@@ -13,6 +13,9 @@ export interface Profile {
   email: string;
   full_name: string | null;
   company: string | null;
+  auto_approval_enabled: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Rfq {
@@ -91,5 +94,22 @@ export interface Notification {
   type: string;
   message: string;
   read_at: string | null;
+  created_at: string;
+}
+
+export type AutoApprovalDecision =
+  | "auto_approved"
+  | "review_needed"
+  | "differs_from_cheapest";
+
+export interface RfqAward {
+  rfq_id: string;
+  decision: AutoApprovalDecision;
+  recommended_supplier_id: string | null;
+  recommended_quote_id: string | null;
+  cheapest_supplier_id: string | null;
+  cheapest_quote_id: string | null;
+  reason: string | null;
+  po_sent_at: string | null;
   created_at: string;
 }

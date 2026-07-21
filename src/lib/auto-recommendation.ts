@@ -9,6 +9,7 @@ import {
   type RfqWithComparisonData,
 } from "@/lib/recommendation-input";
 import { sendComparisonReadyEmail } from "@/lib/email";
+import { evaluateAutoApproval } from "@/lib/auto-approval";
 
 /**
  * Fires whenever a supplier's quote lands (form submit, manual entry, or a
@@ -80,6 +81,12 @@ export async function maybeAutoGenerateRecommendation(rfqId: string) {
     .from("ai_recommendations")
     .insert({ rfq_id: rfqId, content: result.content, model: result.model });
   if (insertError) return;
+
+  await evaluateAutoApproval(
+    supabase,
+    rfq as unknown as RfqWithComparisonData,
+    result.content
+  );
 
   await supabase.from("notifications").insert({
     buyer_id: rfq.buyer_id,

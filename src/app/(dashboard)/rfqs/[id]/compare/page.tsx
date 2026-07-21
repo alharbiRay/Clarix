@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
+  CheckCircle2,
   Clock,
   FileText,
   PenLine,
@@ -22,6 +23,8 @@ import {
   describeWeights,
   recommendationContentSchema,
 } from "@/lib/gemini";
+import { computeQuoteTotal, findCheapestQuote } from "@/lib/quote-comparison";
+import type { RfqAward } from "@/lib/types";
 import {
   Card,
   CardContent,
@@ -124,10 +127,10 @@ export default async function ComparePage({
       .filter((t): t is number => t !== null);
     if (totals.length > 0) bestPerItem.set(item.id, Math.min(...totals));
   }
-  const completeTotals = confirmedColumns
-    .filter((c) => c.missingCount === 0 && c.total !== null)
-    .map((c) => c.total!);
-  const bestTotal = completeTotals.length > 0 ? Math.min(...completeTotals) : null;
+  const cheapestQuote = findCheapestQuote(items, comparable);
+  const bestTotal = cheapestQuote
+    ? (confirmedColumns.find((c) => c.quote.id === cheapestQuote.id)?.total ?? null)
+    : null;
 
   const quotedSupplierIds = new Set(
     [...comparable, ...pendingReview].map((q) => q.supplier_id)
@@ -177,6 +180,33 @@ export default async function ComparePage({
       }
     : null;
 
+  const { data: award } = (await supabase
+    .from("rfq_awards")
+    .select("*")
+    .eq("rfq_id", params.id)
+    .maybeSingle()) as { data: RfqAward | null };
+
+  const quotesById = new Map(rfq.quotes.map((q) => [q.id, q]));
+
+  function awardSide(supplierId: string | null, quoteId: string | null) {
+    const supplier = supplierId ? suppliersById.get(supplierId) : undefined;
+    const quote = quoteId ? quotesById.get(quoteId) : undefined;
+    if (!supplier || !quote) return null;
+    return {
+      label: supplier.company_name || supplier.email,
+      total: computeQuoteTotal(items, quote).total,
+      deliveryDays: quote.delivery_days,
+      warranty: quote.warranty,
+    };
+  }
+
+  const awardRecommended = award
+    ? awardSide(award.recommended_supplier_id, award.recommended_quote_id)
+    : null;
+  const awardCheapest = award
+    ? awardSide(award.cheapest_supplier_id, award.cheapest_quote_id)
+    : null;
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <FadeIn className="flex items-start justify-between gap-4">
@@ -215,6 +245,92 @@ export default async function ComparePage({
           )}
         </div>
       </FadeIn>
+
+      {award && award.decision === "auto_approved" && awardRecommended && (
+        <FadeIn>
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
+            <span>
+              <strong>Auto-approved:</strong> {awardRecommended.label} — PO sent{" "}
+              {formatDate(award.po_sent_at)}. Cheapest complete quote, delivery
+              within 14 days, and a warranty on file.
+            </span>
+          </div>
+        </FadeIn>
+      )}
+
+      {award && award.decision === "review_needed" && (
+        <FadeIn>
+          <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <AlertTriangle size={15} className="shrink-0 text-amber-600" />
+            <span>
+              <strong>Review needed:</strong> the cheapest option has issues —{" "}
+              {award.reason}. Approval required before awarding.
+            </span>
+          </div>
+        </FadeIn>
+      )}
+
+      {award &&
+        award.decision === "differs_from_cheapest" &&
+        awardRecommended &&
+        awardCheapest && (
+          <FadeIn>
+            <Card className="border-amber-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+                  <AlertTriangle size={15} className="text-amber-600" />
+                  Recommendation differs from cheapest — approval required
+                </CardTitle>
+                <CardDescription className="text-xs text-slate-400">
+                  {award.reason}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">
+                    Recommended
+                  </p>
+                  <p className="mt-1 text-base font-bold text-slate-900">
+                    {awardRecommended.label}
+                  </p>
+                  <p className="mt-2 text-sm font-semibold">
+                    {awardRecommended.total === null
+                      ? "—"
+                      : formatMoney(awardRecommended.total, rfq.currency)}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Delivery:{" "}
+                    {awardRecommended.deliveryDays === null
+                      ? "—"
+                      : `${awardRecommended.deliveryDays} days`}{" "}
+                    · Warranty: {awardRecommended.warranty || "—"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-100 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Cheapest
+                  </p>
+                  <p className="mt-1 text-base font-bold text-slate-900">
+                    {awardCheapest.label}
+                  </p>
+                  <p className="mt-2 text-sm font-semibold">
+                    {awardCheapest.total === null
+                      ? "—"
+                      : formatMoney(awardCheapest.total, rfq.currency)}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Delivery:{" "}
+                    {awardCheapest.deliveryDays === null
+                      ? "—"
+                      : `${awardCheapest.deliveryDays} days`}{" "}
+                    · Warranty: {awardCheapest.warranty || "—"}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </FadeIn>
+        )}
 
       {pendingReview.length > 0 && (
         <FadeIn>

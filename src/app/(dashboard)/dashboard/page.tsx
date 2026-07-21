@@ -9,7 +9,7 @@ import {
   RfqActivity,
   type ActivityRow,
 } from "@/components/dashboard/rfq-activity";
-import { ComparisonReadyBanner } from "@/components/dashboard/comparison-ready-banner";
+import { NotificationBanner } from "@/components/dashboard/notification-banner";
 
 interface RfqRow {
   id: string;
@@ -44,9 +44,8 @@ export default async function DashboardPage() {
   const { data: unreadNotifications } = user
     ? await supabase
         .from("notifications")
-        .select("id, rfq_id, message")
+        .select("id, rfq_id, type, message")
         .eq("buyer_id", user.id)
-        .eq("type", "comparison_ready")
         .is("read_at", null)
         .order("created_at", { ascending: false })
     : { data: [] };
@@ -178,7 +177,7 @@ export default async function DashboardPage() {
 
       {unreadNotifications && unreadNotifications.length > 0 && (
         <FadeIn>
-          <ComparisonReadyBanner notifications={unreadNotifications} />
+          <NotificationBanner notifications={unreadNotifications} />
         </FadeIn>
       )}
 
