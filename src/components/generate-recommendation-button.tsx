@@ -16,6 +16,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 
 type PriorityKey = keyof RecommendationWeights;
@@ -172,10 +173,10 @@ export function GenerateRecommendationButton({
             </div>
           </div>
           {hasDeadline && (
-            <Input
-              type="date"
+            <DatePicker
               value={deadlineDate}
-              onChange={(e) => setDeadlineDate(e.target.value)}
+              onChange={setDeadlineDate}
+              placeholder="Pick a deadline"
             />
           )}
 

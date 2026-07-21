@@ -159,7 +159,7 @@ export default async function DashboardPage() {
     };
   });
 
-  const currency = rfqs[0]?.currency ?? "USD";
+  const currency = rfqs[0]?.currency ?? "SAR";
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",

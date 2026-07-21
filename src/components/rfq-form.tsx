@@ -10,6 +10,7 @@ import { rfqSchema, CURRENCIES, type RfqFormValues } from "@/lib/validations/rfq
 import { sanitizeDecimalInput } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -45,7 +46,7 @@ export function RfqForm() {
       title: "",
       project: "",
       description: "",
-      currency: "USD",
+      currency: "SAR",
       deadline: "",
       items: [{ name: "", description: "", quantity: 1, unit: "pcs" }],
       suppliers: [],
@@ -157,7 +158,7 @@ export function RfqForm() {
           <CardContent className="space-y-3">
             <Textarea
               rows={4}
-              placeholder={`e.g. "Need quotes for 10 laptops (Dell Latitude or similar) and 5 monitors for the new office. Budget in USD, need by end of next month. Reach out to sales@acmesupplies.com."`}
+              placeholder={`e.g. "Need quotes for 10 laptops (Dell Latitude or similar) and 5 monitors for the new office. Budget in SAR, need by end of next month. Reach out to sales@acmesupplies.com."`}
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
             />
@@ -248,7 +249,11 @@ export function RfqForm() {
                   <FormItem>
                     <FormLabel>Deadline</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} />
+                      <DatePicker
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="No deadline"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

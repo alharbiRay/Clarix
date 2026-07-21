@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const CURRENCIES = ["USD", "EUR", "GBP", "SAR", "AED"] as const;
+export const CURRENCIES = ["SAR", "AED", "USD", "EUR", "GBP"] as const;
 
 export const rfqItemSchema = z.object({
   name: z.string().trim().min(1, "Item name is required"),
