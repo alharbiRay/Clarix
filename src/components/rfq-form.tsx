@@ -3,9 +3,9 @@
 import { useState, useTransition } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, Trash2, X, Loader2 } from "lucide-react";
+import { Plus, Trash2, X, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { createRfq } from "@/app/(dashboard)/rfqs/actions";
+import { createRfq, autofillRfqFromText } from "@/app/(dashboard)/rfqs/actions";
 import { rfqSchema, CURRENCIES, type RfqFormValues } from "@/lib/validations/rfq";
 import { sanitizeDecimalInput } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -52,12 +52,14 @@ export function RfqForm() {
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, replace } = useFieldArray({
     control: form.control,
     name: "items",
   });
 
   const suppliers = form.watch("suppliers");
+  const [pasteText, setPasteText] = useState("");
+  const [isAutofilling, startAutofillTransition] = useTransition();
 
   function addSupplier(raw: string) {
     const email = raw.trim().replace(/[,;]$/, "").toLowerCase();
@@ -82,6 +84,54 @@ export function RfqForm() {
     );
   }
 
+  function handleAutofill() {
+    if (!pasteText.trim()) {
+      toast.error("Paste some text first");
+      return;
+    }
+    startAutofillTransition(async () => {
+      const result = await autofillRfqFromText(pasteText);
+      if (result.error || !result.data) {
+        toast.error(result.error ?? "Autofill failed");
+        return;
+      }
+      const data = result.data;
+
+      if (data.title) form.setValue("title", data.title, { shouldValidate: true });
+      if (data.project) form.setValue("project", data.project, { shouldValidate: true });
+      if (data.description)
+        form.setValue("description", data.description, { shouldValidate: true });
+      if (data.currency) {
+        const match = CURRENCIES.find(
+          (c) => c.toLowerCase() === data.currency!.toLowerCase()
+        );
+        if (match) form.setValue("currency", match, { shouldValidate: true });
+      }
+      if (data.deadline) form.setValue("deadline", data.deadline, { shouldValidate: true });
+      if (data.items.length > 0) {
+        replace(
+          data.items.map((i) => ({
+            name: i.name,
+            description: i.description ?? "",
+            quantity: i.quantity,
+            unit: i.unit || "pcs",
+          }))
+        );
+      }
+      if (data.supplier_emails.length > 0) {
+        const valid = data.supplier_emails
+          .map((e) => e.trim().toLowerCase())
+          .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+        if (valid.length > 0) {
+          const merged = Array.from(new Set([...suppliers, ...valid]));
+          form.setValue("suppliers", merged, { shouldValidate: true });
+        }
+      }
+
+      toast.success("Form filled in — review before creating the RFQ.");
+    });
+  }
+
   function onSubmit(values: RfqFormValues) {
     startTransition(async () => {
       const result = await createRfq(values);
@@ -93,6 +143,42 @@ export function RfqForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <Card className="border-indigo-100 bg-indigo-50/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <Sparkles className="h-4 w-4 text-indigo-600" />
+              Smart paste
+            </CardTitle>
+            <CardDescription className="text-xs text-slate-400">
+              Paste an email, spec sheet, or notes describing what you need —
+              AI will fill in the title, items, and suppliers below.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Textarea
+              rows={4}
+              placeholder={`e.g. "Need quotes for 10 laptops (Dell Latitude or similar) and 5 monitors for the new office. Budget in USD, need by end of next month. Reach out to sales@acmesupplies.com."`}
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800"
+              disabled={isAutofilling}
+              onClick={handleAutofill}
+            >
+              {isAutofilling ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Fill with AI
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-semibold">RFQ details</CardTitle>

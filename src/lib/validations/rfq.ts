@@ -33,3 +33,23 @@ export const rfqSchema = z.object({
 });
 
 export type RfqFormValues = z.infer<typeof rfqSchema>;
+
+/** Shape returned by the Gemini "smart paste" RFQ autofill (validated before use). */
+export const rfqAutofillSchema = z.object({
+  title: z.string().nullable(),
+  project: z.string().nullable(),
+  description: z.string().nullable(),
+  currency: z.string().nullable(),
+  deadline: z.string().nullable(),
+  items: z.array(
+    z.object({
+      name: z.string(),
+      description: z.string().nullable(),
+      quantity: z.number().positive(),
+      unit: z.string(),
+    })
+  ),
+  supplier_emails: z.array(z.string()),
+});
+
+export type RfqAutofillResult = z.infer<typeof rfqAutofillSchema>;

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { rfqSchema, type RfqFormValues } from "@/lib/validations/rfq";
 import { sendRfqInvitationEmail } from "@/lib/email";
 import { inboundAddressForToken } from "@/lib/resend";
+import { extractRfqFromText } from "@/lib/gemini";
 import type { RfqItem, RfqSupplier } from "@/lib/types";
 
 export async function createRfq(values: RfqFormValues) {
@@ -72,6 +73,36 @@ export async function createRfq(values: RfqFormValues) {
   revalidatePath("/rfqs");
   revalidatePath("/dashboard");
   redirect(`/rfqs/${rfq.id}`);
+}
+
+const MAX_AUTOFILL_CHARS = 20_000;
+
+/**
+ * "Smart paste" — parses unstructured text (an email, spec sheet, notes)
+ * pasted into the New RFQ form and returns extracted fields for the client
+ * to merge into the form. Read-only: nothing is written to the database.
+ */
+export async function autofillRfqFromText(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return { error: "Paste some text first" };
+  if (trimmed.length > MAX_AUTOFILL_CHARS) {
+    return { error: "That's a lot of text — try trimming it down" };
+  }
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  try {
+    const result = await extractRfqFromText(trimmed);
+    return { data: result };
+  } catch (e) {
+    return {
+      error: `Autofill failed: ${e instanceof Error ? e.message : "unknown error"}`,
+    };
+  }
 }
 
 /**

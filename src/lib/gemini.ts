@@ -4,6 +4,10 @@ import {
   extractionSchema,
   type ExtractionResult,
 } from "@/lib/validations/quote";
+import {
+  rfqAutofillSchema,
+  type RfqAutofillResult,
+} from "@/lib/validations/rfq";
 
 const MODEL = "gemini-2.5-flash";
 
@@ -155,6 +159,80 @@ Do not invent prices. If a value is not in the document, use null and add a warn
     ],
     EXTRACTION_RESPONSE_SCHEMA,
     extractionSchema
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RFQ smart-paste autofill
+// ---------------------------------------------------------------------------
+
+const RFQ_AUTOFILL_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    title: { type: Type.STRING, nullable: true },
+    project: { type: Type.STRING, nullable: true },
+    description: { type: Type.STRING, nullable: true },
+    currency: { type: Type.STRING, nullable: true },
+    deadline: { type: Type.STRING, nullable: true },
+    items: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING },
+          description: { type: Type.STRING, nullable: true },
+          quantity: { type: Type.NUMBER },
+          unit: { type: Type.STRING },
+        },
+        required: ["name", "description", "quantity", "unit"],
+      },
+    },
+    supplier_emails: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: [
+    "title",
+    "project",
+    "description",
+    "currency",
+    "deadline",
+    "items",
+    "supplier_emails",
+  ],
+};
+
+/**
+ * Parses unstructured text (a pasted email, spec sheet, or notes) into the
+ * shape of the New RFQ form — "smart paste" autofill. The caller decides
+ * what to do with null/empty fields (typically: leave the user's existing
+ * input untouched).
+ */
+export async function extractRfqFromText(text: string): Promise<RfqAutofillResult> {
+  const client = getClient();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const prompt = `You are helping a buyer fill out an RFQ (request for quote) form from text they pasted — this could be an email, meeting notes, a message from a colleague, or a spec sheet excerpt. Today's date is ${today}.
+
+Pasted text:
+"""
+${text}
+"""
+
+Extract the following, using null (or an empty array) for anything not present or not confidently inferable — do not invent information:
+- "title": a short, specific RFQ title (e.g. "Office network equipment Q3"). If no explicit title is given, compose a reasonable one from the content; null only if the text has no discernible procurement request at all.
+- "project": a project/initiative name if one is mentioned, else null.
+- "description": any extra context, specs, or delivery details worth keeping that don't fit the line items below, else null.
+- "currency": the ISO 4217 currency code (e.g. USD, EUR, GBP, SAR, AED) if a currency or price is mentioned or clearly implied, else null.
+- "deadline": a response deadline as an ISO 8601 date (YYYY-MM-DD) if one is stated or clearly implied (resolve relative phrases like "by next Friday" or "within 2 weeks" against today's date), else null.
+- "items": every distinct product or service being requested. For each: "name" (short), "description" (spec detail if given, else null), "quantity" (a number — default to 1 if not stated), "unit" (short unit like "pcs", "units", "boxes", "hours"; default "pcs"). Empty array if none are identifiable.
+- "supplier_emails": any email addresses in the text that look like supplier/vendor contacts (not the buyer's own). Empty array if none.
+
+Be conservative — only extract what's actually supported by the text.`;
+
+  return generateStructured(
+    client,
+    [{ text: prompt }],
+    RFQ_AUTOFILL_RESPONSE_SCHEMA,
+    rfqAutofillSchema
   );
 }
 
