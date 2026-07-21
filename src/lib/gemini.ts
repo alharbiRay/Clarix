@@ -182,6 +182,19 @@ export const DEFAULT_RECOMMENDATION_WEIGHTS: RecommendationWeights = {
   paymentTerms: 50,
 };
 
+// Buyer-set delivery deadline / budget constraints, captured alongside the
+// priority weights. Also not part of Gemini's structured output — attached
+// to the stored content ourselves, same as `weights`.
+export const recommendationPreferencesSchema = z.object({
+  hasDeadline: z.boolean(),
+  deadlineDate: z.string().nullable(),
+  maxBudget: z.number().nullable(),
+});
+
+export type RecommendationPreferences = z.infer<
+  typeof recommendationPreferencesSchema
+>;
+
 export const recommendationContentSchema = z.object({
   recommendation: z.string(),
   reasoning: z.string(),
@@ -195,6 +208,7 @@ export const recommendationContentSchema = z.object({
   ),
   risks: z.array(z.string()),
   weights: recommendationWeightsSchema.optional(),
+  preferences: recommendationPreferencesSchema.optional(),
 });
 
 export type RecommendationContent = z.infer<typeof recommendationContentSchema>;
@@ -242,10 +256,11 @@ export interface RecommendationInput {
     deadline: string | null;
   };
   weights: RecommendationWeights;
+  preferences?: RecommendationPreferences;
   items: { name: string; quantity: number; unit: string }[];
   quotes: {
     supplier: string;
-    source: "form" | "pdf" | "manual";
+    source: "form" | "pdf" | "manual" | "email";
     total: number | null;
     delivery_days: number | null;
     payment_terms: string | null;
@@ -260,6 +275,24 @@ export interface RecommendationInput {
   }[];
 }
 
+/** Renders deadline/budget constraints as a prompt paragraph, or "" if the buyer set neither. */
+function describeConstraints(preferences: RecommendationPreferences | undefined) {
+  if (!preferences) return "";
+  const lines: string[] = [];
+  if (preferences.hasDeadline && preferences.deadlineDate) {
+    lines.push(
+      `- The buyer needs the goods delivered by ${preferences.deadlineDate}. Treat any supplier whose delivery_days would miss this date (relative to today) as a significant risk, and weigh delivery speed accordingly even beyond the stated priority weight.`
+    );
+  }
+  if (preferences.maxBudget !== null) {
+    lines.push(
+      `- The buyer's maximum budget is ${preferences.maxBudget}. Flag any supplier whose total exceeds this as a risk, and call it out clearly in the reasoning.`
+    );
+  }
+  if (lines.length === 0) return "";
+  return `\nThe buyer also set these hard constraints:\n${lines.join("\n")}\n`;
+}
+
 export async function generateQuoteRecommendation(
   input: RecommendationInput
 ): Promise<{ content: RecommendationContent; model: string }> {
@@ -272,7 +305,7 @@ ${JSON.stringify(input.rfq, null, 2)}
 
 The buyer's stated priorities for this decision (relative importance — weigh your recommendation, ranking, and reasoning accordingly; a criterion near 0% should barely factor in, one near 40%+ should visibly drive the recommendation):
 ${describeWeights(input.weights)}
-
+${describeConstraints(input.preferences)}
 Line items requested:
 ${JSON.stringify(input.items, null, 2)}
 
@@ -283,7 +316,7 @@ Produce:
 - "recommendation": 1-3 sentences naming the supplier you recommend and the single most important reason, consistent with the buyer's stated priorities above. If splitting the order across suppliers is clearly better, say so.
 - "reasoning": a concise paragraph weighing total price, per-item pricing, completeness (missing items), delivery time, payment terms, and warranty — in proportion to the buyer's priority weights, not evenly. Mention concrete numbers, and note explicitly when the priorities changed which supplier comes out ahead (e.g. cheapest isn't fastest).
 - "ranking": every supplier, best first (rank 1 = best) according to the weighted priorities, each with specific strengths and weaknesses (e.g. "cheapest total at X", "missing a price for item Y", "longest warranty").
-- "risks": things the buyer should verify before awarding — missing prices, currency mismatches, unusually low prices, vague terms, quotes still pending review. Empty array only if there are genuinely none.
+- "risks": things the buyer should verify before awarding — missing prices, currency mismatches, unusually low prices, vague terms, quotes still pending review, and any violation of the hard constraints above. Empty array only if there are genuinely none.
 
 Be direct and specific. Do not pad with generic procurement advice.`;
 
@@ -294,5 +327,8 @@ Be direct and specific. Do not pad with generic procurement advice.`;
     recommendationContentSchema
   );
 
-  return { content: { ...content, weights: input.weights }, model: MODEL };
+  return {
+    content: { ...content, weights: input.weights, preferences: input.preferences },
+    model: MODEL,
+  };
 }

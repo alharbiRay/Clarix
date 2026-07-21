@@ -3,14 +3,20 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
-  extractQuoteFromPdf,
   generateQuoteRecommendation,
+  recommendationPreferencesSchema,
   recommendationWeightsSchema,
-  type RecommendationInput,
+  type RecommendationPreferences,
   type RecommendationWeights,
 } from "@/lib/gemini";
+import {
+  buildRecommendationInput,
+  type RfqWithComparisonData,
+} from "@/lib/recommendation-input";
+import { createQuoteFromPdf } from "@/lib/quote-intake";
+import { maybeAutoGenerateRecommendation } from "@/lib/auto-recommendation";
 import { quoteSchema, type QuoteFormValues } from "@/lib/validations/quote";
-import type { Quote, QuoteItem, RfqItem, RfqSupplier } from "@/lib/types";
+import type { RfqItem } from "@/lib/types";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -60,96 +66,21 @@ export async function uploadQuotePdf(formData: FormData) {
     .single();
   if (!supplier) return { error: "Supplier not found on this RFQ" };
 
-  const { data: existing } = await supabase
-    .from("quotes")
-    .select("id")
-    .eq("supplier_id", supplierId)
-    .neq("status", "rejected")
-    .maybeSingle();
-  if (existing) {
-    return { error: "This supplier already has a quote on record" };
-  }
-
-  const items = (rfq.rfq_items as RfqItem[])
-    .slice()
-    .sort((a, b) => a.position - b.position);
-
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  let extraction;
-  try {
-    extraction = await extractQuoteFromPdf({
-      pdfBase64: buffer.toString("base64"),
-      currency: rfq.currency,
-      supplier: { email: supplier.email, company_name: supplier.company_name },
-      items: items.map((i) => ({
-        id: i.id,
-        name: i.name,
-        description: i.description,
-        quantity: Number(i.quantity),
-        unit: i.unit,
-      })),
-    });
-  } catch (e) {
-    return {
-      error: `Extraction failed: ${e instanceof Error ? e.message : "unknown error"}`,
-    };
-  }
-
-  const pdfPath = `${rfqId}/${crypto.randomUUID()}.pdf`;
-  const { error: uploadError } = await supabase.storage
-    .from("quote-pdfs")
-    .upload(pdfPath, buffer, { contentType: "application/pdf" });
-  if (uploadError) {
-    return { error: `Failed to store PDF: ${uploadError.message}` };
-  }
-
-  const { data: quote, error: quoteError } = await supabase
-    .from("quotes")
-    .insert({
-      rfq_id: rfqId,
-      supplier_id: supplierId,
-      source: "pdf",
-      status: "needs_review",
-      pdf_path: pdfPath,
-      extraction_raw: extraction,
-      delivery_days: extraction.delivery_days,
-      payment_terms: extraction.payment_terms,
-      warranty: extraction.warranty,
-      notes: extraction.notes,
-    })
-    .select("id")
-    .single();
-
-  if (quoteError || !quote) {
-    await supabase.storage.from("quote-pdfs").remove([pdfPath]);
-    return { error: quoteError?.message ?? "Failed to save quote" };
-  }
-
-  const validIds = new Set(items.map((i) => i.id));
-  const quoteItems = extraction.items
-    .filter((item) => validIds.has(item.rfq_item_id))
-    .map((item) => ({
-      quote_id: quote.id,
-      rfq_item_id: item.rfq_item_id,
-      unit_price: item.unit_price,
-      total_price: item.total_price,
-      notes: item.notes,
-    }));
-
-  if (quoteItems.length > 0) {
-    const { error: itemsError } = await supabase
-      .from("quote_items")
-      .insert(quoteItems);
-    if (itemsError) {
-      await supabase.from("quotes").delete().eq("id", quote.id);
-      await supabase.storage.from("quote-pdfs").remove([pdfPath]);
-      return { error: itemsError.message };
-    }
-  }
+  const result = await createQuoteFromPdf({
+    supabase,
+    rfqId,
+    supplier,
+    currency: rfq.currency,
+    items: rfq.rfq_items as RfqItem[],
+    pdfBuffer: buffer,
+    source: "pdf",
+  });
+  if (result.error) return { error: result.error };
 
   revalidatePath(`/rfqs/${rfqId}`);
-  return { quoteId: quote.id };
+  return { quoteId: result.quoteId };
 }
 
 /**
@@ -250,6 +181,9 @@ export async function addManualQuote(
 
   revalidatePath(`/rfqs/${rfqId}`);
   revalidatePath(`/rfqs/${rfqId}/compare`);
+  maybeAutoGenerateRecommendation(rfqId).catch((e) =>
+    console.error("Auto-recommendation failed:", e)
+  );
   return { success: true };
 }
 
@@ -332,6 +266,9 @@ export async function confirmQuote(quoteId: string, values: QuoteFormValues) {
 
   revalidatePath(`/rfqs/${quote.rfq_id}`);
   revalidatePath(`/rfqs/${quote.rfq_id}/compare`);
+  maybeAutoGenerateRecommendation(quote.rfq_id).catch((e) =>
+    console.error("Auto-recommendation failed:", e)
+  );
   return { success: true, rfqId: quote.rfq_id };
 }
 
@@ -366,14 +303,21 @@ export async function rejectQuote(quoteId: string) {
 /**
  * Generates (or regenerates) the AI recommendation for an RFQ from all
  * comparable quotes. History is kept; the compare page shows the latest.
+ * The buyer's priority weights + deadline/budget preferences are persisted
+ * to rfq_preferences so the auto-recommendation trigger can reuse them.
  */
 export async function generateRecommendation(
   rfqId: string,
-  weights: RecommendationWeights
+  weights: RecommendationWeights,
+  preferences: RecommendationPreferences
 ) {
   const parsedWeights = recommendationWeightsSchema.safeParse(weights);
   if (!parsedWeights.success) {
     return { error: "Invalid priority weights" };
+  }
+  const parsedPreferences = recommendationPreferencesSchema.safeParse(preferences);
+  if (!parsedPreferences.success) {
+    return { error: "Invalid preferences" };
   }
 
   const supabase = createClient();
@@ -381,6 +325,16 @@ export async function generateRecommendation(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
+
+  const { error: prefsError } = await supabase.from("rfq_preferences").upsert({
+    rfq_id: rfqId,
+    weights: parsedWeights.data,
+    has_deadline: parsedPreferences.data.hasDeadline,
+    deadline_date: parsedPreferences.data.deadlineDate,
+    max_budget: parsedPreferences.data.maxBudget,
+    updated_at: new Date().toISOString(),
+  });
+  if (prefsError) return { error: prefsError.message };
 
   const { data: rfq } = await supabase
     .from("rfqs")
@@ -391,62 +345,14 @@ export async function generateRecommendation(
     .single();
   if (!rfq) return { error: "RFQ not found" };
 
-  const items = (rfq.rfq_items as RfqItem[])
-    .slice()
-    .sort((a, b) => a.position - b.position);
-  const suppliers = new Map(
-    (rfq.rfq_suppliers as RfqSupplier[]).map((s) => [s.id, s])
+  const input = buildRecommendationInput(
+    rfq as unknown as RfqWithComparisonData,
+    parsedWeights.data,
+    parsedPreferences.data
   );
-  const itemNames = new Map(items.map((i) => [i.id, i.name]));
-
-  const comparableQuotes = (
-    rfq.quotes as (Quote & { quote_items: QuoteItem[] })[]
-  ).filter((q) => q.status === "submitted" || q.status === "confirmed");
-
-  if (comparableQuotes.length === 0) {
+  if (!input) {
     return { error: "No comparable quotes yet — collect at least one first" };
   }
-
-  const input: RecommendationInput = {
-    rfq: {
-      title: rfq.title,
-      description: rfq.description,
-      currency: rfq.currency,
-      deadline: rfq.deadline,
-    },
-    weights: parsedWeights.data,
-    items: items.map((i) => ({
-      name: i.name,
-      quantity: Number(i.quantity),
-      unit: i.unit,
-    })),
-    quotes: comparableQuotes.map((q) => {
-      const supplier = suppliers.get(q.supplier_id);
-      const lineItems = q.quote_items.map((qi) => ({
-        item: itemNames.get(qi.rfq_item_id) ?? "Unknown item",
-        unit_price: qi.unit_price === null ? null : Number(qi.unit_price),
-        total_price: qi.total_price === null ? null : Number(qi.total_price),
-        notes: qi.notes,
-      }));
-      const priced = lineItems.filter((li) => li.total_price !== null);
-      return {
-        supplier:
-          supplier?.company_name || supplier?.email || "Unknown supplier",
-        source: q.source,
-        total:
-          priced.length === 0
-            ? null
-            : Math.round(
-                priced.reduce((s, li) => s + (li.total_price ?? 0), 0) * 100
-              ) / 100,
-        delivery_days: q.delivery_days,
-        payment_terms: q.payment_terms,
-        warranty: q.warranty,
-        notes: q.notes,
-        items: lineItems,
-      };
-    }),
-  };
 
   let result;
   try {

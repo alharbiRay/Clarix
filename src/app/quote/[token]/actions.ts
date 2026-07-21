@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { maybeAutoGenerateRecommendation } from "@/lib/auto-recommendation";
 import { quoteSchema, type QuoteFormValues } from "@/lib/validations/quote";
 
 /**
@@ -107,6 +108,10 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
     .from("rfq_suppliers")
     .update({ status: "submitted" })
     .eq("id", supplier.id);
+
+  maybeAutoGenerateRecommendation(supplier.rfq_id).catch((e) =>
+    console.error("Auto-recommendation failed:", e)
+  );
 
   return { success: true };
 }

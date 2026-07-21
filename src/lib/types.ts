@@ -5,7 +5,7 @@ export type SupplierInviteStatus =
   | "viewed"
   | "submitted"
   | "declined";
-export type QuoteSource = "form" | "pdf" | "manual";
+export type QuoteSource = "form" | "pdf" | "manual" | "email";
 export type QuoteStatus = "submitted" | "needs_review" | "confirmed" | "rejected";
 
 export interface Profile {
@@ -73,4 +73,23 @@ export interface QuoteItem {
   unit_price: number | null;
   total_price: number | null;
   notes: string | null;
+}
+
+export interface RfqPreferences {
+  rfq_id: string;
+  weights: { price: number; delivery: number; warranty: number; paymentTerms: number };
+  has_deadline: boolean;
+  deadline_date: string | null;
+  max_budget: number | null;
+  updated_at: string;
+}
+
+export interface Notification {
+  id: string;
+  buyer_id: string;
+  rfq_id: string;
+  type: string;
+  message: string;
+  read_at: string | null;
+  created_at: string;
 }

@@ -9,6 +9,7 @@ import {
   RfqActivity,
   type ActivityRow,
 } from "@/components/dashboard/rfq-activity";
+import { ComparisonReadyBanner } from "@/components/dashboard/comparison-ready-banner";
 
 interface RfqRow {
   id: string;
@@ -35,6 +36,20 @@ function weeklyDelta(count: number) {
 
 export default async function DashboardPage() {
   const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: unreadNotifications } = user
+    ? await supabase
+        .from("notifications")
+        .select("id, rfq_id, message")
+        .eq("buyer_id", user.id)
+        .eq("type", "comparison_ready")
+        .is("read_at", null)
+        .order("created_at", { ascending: false })
+    : { data: [] };
 
   const { data } = await supabase
     .from("rfqs")
@@ -160,6 +175,12 @@ export default async function DashboardPage() {
           {today} — here&apos;s your procurement overview.
         </p>
       </FadeIn>
+
+      {unreadNotifications && unreadNotifications.length > 0 && (
+        <FadeIn>
+          <ComparisonReadyBanner notifications={unreadNotifications} />
+        </FadeIn>
+      )}
 
       <StatCards stats={stats} />
       <DashboardCharts data={months} currency={currency} />

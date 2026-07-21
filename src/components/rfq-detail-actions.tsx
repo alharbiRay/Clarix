@@ -14,8 +14,12 @@ export function SendRfqButton({ rfqId }: { rfqId: string }) {
       const result = await sendRfq(rfqId);
       if (result?.error) {
         toast.error(result.error);
+      } else if (result.emailFailures && result.emailFailures.length > 0) {
+        toast.warning(
+          `RFQ sent, but the invitation email failed for: ${result.emailFailures.join(", ")}. Share the quote link with them manually.`
+        );
       } else {
-        toast.success("RFQ sent — suppliers have been invited.");
+        toast.success("RFQ sent — suppliers have been emailed their invitations.");
       }
     });
   }

@@ -11,10 +11,17 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { FadeIn } from "@/components/motion";
-import { GenerateRecommendationButton } from "@/components/generate-recommendation-button";
+import {
+  GenerateRecommendationButton,
+  type InitialPreferences,
+} from "@/components/generate-recommendation-button";
 import { ManualQuoteDialog } from "@/components/manual-quote-dialog";
 import { formatDate, formatMoney } from "@/lib/format";
-import { describeWeights, recommendationContentSchema } from "@/lib/gemini";
+import {
+  DEFAULT_RECOMMENDATION_WEIGHTS,
+  describeWeights,
+  recommendationContentSchema,
+} from "@/lib/gemini";
 import {
   Card,
   CardContent,
@@ -141,6 +148,35 @@ export default async function ComparePage({
     ? recommendationContentSchema.safeParse(latestRec.content)
     : null;
 
+  const usedPreferences = recommendation?.success
+    ? recommendation.data.preferences
+    : undefined;
+  const preferencesLineParts: string[] = [];
+  if (usedPreferences?.hasDeadline && usedPreferences.deadlineDate) {
+    preferencesLineParts.push(`Delivery needed by ${formatDate(usedPreferences.deadlineDate)}`);
+  }
+  if (usedPreferences?.maxBudget !== undefined && usedPreferences?.maxBudget !== null) {
+    preferencesLineParts.push(
+      `Max budget ${formatMoney(usedPreferences.maxBudget, rfq.currency)}`
+    );
+  }
+  const preferencesLine = preferencesLineParts.join(" · ");
+
+  const { data: prefsRow } = await supabase
+    .from("rfq_preferences")
+    .select("*")
+    .eq("rfq_id", params.id)
+    .maybeSingle();
+
+  const initialPreferences: InitialPreferences | null = prefsRow
+    ? {
+        weights: prefsRow.weights ?? DEFAULT_RECOMMENDATION_WEIGHTS,
+        hasDeadline: prefsRow.has_deadline,
+        deadlineDate: prefsRow.deadline_date,
+        maxBudget: prefsRow.max_budget === null ? null : Number(prefsRow.max_budget),
+      }
+    : null;
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <FadeIn className="flex items-start justify-between gap-4">
@@ -174,6 +210,7 @@ export default async function ComparePage({
             <GenerateRecommendationButton
               rfqId={params.id}
               hasExisting={Boolean(recommendation?.success)}
+              initialPreferences={initialPreferences}
             />
           )}
         </div>
@@ -436,6 +473,9 @@ export default async function ComparePage({
                 <p className="text-xs text-slate-400">
                   Priorities used: {describeWeights(recommendation.data.weights)}
                 </p>
+              )}
+              {preferencesLine && (
+                <p className="text-xs text-slate-400">{preferencesLine}</p>
               )}
             </CardHeader>
             <CardContent className="space-y-5">

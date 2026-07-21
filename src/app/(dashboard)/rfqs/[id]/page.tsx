@@ -209,8 +209,9 @@ export default async function RfqDetailPage({
               Suppliers ({suppliers.length})
             </CardTitle>
             <CardDescription className="text-xs text-slate-400">
-              Each supplier has a unique quote-form link. Email delivery is not
-              wired up yet — copy links to share manually for now.
+              Each supplier has a unique quote-form link. Invitations are
+              emailed automatically when the RFQ is sent — copy a link below
+              if you need to share one manually.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { rfqSchema, type RfqFormValues } from "@/lib/validations/rfq";
+import { sendRfqInvitationEmail } from "@/lib/email";
+import { inboundAddressForToken } from "@/lib/resend";
+import type { RfqItem, RfqSupplier } from "@/lib/types";
 
 export async function createRfq(values: RfqFormValues) {
   const parsed = rfqSchema.safeParse(values);
@@ -72,11 +75,8 @@ export async function createRfq(values: RfqFormValues) {
 }
 
 /**
- * Marks the RFQ as sent and invites all pending suppliers.
- *
- * TODO(email): integrate an email provider (e.g. Resend) to deliver the
- * invitation with both submission options (form link + reply-with-PDF).
- * Until then, the detail page exposes copyable quote-form links.
+ * Marks the RFQ as sent, invites all pending suppliers, and emails each of
+ * them an invitation (form link + reply-with-PDF option) via Resend.
  */
 export async function sendRfq(rfqId: string) {
   const supabase = createClient();
@@ -87,11 +87,12 @@ export async function sendRfq(rfqId: string) {
 
   const now = new Date().toISOString();
 
-  const { error: supplierError } = await supabase
+  const { data: invitedSuppliers, error: supplierError } = await supabase
     .from("rfq_suppliers")
     .update({ status: "sent", invited_at: now })
     .eq("rfq_id", rfqId)
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .select("*");
 
   if (supplierError) return { error: supplierError.message };
 
@@ -106,5 +107,43 @@ export async function sendRfq(rfqId: string) {
   revalidatePath(`/rfqs/${rfqId}`);
   revalidatePath("/rfqs");
   revalidatePath("/dashboard");
-  return { success: true };
+
+  const suppliers = (invitedSuppliers ?? []) as RfqSupplier[];
+  let emailFailures: string[] = [];
+
+  if (suppliers.length > 0) {
+    const { data: rfq } = await supabase
+      .from("rfqs")
+      .select("title, currency, deadline, rfq_items(*)")
+      .eq("id", rfqId)
+      .single();
+
+    if (rfq) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+      const items = (rfq.rfq_items as RfqItem[])
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .map((i) => ({ name: i.name, quantity: Number(i.quantity), unit: i.unit }));
+
+      const results = await Promise.allSettled(
+        suppliers.map((supplier) =>
+          sendRfqInvitationEmail({
+            to: supplier.email,
+            companyName: supplier.company_name,
+            contactName: supplier.contact_name,
+            rfq: { title: rfq.title, currency: rfq.currency, deadline: rfq.deadline },
+            items,
+            formUrl: `${appUrl}/quote/${supplier.token}`,
+            replyToAddress: inboundAddressForToken(supplier.token),
+          })
+        )
+      );
+
+      emailFailures = suppliers
+        .filter((_, i) => results[i].status === "rejected")
+        .map((s) => s.email);
+    }
+  }
+
+  return { success: true, emailFailures };
 }
