@@ -15,6 +15,7 @@ import {
 } from "@/lib/recommendation-input";
 import { createQuoteFromPdf } from "@/lib/quote-intake";
 import { maybeAutoGenerateRecommendation } from "@/lib/auto-recommendation";
+import { ensureSupplierProfile } from "@/lib/supplier-profile";
 import { quoteSchema, type QuoteFormValues } from "@/lib/validations/quote";
 import type { RfqItem } from "@/lib/types";
 
@@ -60,7 +61,7 @@ export async function uploadQuotePdf(formData: FormData) {
 
   const { data: supplier } = await supabase
     .from("rfq_suppliers")
-    .select("id, email, company_name")
+    .select("id, email, company_name, contact_name")
     .eq("id", supplierId)
     .eq("rfq_id", rfqId)
     .single();
@@ -71,6 +72,7 @@ export async function uploadQuotePdf(formData: FormData) {
   const result = await createQuoteFromPdf({
     supabase,
     rfqId,
+    buyerId: user.id,
     supplier,
     currency: rfq.currency,
     items: rfq.rfq_items as RfqItem[],
@@ -106,7 +108,7 @@ export async function addManualQuote(
 
   const { data: supplier } = await supabase
     .from("rfq_suppliers")
-    .select("id")
+    .select("id, email, company_name, contact_name")
     .eq("id", supplierId)
     .eq("rfq_id", rfqId)
     .single();
@@ -178,6 +180,15 @@ export async function addManualQuote(
     .from("rfq_suppliers")
     .update({ status: "submitted" })
     .eq("id", supplierId);
+
+  await ensureSupplierProfile({
+    supabase,
+    buyerId: user.id,
+    rfqSupplierId: supplierId,
+    email: supplier.email,
+    companyName: supplier.company_name,
+    contactName: supplier.contact_name,
+  });
 
   revalidatePath(`/rfqs/${rfqId}`);
   revalidatePath(`/rfqs/${rfqId}/compare`);

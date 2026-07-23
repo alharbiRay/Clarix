@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { extractQuoteFromPdf } from "@/lib/gemini";
+import { ensureSupplierProfile } from "@/lib/supplier-profile";
 import type { RfqItem } from "@/lib/types";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -7,7 +8,13 @@ const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10 MB
 export interface QuoteIntakeInput {
   supabase: SupabaseClient;
   rfqId: string;
-  supplier: { id: string; email: string; company_name: string | null };
+  buyerId: string;
+  supplier: {
+    id: string;
+    email: string;
+    company_name: string | null;
+    contact_name?: string | null;
+  };
   currency: string;
   items: RfqItem[];
   pdfBuffer: Buffer;
@@ -23,7 +30,8 @@ export interface QuoteIntakeInput {
  * the supabase client (RLS-scoped vs. service-role) come from.
  */
 export async function createQuoteFromPdf(input: QuoteIntakeInput) {
-  const { supabase, rfqId, supplier, currency, items, pdfBuffer, source, sourceEmailId } = input;
+  const { supabase, rfqId, buyerId, supplier, currency, items, pdfBuffer, source, sourceEmailId } =
+    input;
 
   if (pdfBuffer.length === 0) {
     return { error: "The PDF attachment was empty" };
@@ -116,6 +124,17 @@ export async function createQuoteFromPdf(input: QuoteIntakeInput) {
       return { error: itemsError.message };
     }
   }
+
+  // extraction.supplier_name is the one place a company name actually gets
+  // "extracted from a PDF" today — nothing else in the app ever writes it.
+  await ensureSupplierProfile({
+    supabase,
+    buyerId,
+    rfqSupplierId: supplier.id,
+    email: supplier.email,
+    companyName: supplier.company_name || extraction.supplier_name,
+    contactName: supplier.contact_name,
+  });
 
   return { quoteId: quote.id as string };
 }

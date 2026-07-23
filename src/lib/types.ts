@@ -51,6 +51,8 @@ export interface RfqSupplier {
   status: SupplierInviteStatus;
   invited_at: string | null;
   viewed_at: string | null;
+  /** Links to the buyer's persistent Supplier profile for this email (nullable until a quote is submitted). */
+  supplier_id: string | null;
 }
 
 export interface Quote {
@@ -112,4 +114,28 @@ export interface RfqAward {
   reason: string | null;
   po_sent_at: string | null;
   created_at: string;
+}
+
+/** A buyer's persistent profile for a supplier email, independent of any single RFQ. */
+export interface Supplier {
+  id: string;
+  buyer_id: string;
+  email: string;
+  company_name: string | null;
+  contact_name: string | null;
+  phone: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Computed from RFQ/quote/award history — see src/lib/supplier-stats.ts. */
+export interface SupplierStats {
+  rfqsParticipated: number;
+  timesAwarded: number;
+  winRate: number | null;
+  avgResponseDays: number | null;
+  priceCompetitivenessPct: number | null;
+  rating: number | null;
+  lastActive: string | null;
 }

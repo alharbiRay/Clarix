@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
   const { data: supplier } = await supabase
     .from("rfq_suppliers")
     .select(
-      "id, rfq_id, email, company_name, rfqs(status, deadline, currency, title, buyer_id, rfq_items(*))"
+      "id, rfq_id, email, company_name, contact_name, rfqs(status, deadline, currency, title, buyer_id, rfq_items(*))"
     )
     .eq("token", token)
     .single();
@@ -124,7 +124,13 @@ export async function POST(request: NextRequest) {
   const result = await createQuoteFromPdf({
     supabase,
     rfqId: supplier.rfq_id,
-    supplier: { id: supplier.id, email: supplier.email, company_name: supplier.company_name },
+    buyerId: rfq.buyer_id,
+    supplier: {
+      id: supplier.id,
+      email: supplier.email,
+      company_name: supplier.company_name,
+      contact_name: supplier.contact_name,
+    },
     currency: rfq.currency,
     items: rfq.rfq_items,
     pdfBuffer,

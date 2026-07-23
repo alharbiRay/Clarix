@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { maybeAutoGenerateRecommendation } from "@/lib/auto-recommendation";
+import { ensureSupplierProfile } from "@/lib/supplier-profile";
 import { quoteSchema, type QuoteFormValues } from "@/lib/validations/quote";
 
 /**
@@ -19,7 +20,9 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
 
   const { data: supplier } = await supabase
     .from("rfq_suppliers")
-    .select("id, rfq_id, status, rfqs(id, status, deadline)")
+    .select(
+      "id, rfq_id, status, email, company_name, contact_name, rfqs(id, status, deadline, buyer_id)"
+    )
     .eq("token", token)
     .single();
 
@@ -29,6 +32,7 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
     id: string;
     status: string;
     deadline: string | null;
+    buyer_id: string;
   };
 
   if (rfq.status !== "sent" && rfq.status !== "draft") {
@@ -108,6 +112,15 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
     .from("rfq_suppliers")
     .update({ status: "submitted" })
     .eq("id", supplier.id);
+
+  await ensureSupplierProfile({
+    supabase,
+    buyerId: rfq.buyer_id,
+    rfqSupplierId: supplier.id,
+    email: supplier.email,
+    companyName: supplier.company_name,
+    contactName: supplier.contact_name,
+  });
 
   maybeAutoGenerateRecommendation(supplier.rfq_id).catch((e) =>
     console.error("Auto-recommendation failed:", e)

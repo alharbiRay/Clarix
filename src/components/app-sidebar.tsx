@@ -23,7 +23,7 @@ import {
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/rfqs", label: "RFQs", icon: FileText },
-  { href: null, label: "Suppliers", icon: Users },
+  { href: "/suppliers", label: "Suppliers", icon: Users },
   { href: null, label: "Reports", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
