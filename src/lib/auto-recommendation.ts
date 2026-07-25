@@ -1,3 +1,4 @@
+// v2: wired into all three quote submission paths (form, manual, PDF confirm)
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   DEFAULT_RECOMMENDATION_WEIGHTS,
