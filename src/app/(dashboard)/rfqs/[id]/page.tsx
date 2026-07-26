@@ -19,6 +19,7 @@ import {
 } from "@/components/rfq-detail-actions";
 import { QuoteUploadDialog } from "@/components/quote-upload-dialog";
 import { ManualQuoteDialog } from "@/components/manual-quote-dialog";
+import { QuoteRowActions } from "@/components/quote-row-actions";
 import { FadeIn } from "@/components/motion";
 import { formatDate, formatMoney } from "@/lib/format";
 import type { Quote, QuoteItem, Rfq, RfqItem, RfqSupplier } from "@/lib/types";
@@ -323,11 +324,14 @@ export default async function RfqDetailPage({
                       <TableHead className="text-right text-xs font-semibold text-slate-500">
                         Status
                       </TableHead>
+                      <TableHead className="w-10" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {quotes.map((quote) => {
                       const supplier = suppliersById.get(quote.supplier_id);
+                      const supplierLabel =
+                        supplier?.company_name || supplier?.email || "This supplier";
                       const total = quoteTotal(quote);
                       return (
                         <TableRow key={quote.id} className="border-slate-100">
@@ -372,6 +376,12 @@ export default async function RfqDetailPage({
                                   : "Submitted"}
                               </span>
                             )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <QuoteRowActions
+                              quoteId={quote.id}
+                              supplierLabel={supplierLabel}
+                            />
                           </TableCell>
                         </TableRow>
                       );

@@ -127,10 +127,18 @@ export async function createQuoteFromPdf(input: QuoteIntakeInput) {
     }
   }
 
-  await supabase
+  const { error: supplierStatusError } = await supabase
     .from("rfq_suppliers")
     .update({ status: "submitted" })
     .eq("id", supplier.id);
+  if (supplierStatusError) {
+    console.error(
+      `[createQuoteFromPdf] rfq=${rfqId} supplier=${supplier.id} failed to flip status to submitted:`,
+      supplierStatusError
+    );
+  } else {
+    console.log(`[createQuoteFromPdf] rfq=${rfqId} supplier=${supplier.id} status set to submitted`);
+  }
 
   // extraction.supplier_name is the one place a company name actually gets
   // "extracted from a PDF" today — nothing else in the app ever writes it.

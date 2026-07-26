@@ -146,8 +146,14 @@ export async function POST(request: NextRequest) {
   // Extraction is auto-confirmed (src/lib/quote-intake.ts) — no per-quote
   // "please review" email. The buyer hears from us once, at the end, via
   // maybeAutoGenerateRecommendation's auto-approval evaluation.
-  maybeAutoGenerateRecommendation(supplier.rfq_id).catch((e) =>
-    console.error("Auto-recommendation failed:", e)
+  //
+  // Must be awaited: this route already declares maxDuration=60 to give it
+  // room, but an un-awaited call here would race the NextResponse below and
+  // could be torn down before the Gemini call and auto-approval evaluation
+  // finish.
+  console.log(`[webhook] rfq=${supplier.rfq_id} quote=${result.quoteId} confirmed from inbound email — awaiting maybeAutoGenerateRecommendation`);
+  await maybeAutoGenerateRecommendation(supplier.rfq_id).catch((e) =>
+    console.error(`[webhook] rfq=${supplier.rfq_id} auto-recommendation failed:`, e)
   );
 
   return NextResponse.json({ ok: true, quoteId: result.quoteId });

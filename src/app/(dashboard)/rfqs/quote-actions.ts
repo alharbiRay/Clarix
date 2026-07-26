@@ -83,8 +83,13 @@ export async function uploadQuotePdf(formData: FormData) {
 
   revalidatePath(`/rfqs/${rfqId}`);
   revalidatePath(`/rfqs/${rfqId}/compare`);
-  maybeAutoGenerateRecommendation(rfqId).catch((e) =>
-    console.error("Auto-recommendation failed:", e)
+  console.log(`[uploadQuotePdf] rfq=${rfqId} quote=${result.quoteId} confirmed — awaiting maybeAutoGenerateRecommendation`);
+  // Must be awaited, not fire-and-forget: on a serverless runtime the
+  // function instance can be frozen/torn down the moment this action
+  // returns, silently killing an un-awaited background promise before the
+  // Gemini call and auto-approval evaluation ever run.
+  await maybeAutoGenerateRecommendation(rfqId).catch((e) =>
+    console.error(`[uploadQuotePdf] rfq=${rfqId} auto-recommendation failed:`, e)
   );
   return { quoteId: result.quoteId };
 }
@@ -196,8 +201,9 @@ export async function addManualQuote(
 
   revalidatePath(`/rfqs/${rfqId}`);
   revalidatePath(`/rfqs/${rfqId}/compare`);
-  maybeAutoGenerateRecommendation(rfqId).catch((e) =>
-    console.error("Auto-recommendation failed:", e)
+  console.log(`[addManualQuote] rfq=${rfqId} supplier=${supplierId} saved — awaiting maybeAutoGenerateRecommendation`);
+  await maybeAutoGenerateRecommendation(rfqId).catch((e) =>
+    console.error(`[addManualQuote] rfq=${rfqId} auto-recommendation failed:`, e)
   );
   return { success: true };
 }
@@ -281,9 +287,73 @@ export async function confirmQuote(quoteId: string, values: QuoteFormValues) {
 
   revalidatePath(`/rfqs/${quote.rfq_id}`);
   revalidatePath(`/rfqs/${quote.rfq_id}/compare`);
-  maybeAutoGenerateRecommendation(quote.rfq_id).catch((e) =>
-    console.error("Auto-recommendation failed:", e)
+  console.log(`[confirmQuote] rfq=${quote.rfq_id} quote=${quoteId} confirmed — awaiting maybeAutoGenerateRecommendation`);
+  await maybeAutoGenerateRecommendation(quote.rfq_id).catch((e) =>
+    console.error(`[confirmQuote] rfq=${quote.rfq_id} auto-recommendation failed:`, e)
   );
+  return { success: true, rfqId: quote.rfq_id };
+}
+
+/**
+ * Buyer permanently deletes a quote (form, manual, or PDF) from the RFQ
+ * detail page. Blocked if the quote is already tied to an award decision
+ * (rfq_awards.recommended_quote_id / cheapest_quote_id) — deleting a quote
+ * a PO may already have been sent for would corrupt that record. On success,
+ * the supplier reverts to 'sent' (or 'pending' if they were never actually
+ * invited) so they're selectable again for a fresh manual/PDF entry.
+ */
+export async function deleteQuote(quoteId: string) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: quote } = await supabase
+    .from("quotes")
+    .select("id, rfq_id, supplier_id, pdf_path")
+    .eq("id", quoteId)
+    .single();
+  if (!quote) return { error: "Quote not found" };
+
+  // quote.id (not the raw quoteId param) is used in this raw .or() filter
+  // string — it's only reached this line because the .eq("id", quoteId)
+  // lookup above matched a real uuid column value, so it's safe to
+  // interpolate; the unvalidated request param never is.
+  const { data: award } = await supabase
+    .from("rfq_awards")
+    .select("rfq_id")
+    .eq("rfq_id", quote.rfq_id)
+    .or(`recommended_quote_id.eq.${quote.id},cheapest_quote_id.eq.${quote.id}`)
+    .maybeSingle();
+  if (award) {
+    return {
+      error: "This quote is part of an award decision and can't be deleted",
+    };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("quotes")
+    .delete()
+    .eq("id", quoteId);
+  if (deleteError) return { error: deleteError.message };
+
+  if (quote.pdf_path) {
+    await supabase.storage.from("quote-pdfs").remove([quote.pdf_path]);
+  }
+
+  const { data: supplierRow } = await supabase
+    .from("rfq_suppliers")
+    .select("invited_at")
+    .eq("id", quote.supplier_id)
+    .single();
+  await supabase
+    .from("rfq_suppliers")
+    .update({ status: supplierRow?.invited_at ? "sent" : "pending" })
+    .eq("id", quote.supplier_id);
+
+  revalidatePath(`/rfqs/${quote.rfq_id}`);
+  revalidatePath(`/rfqs/${quote.rfq_id}/compare`);
   return { success: true, rfqId: quote.rfq_id };
 }
 
