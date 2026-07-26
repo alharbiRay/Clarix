@@ -17,6 +17,7 @@ import {
   type InitialPreferences,
 } from "@/components/generate-recommendation-button";
 import { ManualQuoteDialog } from "@/components/manual-quote-dialog";
+import { ApproveAwardButton } from "@/components/approve-award-button";
 import { formatDate, formatMoney } from "@/lib/format";
 import {
   DEFAULT_RECOMMENDATION_WEIGHTS,
@@ -259,20 +260,44 @@ export default async function ComparePage({
         </FadeIn>
       )}
 
-      {award && award.decision === "review_needed" && (
+      {award &&
+        award.decision !== "auto_approved" &&
+        award.po_sent_at &&
+        awardRecommended && (
+          <FadeIn>
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
+              <span>
+                <strong>Approved:</strong> {awardRecommended.label} — PO sent{" "}
+                {formatDate(award.po_sent_at)}.
+              </span>
+            </div>
+          </FadeIn>
+        )}
+
+      {award && award.decision === "review_needed" && !award.po_sent_at && (
         <FadeIn>
-          <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            <AlertTriangle size={15} className="shrink-0 text-amber-600" />
-            <span>
-              <strong>Review needed:</strong> {award.reason}. Approval
-              required before awarding.
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <span className="flex items-center gap-2">
+              <AlertTriangle size={15} className="shrink-0 text-amber-600" />
+              <span>
+                <strong>Review needed:</strong> {award.reason}. Approval
+                required before awarding.
+              </span>
             </span>
+            {awardRecommended && (
+              <ApproveAwardButton
+                rfqId={params.id}
+                supplierLabel={awardRecommended.label}
+              />
+            )}
           </div>
         </FadeIn>
       )}
 
       {award &&
         award.decision === "differs_from_cheapest" &&
+        !award.po_sent_at &&
         awardRecommended &&
         awardCheapest && (
           <FadeIn>
@@ -306,6 +331,11 @@ export default async function ComparePage({
                       : `${awardRecommended.deliveryDays} days`}{" "}
                     · Warranty: {awardRecommended.warranty || "—"}
                   </p>
+                  <ApproveAwardButton
+                    rfqId={params.id}
+                    supplierLabel={awardRecommended.label}
+                    className="mt-3 w-full justify-center"
+                  />
                 </div>
                 <div className="rounded-xl border border-slate-100 p-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">

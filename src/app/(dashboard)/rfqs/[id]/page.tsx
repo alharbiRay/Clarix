@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileText, Scale } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, FileText, Scale } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,9 +20,10 @@ import {
 import { QuoteUploadDialog } from "@/components/quote-upload-dialog";
 import { ManualQuoteDialog } from "@/components/manual-quote-dialog";
 import { QuoteRowActions } from "@/components/quote-row-actions";
+import { ApproveAwardButton } from "@/components/approve-award-button";
 import { FadeIn } from "@/components/motion";
 import { formatDate, formatMoney } from "@/lib/format";
-import type { Quote, QuoteItem, Rfq, RfqItem, RfqSupplier } from "@/lib/types";
+import type { Quote, QuoteItem, Rfq, RfqAward, RfqItem, RfqSupplier } from "@/lib/types";
 
 const SUPPLIER_STATUS: Record<
   RfqSupplier["status"],
@@ -67,11 +68,14 @@ export default async function RfqDetailPage({
 }) {
   const supabase = createClient();
 
-  const { data } = await supabase
-    .from("rfqs")
-    .select("*, rfq_items(*), rfq_suppliers(*), quotes(*, quote_items(*))")
-    .eq("id", params.id)
-    .single();
+  const [{ data }, { data: awardData }] = await Promise.all([
+    supabase
+      .from("rfqs")
+      .select("*, rfq_items(*), rfq_suppliers(*), quotes(*, quote_items(*))")
+      .eq("id", params.id)
+      .single(),
+    supabase.from("rfq_awards").select("*").eq("rfq_id", params.id).maybeSingle(),
+  ]);
 
   if (!data) notFound();
 
@@ -85,6 +89,13 @@ export default async function RfqDetailPage({
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
   const suppliersById = new Map(suppliers.map((s) => [s.id, s]));
+  const award = awardData as RfqAward | null;
+  const awardRecommendedSupplier = award?.recommended_supplier_id
+    ? suppliersById.get(award.recommended_supplier_id)
+    : undefined;
+  const awardRecommendedLabel = awardRecommendedSupplier
+    ? awardRecommendedSupplier.company_name || awardRecommendedSupplier.email
+    : null;
   const quotes = rfq.quotes.filter((q) => q.status !== "rejected");
   const quotedSupplierIds = new Set(quotes.map((q) => q.supplier_id));
   const uploadableSuppliers = suppliers
@@ -139,6 +150,58 @@ export default async function RfqDetailPage({
           {rfq.status === "draft" && <SendRfqButton rfqId={rfq.id} />}
         </div>
       </FadeIn>
+
+      {award && award.decision === "auto_approved" && awardRecommendedLabel && (
+        <FadeIn delay={0.01}>
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
+            <span>
+              <strong>Auto-approved:</strong> {awardRecommendedLabel} — PO sent{" "}
+              {formatDate(award.po_sent_at)}.
+            </span>
+          </div>
+        </FadeIn>
+      )}
+
+      {award &&
+        award.decision !== "auto_approved" &&
+        award.po_sent_at &&
+        awardRecommendedLabel && (
+          <FadeIn delay={0.01}>
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
+              <span>
+                <strong>Approved:</strong> {awardRecommendedLabel} — PO sent{" "}
+                {formatDate(award.po_sent_at)}.
+              </span>
+            </div>
+          </FadeIn>
+        )}
+
+      {award && award.decision !== "auto_approved" && !award.po_sent_at && (
+        <FadeIn delay={0.01}>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <span className="flex items-center gap-2">
+              <AlertTriangle size={15} className="shrink-0 text-amber-600" />
+              <span>
+                <strong>Review needed:</strong> {award.reason}.{" "}
+                <Link
+                  href={`/rfqs/${rfq.id}/compare`}
+                  className="underline underline-offset-2"
+                >
+                  View comparison
+                </Link>
+              </span>
+            </span>
+            {awardRecommendedLabel && (
+              <ApproveAwardButton
+                rfqId={rfq.id}
+                supplierLabel={awardRecommendedLabel}
+              />
+            )}
+          </div>
+        </FadeIn>
+      )}
 
       {rfq.description && (
         <FadeIn delay={0.02}>

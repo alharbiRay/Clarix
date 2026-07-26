@@ -2,9 +2,19 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Sparkles, X, type LucideIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  Sparkles,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { markNotificationRead } from "@/app/(dashboard)/dashboard/actions";
+import { approveAward } from "@/app/(dashboard)/rfqs/actions";
+import { Button } from "@/components/ui/button";
 
 export interface DashboardNotification {
   id: string;
@@ -49,6 +59,11 @@ const STYLES: Record<
 
 const DEFAULT_STYLE = STYLES.comparison_ready;
 
+// These are the two notification types evaluateAutoApproval sends when a
+// recommendation needed manual review — an "Approve & Send PO" action
+// belongs on both. auto_approved/comparison_ready are FYI-only.
+const APPROVABLE_TYPES = new Set(["review_needed", "differs_from_cheapest"]);
+
 export function NotificationBanner({
   notifications,
 }: {
@@ -77,31 +92,78 @@ export function NotificationBanner({
 
   return (
     <div className="space-y-2">
-      {visible.map((n) => {
-        const style = STYLES[n.type] ?? DEFAULT_STYLE;
-        const Icon = style.icon;
-        return (
-          <div
-            key={n.id}
-            className={`flex items-center justify-between gap-3 rounded-xl border ${style.border} ${style.bg} px-4 py-3 text-sm`}
+      {visible.map((n) => (
+        <NotificationRow
+          key={n.id}
+          notification={n}
+          onDismiss={() => dismiss(n.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function NotificationRow({
+  notification: n,
+  onDismiss,
+}: {
+  notification: DashboardNotification;
+  onDismiss: () => void;
+}) {
+  const router = useRouter();
+  const [isApproving, startApproveTransition] = useTransition();
+  const style = STYLES[n.type] ?? DEFAULT_STYLE;
+  const Icon = style.icon;
+  const approvable = APPROVABLE_TYPES.has(n.type);
+
+  function handleApprove() {
+    startApproveTransition(async () => {
+      const result = await approveAward(n.rfq_id);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
+        toast.success("Approved — PO sent.");
+        onDismiss();
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 rounded-xl border ${style.border} ${style.bg} px-4 py-3 text-sm`}
+    >
+      <Link
+        href={`/rfqs/${n.rfq_id}/compare`}
+        className={`flex min-w-0 items-center gap-2 font-medium ${style.text} hover:underline`}
+      >
+        <Icon size={15} className={`shrink-0 ${style.iconColor}`} />
+        <span className="truncate">{n.message}</span>
+      </Link>
+      <div className="flex shrink-0 items-center gap-2">
+        {approvable && (
+          <Button
+            size="sm"
+            disabled={isApproving}
+            onClick={handleApprove}
+            className="h-7 gap-1.5 bg-emerald-600 px-2.5 text-xs text-white hover:bg-emerald-700"
           >
-            <Link
-              href={`/rfqs/${n.rfq_id}/compare`}
-              className={`flex min-w-0 items-center gap-2 font-medium ${style.text} hover:underline`}
-            >
-              <Icon size={15} className={`shrink-0 ${style.iconColor}`} />
-              <span className="truncate">{n.message}</span>
-            </Link>
-            <button
-              onClick={() => dismiss(n.id)}
-              className={`shrink-0 rounded-md p-1 ${style.iconColor} opacity-60 transition-opacity hover:opacity-100`}
-              aria-label="Dismiss"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        );
-      })}
+            {isApproving ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-3 w-3" />
+            )}
+            Approve
+          </Button>
+        )}
+        <button
+          onClick={onDismiss}
+          className={`rounded-md p-1 ${style.iconColor} opacity-60 transition-opacity hover:opacity-100`}
+          aria-label="Dismiss"
+        >
+          <X size={14} />
+        </button>
+      </div>
     </div>
   );
 }

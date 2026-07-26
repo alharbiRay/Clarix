@@ -3,11 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { rfqSchema, type RfqFormValues } from "@/lib/validations/rfq";
-import { sendRfqInvitationEmail } from "@/lib/email";
+import { sendPoConfirmationEmail, sendRfqInvitationEmail } from "@/lib/email";
 import { inboundAddressForToken } from "@/lib/resend";
 import { extractRfqFromText } from "@/lib/gemini";
-import type { RfqItem, RfqSupplier } from "@/lib/types";
+import { computeQuoteTotal } from "@/lib/quote-comparison";
+import type { Quote, QuoteItem, RfqItem, RfqSupplier } from "@/lib/types";
 
 export async function createRfq(values: RfqFormValues) {
   const parsed = rfqSchema.safeParse(values);
@@ -191,4 +193,121 @@ export async function sendRfq(rfqId: string) {
   }
 
   return { success: true, emailFailures };
+}
+
+/**
+ * Buyer manually approves a recommendation that auto-approval left for
+ * review (Rule 2 or Rule 3 in src/lib/auto-approval.ts — cheapest failed
+ * delivery/warranty, or the recommended supplier wasn't the cheapest).
+ * Sends the same PO confirmation email the auto-approve path sends and
+ * marks the RFQ awarded.
+ *
+ * rfq_awards.decision is left as whatever the rules engine originally
+ * landed on (review_needed / differs_from_cheapest) — it's a record of that
+ * decision, not of what happened after. po_sent_at is what the UI checks to
+ * tell "still needs approval" from "approved" now, since a manual approval
+ * never actually met the Rule-1 auto-approve criteria. The update is
+ * conditioned on po_sent_at still being null so a double-click (or a stale
+ * notification clicked twice) can't send two POs.
+ */
+export async function approveAward(rfqId: string) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: award } = await supabase
+    .from("rfq_awards")
+    .select("*")
+    .eq("rfq_id", rfqId)
+    .maybeSingle();
+  if (!award) return { error: "No recommendation to approve yet" };
+  if (award.po_sent_at) {
+    return { error: "A PO has already been sent for this RFQ" };
+  }
+  if (!award.recommended_supplier_id || !award.recommended_quote_id) {
+    return { error: "No recommended supplier to approve" };
+  }
+
+  const { data: rfq } = await supabase
+    .from("rfqs")
+    .select("id, title, currency, buyer_id, rfq_items(*)")
+    .eq("id", rfqId)
+    .single();
+  if (!rfq) return { error: "RFQ not found" };
+
+  const { data: supplier } = await supabase
+    .from("rfq_suppliers")
+    .select("id, email, company_name")
+    .eq("id", award.recommended_supplier_id)
+    .single();
+  if (!supplier) return { error: "Recommended supplier not found" };
+
+  const { data: quote } = await supabase
+    .from("quotes")
+    .select("*, quote_items(*)")
+    .eq("id", award.recommended_quote_id)
+    .single();
+  if (!quote) return { error: "Recommended quote not found" };
+
+  const items = rfq.rfq_items as RfqItem[];
+  const total = computeQuoteTotal(
+    items,
+    quote as Quote & { quote_items: QuoteItem[] }
+  ).total;
+  const label = supplier.company_name || supplier.email;
+
+  const { data: updatedAward, error: awardUpdateError } = await supabase
+    .from("rfq_awards")
+    .update({ po_sent_at: new Date().toISOString() })
+    .eq("rfq_id", rfqId)
+    .is("po_sent_at", null)
+    .select("rfq_id")
+    .maybeSingle();
+  if (awardUpdateError) return { error: awardUpdateError.message };
+  if (!updatedAward) {
+    return { error: "A PO has already been sent for this RFQ" };
+  }
+
+  const { error: rfqUpdateError } = await supabase
+    .from("rfqs")
+    .update({ status: "awarded" })
+    .eq("id", rfqId);
+  if (rfqUpdateError) return { error: rfqUpdateError.message };
+
+  // Buyers have no INSERT policy on notifications (only select/update) —
+  // every other write to this table goes through the admin client too.
+  const adminSupabase = createAdminClient();
+  const { error: notifError } = await adminSupabase.from("notifications").insert({
+    buyer_id: rfq.buyer_id,
+    rfq_id: rfqId,
+    type: "auto_approved",
+    message: `Approved: ${label} — PO sent`,
+  });
+  if (notifError) console.error(`[approveAward] rfq=${rfqId} notifications insert failed:`, notifError);
+
+  try {
+    await sendPoConfirmationEmail({
+      to: supplier.email,
+      supplierLabel: label,
+      rfqTitle: rfq.title,
+      currency: rfq.currency,
+      items: items.map((i) => ({
+        name: i.name,
+        quantity: Number(i.quantity),
+        unit: i.unit,
+      })),
+      total,
+      deliveryDays: quote.delivery_days,
+      warranty: quote.warranty,
+    });
+  } catch (e) {
+    console.error(`[approveAward] rfq=${rfqId} PO confirmation email failed:`, e);
+  }
+
+  revalidatePath(`/rfqs/${rfqId}`);
+  revalidatePath(`/rfqs/${rfqId}/compare`);
+  revalidatePath("/dashboard");
+  return { success: true, rfqId };
 }
