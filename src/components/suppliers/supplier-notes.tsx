@@ -21,12 +21,15 @@ export function SupplierNotes({
   const dirty = notes !== savedNotes;
 
   function handleSave() {
+    const pending = notes;
+    const previous = savedNotes;
+    setSavedNotes(pending); // optimistic — flips `dirty` false and disables the button immediately
     startTransition(async () => {
-      const result = await updateSupplierNotes(supplierId, notes);
+      const result = await updateSupplierNotes(supplierId, pending);
       if (result?.error) {
+        setSavedNotes(previous);
         toast.error(result.error);
       } else {
-        setSavedNotes(notes);
         toast.success("Notes saved.");
       }
     });

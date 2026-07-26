@@ -65,9 +65,9 @@ export function QuoteUploadDialog({
       if (result.error) {
         toast.error(result.error);
       } else if (result.quoteId) {
-        toast.success("Quote extracted — review the values before confirming.");
+        toast.success("Quote extracted and confirmed automatically.");
         setOpen(false);
-        router.push(`/rfqs/${rfqId}/quotes/${result.quoteId}`);
+        router.push(`/rfqs/${rfqId}`);
       }
     });
   }
@@ -85,7 +85,8 @@ export function QuoteUploadDialog({
           <DialogTitle>Upload a PDF quote</DialogTitle>
           <DialogDescription>
             For suppliers who replied with a PDF instead of the form. Gemini
-            extracts the prices; you review them before they count.
+            extracts the prices and confirms the quote automatically — no
+            review needed.
           </DialogDescription>
         </DialogHeader>
 

@@ -9,21 +9,24 @@ import {
   buildRecommendationInput,
   type RfqWithComparisonData,
 } from "@/lib/recommendation-input";
-import { sendComparisonReadyEmail } from "@/lib/email";
 import { evaluateAutoApproval } from "@/lib/auto-approval";
 
 /**
  * Fires whenever a supplier's quote lands (form submit, manual entry, or a
- * buyer confirming a PDF extraction) — the three places rfq_suppliers.status
- * flips to 'submitted'. If every invited supplier has now resolved
- * (submitted or declined) and no recommendation exists yet for this RFQ,
- * generates one automatically (using saved rfq_preferences if the buyer set
- * any, defaults otherwise), notifies the buyer in-app, and emails them.
+ * PDF extraction — now auto-confirmed, see src/lib/quote-intake.ts) — the
+ * places rfq_suppliers.status flips to 'submitted'. If every invited
+ * supplier has now resolved (submitted or declined) and no recommendation
+ * exists yet for this RFQ, generates one automatically (using saved
+ * rfq_preferences if the buyer set any, defaults otherwise) and hands off to
+ * evaluateAutoApproval, which sends the buyer their one and only
+ * notification for this RFQ — "Auto-approved: ... — PO sent" or "Review
+ * needed: ...".
  *
- * Runs on the admin client since it's called from both buyer-authenticated
- * actions and the token-based (no-login) supplier submission flow. Never
- * throws past a logged, best-effort attempt — this is a side effect of a
- * quote submission and must not break that submission.
+ * Runs on the admin client since it's called from buyer-authenticated
+ * actions, the token-based (no-login) supplier submission flow, and the
+ * inbound-email webhook. Never throws past a logged, best-effort attempt —
+ * this is a side effect of a quote submission and must not break that
+ * submission.
  */
 export async function maybeAutoGenerateRecommendation(rfqId: string) {
   const supabase = createAdminClient();
@@ -88,29 +91,4 @@ export async function maybeAutoGenerateRecommendation(rfqId: string) {
     rfq as unknown as RfqWithComparisonData,
     result.content
   );
-
-  await supabase.from("notifications").insert({
-    buyer_id: rfq.buyer_id,
-    rfq_id: rfqId,
-    type: "comparison_ready",
-    message: `Your comparison for ${rfq.title} is ready`,
-  });
-
-  try {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("email")
-      .eq("id", rfq.buyer_id)
-      .single();
-    if (profile?.email) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-      await sendComparisonReadyEmail({
-        to: profile.email,
-        rfqTitle: rfq.title,
-        compareUrl: `${appUrl}/rfqs/${rfqId}/compare`,
-      });
-    }
-  } catch (e) {
-    console.error("Failed to send comparison-ready email:", e);
-  }
 }

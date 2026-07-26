@@ -70,7 +70,11 @@ export function QuoteReviewForm({
   pdfUrl: string | null;
 }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  // Separate transitions per button so only the one actually clicked shows
+  // its own spinner — both still disable together to prevent a double submit.
+  const [isConfirming, startConfirmTransition] = useTransition();
+  const [isRejecting, startRejectTransition] = useTransition();
+  const isPending = isConfirming || isRejecting;
   const [prices, setPrices] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       items.map((i) => [i.rfq_item_id, i.unit_price === null ? "" : String(i.unit_price)])
@@ -97,7 +101,7 @@ export function QuoteReviewForm({
 
   function handleConfirm(e: React.FormEvent) {
     e.preventDefault();
-    startTransition(async () => {
+    startConfirmTransition(async () => {
       const result = await confirmQuote(quoteId, {
         items: items.map((item) => {
           const v = parseFloat(prices[item.rfq_item_id] ?? "");
@@ -122,7 +126,7 @@ export function QuoteReviewForm({
   }
 
   function handleReject() {
-    startTransition(async () => {
+    startRejectTransition(async () => {
       const result = await rejectQuote(quoteId);
       if (result?.error) {
         toast.error(result.error);
@@ -316,11 +320,15 @@ export function QuoteReviewForm({
           onClick={handleReject}
           className="gap-2 text-red-600 hover:bg-red-50 hover:text-red-700"
         >
-          <XCircle className="h-4 w-4" />
+          {isRejecting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <XCircle className="h-4 w-4" />
+          )}
           Reject quote
         </Button>
         <Button type="submit" disabled={isPending} className="gap-2">
-          {isPending ? (
+          {isConfirming ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <CheckCircle2 className="h-4 w-4" />

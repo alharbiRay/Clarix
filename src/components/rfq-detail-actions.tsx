@@ -11,15 +11,20 @@ export function SendRfqButton({ rfqId }: { rfqId: string }) {
 
   function handleSend() {
     startTransition(async () => {
-      const result = await sendRfq(rfqId);
-      if (result?.error) {
-        toast.error(result.error);
-      } else if (result.emailFailures && result.emailFailures.length > 0) {
-        toast.warning(
-          `RFQ sent, but the invitation email failed for: ${result.emailFailures.join(", ")}. Share the quote link with them manually.`
-        );
-      } else {
-        toast.success("RFQ sent — suppliers have been emailed their invitations.");
+      try {
+        const result = await sendRfq(rfqId);
+        if (result?.error) {
+          toast.error(result.error);
+        } else if (result.emailFailures && result.emailFailures.length > 0) {
+          toast.warning(
+            `RFQ sent, but the invitation email failed for: ${result.emailFailures.join(", ")}. Share the quote link with them manually.`
+          );
+        } else {
+          toast.success("RFQ sent — suppliers have been emailed their invitations.");
+        }
+      } catch (e) {
+        console.error("sendRfq threw unexpectedly:", e);
+        toast.error("Something went wrong sending invitations. Check the server logs.");
       }
     });
   }

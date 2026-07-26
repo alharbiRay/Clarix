@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getResendClient } from "@/lib/resend";
-import { sendQuoteReceivedEmail } from "@/lib/email";
 import { createQuoteFromPdf } from "@/lib/quote-intake";
+import { maybeAutoGenerateRecommendation } from "@/lib/auto-recommendation";
 import type { RfqItem } from "@/lib/types";
 
 // Gemini extraction can take a few seconds — give the function room.
@@ -143,24 +143,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
-  try {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("email")
-      .eq("id", rfq.buyer_id)
-      .single();
-    if (profile?.email) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-      await sendQuoteReceivedEmail({
-        to: profile.email,
-        rfqTitle: rfq.title,
-        supplierLabel: supplier.company_name || supplier.email,
-        reviewUrl: `${appUrl}/rfqs/${supplier.rfq_id}/quotes/${result.quoteId}`,
-      });
-    }
-  } catch (e) {
-    console.error("Failed to send quote-received email:", e);
-  }
+  // Extraction is auto-confirmed (src/lib/quote-intake.ts) — no per-quote
+  // "please review" email. The buyer hears from us once, at the end, via
+  // maybeAutoGenerateRecommendation's auto-approval evaluation.
+  maybeAutoGenerateRecommendation(supplier.rfq_id).catch((e) =>
+    console.error("Auto-recommendation failed:", e)
+  );
 
   return NextResponse.json({ ok: true, quoteId: result.quoteId });
 }

@@ -25,24 +25,24 @@ function formatPct(v: number | null) {
 export default async function SuppliersPage() {
   const supabase = createClient();
 
-  const { data: suppliersData } = await supabase
-    .from("suppliers")
-    .select("*")
-    .order("created_at", { ascending: false });
+  // Independent of each other — the open-RFQs list doesn't depend on the
+  // suppliers query, so fetch both concurrently instead of sequentially.
+  const [{ data: suppliersData }, { data: openRfqsData }] = await Promise.all([
+    supabase.from("suppliers").select("*").order("created_at", { ascending: false }),
+    supabase
+      .from("rfqs")
+      .select("id, title, status")
+      .in("status", ["draft", "sent"])
+      .order("created_at", { ascending: false }),
+  ]);
   const suppliers = (suppliersData ?? []) as Supplier[];
+  const openRfqs = openRfqsData ?? [];
 
   const statsBySupplierId = new Map<string, SupplierStats>(
     await Promise.all(
       suppliers.map(async (s) => [s.id, await computeSupplierStats(supabase, s.id)] as const)
     )
   );
-
-  const { data: openRfqsData } = await supabase
-    .from("rfqs")
-    .select("id, title, status")
-    .in("status", ["draft", "sent"])
-    .order("created_at", { ascending: false });
-  const openRfqs = openRfqsData ?? [];
 
   return (
     <div className="space-y-7">

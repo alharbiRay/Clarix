@@ -51,12 +51,26 @@ export default async function ComparePage({
 }) {
   const supabase = createClient();
 
-  const { data } = await supabase
-    .from("rfqs")
-    .select("*, rfq_items(*), rfq_suppliers(*), quotes(*, quote_items(*))")
-    .eq("id", params.id)
-    .single();
+  // All four queries key off params.id alone — none depends on another's
+  // result — so fire them concurrently instead of one after another.
+  const [rfqResult, recResult, prefsResult, awardResult] = await Promise.all([
+    supabase
+      .from("rfqs")
+      .select("*, rfq_items(*), rfq_suppliers(*), quotes(*, quote_items(*))")
+      .eq("id", params.id)
+      .single(),
+    supabase
+      .from("ai_recommendations")
+      .select("*")
+      .eq("rfq_id", params.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.from("rfq_preferences").select("*").eq("rfq_id", params.id).maybeSingle(),
+    supabase.from("rfq_awards").select("*").eq("rfq_id", params.id).maybeSingle(),
+  ]);
 
+  const { data } = rfqResult;
   if (!data) notFound();
 
   const rfq = data as unknown as Rfq & {
@@ -139,13 +153,7 @@ export default async function ComparePage({
     .filter((s) => !quotedSupplierIds.has(s.id))
     .map((s) => ({ id: s.id, label: s.company_name || s.email }));
 
-  const { data: latestRec } = await supabase
-    .from("ai_recommendations")
-    .select("*")
-    .eq("rfq_id", params.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: latestRec } = recResult;
 
   const recommendation = latestRec
     ? recommendationContentSchema.safeParse(latestRec.content)
@@ -165,11 +173,7 @@ export default async function ComparePage({
   }
   const preferencesLine = preferencesLineParts.join(" · ");
 
-  const { data: prefsRow } = await supabase
-    .from("rfq_preferences")
-    .select("*")
-    .eq("rfq_id", params.id)
-    .maybeSingle();
+  const { data: prefsRow } = prefsResult;
 
   const initialPreferences: InitialPreferences | null = prefsRow
     ? {
@@ -180,11 +184,7 @@ export default async function ComparePage({
       }
     : null;
 
-  const { data: award } = (await supabase
-    .from("rfq_awards")
-    .select("*")
-    .eq("rfq_id", params.id)
-    .maybeSingle()) as { data: RfqAward | null };
+  const award = awardResult.data as RfqAward | null;
 
   const quotesById = new Map(rfq.quotes.map((q) => [q.id, q]));
 
@@ -264,8 +264,8 @@ export default async function ComparePage({
           <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             <AlertTriangle size={15} className="shrink-0 text-amber-600" />
             <span>
-              <strong>Review needed:</strong> the cheapest option has issues —{" "}
-              {award.reason}. Approval required before awarding.
+              <strong>Review needed:</strong> {award.reason}. Approval
+              required before awarding.
             </span>
           </div>
         </FadeIn>

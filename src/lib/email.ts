@@ -1,6 +1,20 @@
 import { getFromAddress, getResendClient } from "@/lib/resend";
 import { formatDate, formatMoney } from "@/lib/format";
 
+/** Logs the full Resend error (name/statusCode/message) before throwing — nothing else in this pipeline does. */
+function throwOnError(
+  context: string,
+  error: { name: string; statusCode: number | null; message: string } | null
+) {
+  if (!error) return;
+  console.error(`[email] ${context} failed:`, {
+    name: error.name,
+    statusCode: error.statusCode,
+    message: error.message,
+  });
+  throw new Error(`${error.name}: ${error.message}`);
+}
+
 function wrapper(preheader: string, bodyHtml: string) {
   return `<!doctype html>
 <html>
@@ -96,60 +110,7 @@ export async function sendRfqInvitationEmail(input: RfqInvitationEmailInput) {
     replyTo: input.replyToAddress,
   });
 
-  if (error) throw new Error(error.message);
-}
-
-interface QuoteReceivedEmailInput {
-  to: string;
-  rfqTitle: string;
-  supplierLabel: string;
-  reviewUrl: string;
-}
-
-export async function sendQuoteReceivedEmail(input: QuoteReceivedEmailInput) {
-  const resend = getResendClient();
-
-  const body = `
-    <p style="margin:0 0 16px;font-size:15px;color:#0f172a;">A supplier emailed in a quote.</p>
-    <p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#334155;">
-      <strong>${input.supplierLabel}</strong> replied to your invitation for <strong>${input.rfqTitle}</strong> with a PDF. We extracted the pricing automatically — please review and confirm it before it counts toward the comparison.
-    </p>
-    ${button(input.reviewUrl, "Review extracted quote")}`;
-
-  const { error } = await resend.emails.send({
-    from: getFromAddress(),
-    to: input.to,
-    subject: `New quote received by email: ${input.rfqTitle}`,
-    html: wrapper(`${input.supplierLabel} emailed in a quote for ${input.rfqTitle}`, body),
-  });
-
-  if (error) throw new Error(error.message);
-}
-
-interface ComparisonReadyEmailInput {
-  to: string;
-  rfqTitle: string;
-  compareUrl: string;
-}
-
-export async function sendComparisonReadyEmail(input: ComparisonReadyEmailInput) {
-  const resend = getResendClient();
-
-  const body = `
-    <p style="margin:0 0 16px;font-size:15px;color:#0f172a;">Your comparison is ready.</p>
-    <p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#334155;">
-      All suppliers invited to <strong>${input.rfqTitle}</strong> have submitted their quotes. We generated an AI recommendation to help you decide.
-    </p>
-    ${button(input.compareUrl, "View comparison")}`;
-
-  const { error } = await resend.emails.send({
-    from: getFromAddress(),
-    to: input.to,
-    subject: `Your comparison for ${input.rfqTitle} is ready`,
-    html: wrapper(`Your comparison for ${input.rfqTitle} is ready`, body),
-  });
-
-  if (error) throw new Error(error.message);
+  throwOnError("sendRfqInvitationEmail", error);
 }
 
 interface PoConfirmationEmailInput {
@@ -205,7 +166,7 @@ export async function sendPoConfirmationEmail(input: PoConfirmationEmailInput) {
     html: wrapper(`Your quote for ${input.rfqTitle} has been selected`, body),
   });
 
-  if (error) throw new Error(error.message);
+  throwOnError("sendPoConfirmationEmail", error);
 }
 
 interface AutoApprovalEmailInput {
@@ -233,29 +194,25 @@ export async function sendAutoApprovalEmail(input: AutoApprovalEmailInput) {
     html: wrapper(`Auto-approved: ${input.supplierLabel} — PO sent`, body),
   });
 
-  if (error) throw new Error(error.message);
+  throwOnError("sendAutoApprovalEmail", error);
 }
 
 interface ReviewNeededEmailInput {
   to: string;
   rfqTitle: string;
   reason: string;
-  /** true when the recommended supplier differs from the cheapest (Rule 3); false when it's the cheapest but failed a check (Rule 2). */
-  differs: boolean;
   compareUrl: string;
 }
 
-/** Buyer notification for Rules 2 & 3 — something needs a human decision before awarding. */
+/** Buyer's one and only notification for an RFQ when auto-approval doesn't clear it — sent by evaluateAutoApproval. */
 export async function sendReviewNeededEmail(input: ReviewNeededEmailInput) {
   const resend = getResendClient();
-  const headline = input.differs
-    ? "Recommendation differs from cheapest — approval required"
-    : `Review needed: cheapest option has issues — ${input.reason}`;
+  const headline = `Review needed: ${input.reason}`;
 
   const body = `
     <p style="margin:0 0 16px;font-size:15px;color:#0f172a;">${headline}</p>
     <p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#334155;">
-      <strong>${input.rfqTitle}</strong> wasn't auto-approved — ${input.reason}. Take a look and decide who to award.
+      <strong>${input.rfqTitle}</strong> wasn't auto-approved. Take a look and decide who to award.
     </p>
     ${button(input.compareUrl, "Review comparison")}`;
 
@@ -266,5 +223,5 @@ export async function sendReviewNeededEmail(input: ReviewNeededEmailInput) {
     html: wrapper(headline, body),
   });
 
-  if (error) throw new Error(error.message);
+  throwOnError("sendReviewNeededEmail", error);
 }

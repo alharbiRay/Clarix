@@ -23,9 +23,9 @@ const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10 MB
 
 /**
  * Buyer uploads a supplier's PDF quote. The PDF is stored in the private
- * quote-pdfs bucket, run through Gemini extraction, and saved as a quote in
- * 'needs_review' status. The buyer confirms it on the review screen before it
- * joins the comparison.
+ * quote-pdfs bucket, run through Gemini extraction, and saved as a
+ * 'confirmed' quote automatically — no manual review step, it joins the
+ * comparison immediately.
  */
 export async function uploadQuotePdf(formData: FormData) {
   const rfqId = formData.get("rfqId");
@@ -82,6 +82,10 @@ export async function uploadQuotePdf(formData: FormData) {
   if (result.error) return { error: result.error };
 
   revalidatePath(`/rfqs/${rfqId}`);
+  revalidatePath(`/rfqs/${rfqId}/compare`);
+  maybeAutoGenerateRecommendation(rfqId).catch((e) =>
+    console.error("Auto-recommendation failed:", e)
+  );
   return { quoteId: result.quoteId };
 }
 

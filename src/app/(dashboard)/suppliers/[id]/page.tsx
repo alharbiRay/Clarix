@@ -53,12 +53,14 @@ export default async function SupplierDetailPage({
   if (!data) notFound();
   const supplier = data as Supplier;
 
-  const stats = await computeSupplierStats(supabase, supplier.id);
-
-  const { data: rfqSuppliersData } = await supabase
-    .from("rfq_suppliers")
-    .select("id, rfq_id, rfqs(id, title, currency, rfq_items(*)), quotes(*, quote_items(*))")
-    .eq("supplier_id", supplier.id);
+  // Both only depend on supplier.id, not on each other — fetch concurrently.
+  const [stats, { data: rfqSuppliersData }] = await Promise.all([
+    computeSupplierStats(supabase, supplier.id),
+    supabase
+      .from("rfq_suppliers")
+      .select("id, rfq_id, rfqs(id, title, currency, rfq_items(*)), quotes(*, quote_items(*))")
+      .eq("supplier_id", supplier.id),
+  ]);
 
   const rfqSuppliers = (rfqSuppliersData ?? []) as unknown as RfqSupplierRow[];
 

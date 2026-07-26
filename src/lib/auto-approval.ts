@@ -22,17 +22,22 @@ function supplierLabel(s: Pick<RfqSupplier, "company_name" | "email">) {
  * buyer's manual "Get/Regenerate recommendation" button — that's explicit
  * experimentation and shouldn't risk sending a PO or repeat notifications.
  *
+ * This is the buyer's ONE notification for the RFQ — nothing else in the
+ * auto-generate pipeline notifies them. Exactly one of two messages lands:
+ *   "Auto-approved: [supplier] — PO sent"
+ *   "Review needed: [reason]"
+ *
  * Rule 1: recommended === cheapest, delivery <=14 days, has a warranty
  *   → auto-award, email the supplier a PO confirmation, notify the buyer.
  * Rule 2: recommended === cheapest but fails delivery/warranty
- *   → notify the buyer, no PO sent.
+ *   → "Review needed", no PO sent.
  * Rule 3: recommended !== cheapest
- *   → notify the buyer with the price difference, no PO sent.
+ *   → "Review needed" with the price difference, no PO sent.
+ * Disabled: profiles.auto_approval_enabled is off
+ *   → "Review needed" — comparison is ready, but nothing is auto-sent.
  *
- * Gated by profiles.auto_approval_enabled (default true) — disabling it
- * skips this function entirely, not just the auto-send step. Idempotent via
- * the rfq_awards row (one per RFQ). Never throws — this is a best-effort
- * side effect of recommendation generation.
+ * Idempotent via the rfq_awards row (one per RFQ). Never throws — this is a
+ * best-effort side effect of recommendation generation.
  */
 export async function evaluateAutoApproval(
   supabase: SupabaseClient,
@@ -45,7 +50,6 @@ export async function evaluateAutoApproval(
       .select("auto_approval_enabled, email")
       .eq("id", rfq.buyer_id)
       .single();
-    if (!profile?.auto_approval_enabled) return;
 
     const { data: existingAward } = await supabase
       .from("rfq_awards")
@@ -53,6 +57,42 @@ export async function evaluateAutoApproval(
       .eq("rfq_id", rfq.id)
       .maybeSingle();
     if (existingAward) return;
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const compareUrl = `${appUrl}/rfqs/${rfq.id}/compare`;
+    const buyerEmail = profile?.email as string | undefined;
+
+    if (!profile?.auto_approval_enabled) {
+      const reason = "auto-approval is turned off — review and approve manually";
+      await supabase.from("rfq_awards").insert({
+        rfq_id: rfq.id,
+        decision: "review_needed",
+        recommended_supplier_id: null,
+        recommended_quote_id: null,
+        cheapest_supplier_id: null,
+        cheapest_quote_id: null,
+        reason,
+      });
+      await supabase.from("notifications").insert({
+        buyer_id: rfq.buyer_id,
+        rfq_id: rfq.id,
+        type: "review_needed",
+        message: `Review needed: ${reason}`,
+      });
+      if (buyerEmail) {
+        try {
+          await sendReviewNeededEmail({
+            to: buyerEmail,
+            rfqTitle: rfq.title,
+            reason,
+            compareUrl,
+          });
+        } catch (e) {
+          console.error("Failed to send review-needed buyer email:", e);
+        }
+      }
+      return;
+    }
 
     const items = rfq.rfq_items;
     const cheapestQuote = findCheapestQuote(items, rfq.quotes);
@@ -80,9 +120,6 @@ export async function evaluateAutoApproval(
 
     const cheapestSupplier = suppliersById.get(cheapestQuote.supplier_id)!;
     const recommendedSupplier = suppliersById.get(recommendedQuote.supplier_id)!;
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-    const compareUrl = `${appUrl}/rfqs/${rfq.id}/compare`;
-    const buyerEmail = profile.email as string | undefined;
 
     if (recommendedQuote.id === cheapestQuote.id) {
       const deliveryOk =
@@ -155,7 +192,7 @@ export async function evaluateAutoApproval(
           );
         }
         if (!warrantyOk) reasons.push("no warranty provided");
-        const reason = reasons.join("; ");
+        const reason = `cheapest option has issues — ${reasons.join("; ")}`;
 
         await supabase.from("rfq_awards").insert({
           rfq_id: rfq.id,
@@ -170,7 +207,7 @@ export async function evaluateAutoApproval(
           buyer_id: rfq.buyer_id,
           rfq_id: rfq.id,
           type: "review_needed",
-          message: `Review needed: cheapest option has issues — ${reason}`,
+          message: `Review needed: ${reason}`,
         });
 
         if (buyerEmail) {
@@ -179,7 +216,6 @@ export async function evaluateAutoApproval(
               to: buyerEmail,
               rfqTitle: rfq.title,
               reason,
-              differs: false,
               compareUrl,
             });
           } catch (e) {
@@ -197,8 +233,8 @@ export async function evaluateAutoApproval(
           : null;
       const reason =
         diff !== null
-          ? `${formatMoney(diff, rfq.currency)} more than the cheapest quote`
-          : "recommended supplier is not the cheapest";
+          ? `recommended supplier is ${formatMoney(diff, rfq.currency)} more than the cheapest quote`
+          : "recommended supplier differs from the cheapest and needs approval";
 
       await supabase.from("rfq_awards").insert({
         rfq_id: rfq.id,
@@ -213,7 +249,7 @@ export async function evaluateAutoApproval(
         buyer_id: rfq.buyer_id,
         rfq_id: rfq.id,
         type: "differs_from_cheapest",
-        message: "Recommendation differs from cheapest — approval required",
+        message: `Review needed: ${reason}`,
       });
 
       if (buyerEmail) {
@@ -222,7 +258,6 @@ export async function evaluateAutoApproval(
             to: buyerEmail,
             rfqTitle: rfq.title,
             reason,
-            differs: true,
             compareUrl,
           });
         } catch (e) {

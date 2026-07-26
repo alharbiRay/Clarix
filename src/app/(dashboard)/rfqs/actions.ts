@@ -156,9 +156,14 @@ export async function sendRfq(rfqId: string) {
         .sort((a, b) => a.position - b.position)
         .map((i) => ({ name: i.name, quantity: Number(i.quantity), unit: i.unit }));
 
+      // Wrapped in an async callback so a synchronous throw (e.g. a missing
+      // env var read inside inboundAddressForToken) becomes a per-supplier
+      // rejection instead of crashing sendRfq() entirely before any emails
+      // are attempted — the RFQ/supplier statuses are already committed by
+      // this point, so a hard crash here would silently send zero emails.
       const results = await Promise.allSettled(
-        suppliers.map((supplier) =>
-          sendRfqInvitationEmail({
+        suppliers.map(async (supplier) => {
+          await sendRfqInvitationEmail({
             to: supplier.email,
             companyName: supplier.company_name,
             contactName: supplier.contact_name,
@@ -166,9 +171,18 @@ export async function sendRfq(rfqId: string) {
             items,
             formUrl: `${appUrl}/quote/${supplier.token}`,
             replyToAddress: inboundAddressForToken(supplier.token),
-          })
-        )
+          });
+        })
       );
+
+      results.forEach((result, i) => {
+        if (result.status === "rejected") {
+          console.error(
+            `[sendRfq] invitation email failed for ${suppliers[i].email} (rfq ${rfqId}):`,
+            result.reason
+          );
+        }
+      });
 
       emailFailures = suppliers
         .filter((_, i) => results[i].status === "rejected")

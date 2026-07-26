@@ -37,27 +37,30 @@ function weeklyDelta(count: number) {
 export default async function DashboardPage() {
   const supabase = createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: unreadNotifications } = user
-    ? await supabase
+  // The notifications lookup depends on the signed-in user, but the RFQ
+  // query doesn't — run them concurrently instead of one after another.
+  const [{ data: unreadNotifications }, { data }] = await Promise.all([
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return { data: [] };
+      return supabase
         .from("notifications")
         .select("id, rfq_id, type, message")
         .eq("buyer_id", user.id)
         .is("read_at", null)
-        .order("created_at", { ascending: false })
-    : { data: [] };
-
-  const { data } = await supabase
-    .from("rfqs")
-    .select(
-      "id,title,project,currency,deadline,status,created_at," +
-        "rfq_suppliers(id,created_at)," +
-        "quotes(id,status,submitted_at,quote_items(total_price))"
-    )
-    .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false });
+    })(),
+    supabase
+      .from("rfqs")
+      .select(
+        "id,title,project,currency,deadline,status,created_at," +
+          "rfq_suppliers(id,created_at)," +
+          "quotes(id,status,submitted_at,quote_items(total_price))"
+      )
+      .order("created_at", { ascending: false }),
+  ]);
 
   const rfqs = (data ?? []) as unknown as RfqRow[];
   const now = Date.now();

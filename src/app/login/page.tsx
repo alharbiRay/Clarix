@@ -44,7 +44,12 @@ export default function LoginPage() {
       password: String(formData.get("password")),
       options: {
         data: { full_name: String(formData.get("full_name") ?? "") },
-        emailRedirectTo: `${location.origin}/auth/callback`,
+        // Prefer the canonical app URL over location.origin — if the app is
+        // still reachable at an old domain (e.g. a bookmarked Vercel
+        // preview/production URL) alongside the real one, location.origin
+        // would send confirmation links to whichever domain the user
+        // happened to load this page from instead of the real site.
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? location.origin}/auth/callback`,
       },
     });
     setLoading(false);

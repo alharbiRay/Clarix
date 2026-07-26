@@ -277,8 +277,9 @@ export default async function RfqDetailPage({
                 Quotes ({quotes.length})
               </CardTitle>
               <CardDescription className="text-xs text-slate-400">
-                Form submissions arrive automatically. PDF quotes are extracted
-                by AI and need your confirmation.
+                Form submissions arrive automatically. PDF quotes are
+                extracted and confirmed by AI automatically — no review
+                needed.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">

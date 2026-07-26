@@ -24,10 +24,11 @@ export interface QuoteIntakeInput {
 
 /**
  * Extracts a supplier PDF quote with Gemini, stores the PDF, and inserts the
- * resulting quote + quote_items in 'needs_review' status. Shared by the
- * buyer-side PDF upload action and the Resend inbound-email webhook — the
- * only difference between those two entry points is where the PDF bytes and
- * the supabase client (RLS-scoped vs. service-role) come from.
+ * resulting quote + quote_items already 'confirmed' — no manual buyer review
+ * step. Shared by the buyer-side PDF upload action and the Resend
+ * inbound-email webhook — the only difference between those two entry points
+ * is where the PDF bytes and the supabase client (RLS-scoped vs.
+ * service-role) come from.
  */
 export async function createQuoteFromPdf(input: QuoteIntakeInput) {
   const { supabase, rfqId, buyerId, supplier, currency, items, pdfBuffer, source, sourceEmailId } =
@@ -86,7 +87,8 @@ export async function createQuoteFromPdf(input: QuoteIntakeInput) {
       rfq_id: rfqId,
       supplier_id: supplier.id,
       source,
-      status: "needs_review",
+      status: "confirmed",
+      confirmed_at: new Date().toISOString(),
       pdf_path: pdfPath,
       extraction_raw: extraction,
       delivery_days: extraction.delivery_days,
@@ -124,6 +126,11 @@ export async function createQuoteFromPdf(input: QuoteIntakeInput) {
       return { error: itemsError.message };
     }
   }
+
+  await supabase
+    .from("rfq_suppliers")
+    .update({ status: "submitted" })
+    .eq("id", supplier.id);
 
   // extraction.supplier_name is the one place a company name actually gets
   // "extracted from a PDF" today — nothing else in the app ever writes it.

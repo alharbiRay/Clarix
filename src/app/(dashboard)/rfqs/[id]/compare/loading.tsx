@@ -1,6 +1,4 @@
-function Pulse({ className }: { className?: string }) {
-  return <div className={`animate-pulse rounded-xl bg-slate-100 ${className}`} />;
-}
+import { Pulse } from "@/components/ui/skeleton-pulse";
 
 export default function CompareLoading() {
   return (

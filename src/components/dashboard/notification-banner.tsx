@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Sparkles, X, type LucideIcon } from "lucide-react";
+import { toast } from "sonner";
 import { markNotificationRead } from "@/app/(dashboard)/dashboard/actions";
 
 export interface DashboardNotification {
@@ -61,8 +62,16 @@ export function NotificationBanner({
 
   function dismiss(id: string) {
     setDismissed((prev) => new Set(prev).add(id));
-    startTransition(() => {
-      markNotificationRead(id);
+    startTransition(async () => {
+      const result = await markNotificationRead(id);
+      if (result?.error) {
+        setDismissed((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        toast.error("Couldn't dismiss that notification — try again.");
+      }
     });
   }
 

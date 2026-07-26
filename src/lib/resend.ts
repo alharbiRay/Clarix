@@ -9,7 +9,7 @@ export function getResendClient() {
 }
 
 export function getFromAddress() {
-  return process.env.RESEND_FROM_EMAIL || "Clarix <noreply@clarix.app>";
+  return process.env.RESEND_FROM_EMAIL || "Clarix <noreply@clarix.website>";
 }
 
 export function getInboundDomain() {
