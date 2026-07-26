@@ -132,6 +132,16 @@ export default async function ComparePage({
 
   const confirmedColumns = columns.filter((c) => !c.pending);
 
+  // For the "choose different supplier" picker on the approve button —
+  // every submitted/confirmed quote is a valid award target, not just the
+  // AI's pick or the cheapest.
+  const approvableQuotes = confirmedColumns.map((c) => ({
+    quoteId: c.quote.id,
+    label: c.label,
+    total: c.total,
+    deliveryDays: c.quote.delivery_days,
+  }));
+
   // Lowest line total per item, and lowest complete quote total — computed
   // only from confirmed/submitted quotes so an unreviewed AI extraction can't
   // win a "best price" badge before a human has checked it.
@@ -289,6 +299,8 @@ export default async function ComparePage({
               <ApproveAwardButton
                 rfqId={params.id}
                 supplierLabel={awardRecommended.label}
+                quotes={approvableQuotes}
+                currency={rfq.currency}
               />
             )}
           </div>
@@ -334,7 +346,9 @@ export default async function ComparePage({
                   <ApproveAwardButton
                     rfqId={params.id}
                     supplierLabel={awardRecommended.label}
-                    className="mt-3 w-full justify-center"
+                    quotes={approvableQuotes}
+                    currency={rfq.currency}
+                    className="mt-3"
                   />
                 </div>
                 <div className="rounded-xl border border-slate-100 p-4">

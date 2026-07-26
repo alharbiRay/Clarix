@@ -115,6 +115,21 @@ export default async function RfqDetailPage({
     );
   }
 
+  // For the "choose different supplier" picker on the approve button —
+  // every submitted/confirmed quote is a valid award target, not just the
+  // AI's pick.
+  const approvableQuotes = quotes
+    .filter((q) => q.status === "submitted" || q.status === "confirmed")
+    .map((q) => {
+      const supplier = suppliersById.get(q.supplier_id);
+      return {
+        quoteId: q.id,
+        label: supplier?.company_name || supplier?.email || "Unknown supplier",
+        total: quoteTotal(q),
+        deliveryDays: q.delivery_days,
+      };
+    });
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <FadeIn className="flex items-start justify-between gap-4">
@@ -197,6 +212,8 @@ export default async function RfqDetailPage({
               <ApproveAwardButton
                 rfqId={rfq.id}
                 supplierLabel={awardRecommendedLabel}
+                quotes={approvableQuotes}
+                currency={rfq.currency}
               />
             )}
           </div>

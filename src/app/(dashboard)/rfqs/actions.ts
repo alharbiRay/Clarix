@@ -202,15 +202,23 @@ export async function sendRfq(rfqId: string) {
  * Sends the same PO confirmation email the auto-approve path sends and
  * marks the RFQ awarded.
  *
+ * `overrideQuoteId` lets the buyer award a different supplier than the AI
+ * recommended (the "Choose different supplier" picker on the compare/detail
+ * pages) — it must belong to this RFQ and be a submitted/confirmed quote.
+ * Omit it to approve the AI's original pick.
+ *
  * rfq_awards.decision is left as whatever the rules engine originally
  * landed on (review_needed / differs_from_cheapest) — it's a record of that
- * decision, not of what happened after. po_sent_at is what the UI checks to
- * tell "still needs approval" from "approved" now, since a manual approval
- * never actually met the Rule-1 auto-approve criteria. The update is
- * conditioned on po_sent_at still being null so a double-click (or a stale
- * notification clicked twice) can't send two POs.
+ * decision, not of what happened after. recommended_supplier_id/quote_id
+ * ARE overwritten to whoever actually got the PO (the AI's pick or the
+ * buyer's override) so "Approved: X" always names the right supplier.
+ * po_sent_at is what the UI checks to tell "still needs approval" from
+ * "approved" now, since a manual approval never actually met the Rule-1
+ * auto-approve criteria. The update is conditioned on po_sent_at still
+ * being null so a double-click (or a stale notification clicked twice)
+ * can't send two POs.
  */
-export async function approveAward(rfqId: string) {
+export async function approveAward(rfqId: string, overrideQuoteId?: string) {
   const supabase = createClient();
   const {
     data: { user },
@@ -226,9 +234,9 @@ export async function approveAward(rfqId: string) {
   if (award.po_sent_at) {
     return { error: "A PO has already been sent for this RFQ" };
   }
-  if (!award.recommended_supplier_id || !award.recommended_quote_id) {
-    return { error: "No recommended supplier to approve" };
-  }
+
+  const targetQuoteId = overrideQuoteId || award.recommended_quote_id;
+  if (!targetQuoteId) return { error: "No supplier to approve" };
 
   const { data: rfq } = await supabase
     .from("rfqs")
@@ -237,19 +245,23 @@ export async function approveAward(rfqId: string) {
     .single();
   if (!rfq) return { error: "RFQ not found" };
 
-  const { data: supplier } = await supabase
-    .from("rfq_suppliers")
-    .select("id, email, company_name")
-    .eq("id", award.recommended_supplier_id)
-    .single();
-  if (!supplier) return { error: "Recommended supplier not found" };
-
   const { data: quote } = await supabase
     .from("quotes")
     .select("*, quote_items(*)")
-    .eq("id", award.recommended_quote_id)
+    .eq("id", targetQuoteId)
+    .eq("rfq_id", rfqId)
     .single();
-  if (!quote) return { error: "Recommended quote not found" };
+  if (!quote) return { error: "Quote not found" };
+  if (quote.status !== "submitted" && quote.status !== "confirmed") {
+    return { error: "This quote isn't ready to be awarded" };
+  }
+
+  const { data: supplier } = await supabase
+    .from("rfq_suppliers")
+    .select("id, email, company_name")
+    .eq("id", quote.supplier_id)
+    .single();
+  if (!supplier) return { error: "Supplier not found" };
 
   const items = rfq.rfq_items as RfqItem[];
   const total = computeQuoteTotal(
@@ -260,7 +272,11 @@ export async function approveAward(rfqId: string) {
 
   const { data: updatedAward, error: awardUpdateError } = await supabase
     .from("rfq_awards")
-    .update({ po_sent_at: new Date().toISOString() })
+    .update({
+      po_sent_at: new Date().toISOString(),
+      recommended_supplier_id: supplier.id,
+      recommended_quote_id: quote.id,
+    })
     .eq("rfq_id", rfqId)
     .is("po_sent_at", null)
     .select("rfq_id")
