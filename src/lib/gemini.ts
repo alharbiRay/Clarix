@@ -9,7 +9,7 @@ import {
   type RfqAutofillResult,
 } from "@/lib/validations/rfq";
 
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-2.0-flash";
 
 function getClient() {
   if (!process.env.GEMINI_API_KEY) {
