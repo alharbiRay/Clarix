@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { computeSupplierStats } from "@/lib/supplier-stats";
+import { computeAllSupplierStats } from "@/lib/supplier-stats";
 import { formatDate } from "@/lib/format";
 import { FadeIn } from "@/components/motion";
 import { AddSupplierDialog } from "@/components/suppliers/add-supplier-dialog";
@@ -38,10 +38,9 @@ export default async function SuppliersPage() {
   const suppliers = (suppliersData ?? []) as Supplier[];
   const openRfqs = openRfqsData ?? [];
 
-  const statsBySupplierId = new Map<string, SupplierStats>(
-    await Promise.all(
-      suppliers.map(async (s) => [s.id, await computeSupplierStats(supabase, s.id)] as const)
-    )
+  const statsBySupplierId: Map<string, SupplierStats> = await computeAllSupplierStats(
+    supabase,
+    suppliers.map((s) => s.id)
   );
 
   return (

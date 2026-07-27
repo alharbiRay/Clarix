@@ -18,6 +18,97 @@ function getClient() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 }
 
+const MAX_RETRIES = 2;
+const MAX_RETRY_DELAY_MS = 10_000;
+
+interface GeminiErrorInfo {
+  status?: string;
+  message: string;
+  retryDelaySeconds?: number;
+}
+
+/** Best-effort parse of the Gemini SDK's error — its .message is the raw JSON API error body. */
+function parseGeminiError(e: unknown): GeminiErrorInfo {
+  const raw = e instanceof Error ? e.message : String(e);
+  try {
+    const parsed = JSON.parse(raw);
+    const err = parsed?.error;
+    if (!err || typeof err !== "object") return { message: raw };
+    const details = Array.isArray(err.details) ? err.details : [];
+    const retryInfo = details.find(
+      (d: unknown) =>
+        typeof d === "object" &&
+        d !== null &&
+        typeof (d as { "@type"?: unknown })["@type"] === "string" &&
+        (d as { "@type": string })["@type"].includes("RetryInfo")
+    ) as { retryDelay?: string } | undefined;
+    const match = retryInfo?.retryDelay ? /^([\d.]+)s$/.exec(retryInfo.retryDelay) : null;
+    return {
+      status: typeof err.status === "string" ? err.status : undefined,
+      message: typeof err.message === "string" ? err.message : raw,
+      retryDelaySeconds: match ? parseFloat(match[1]) : undefined,
+    };
+  } catch {
+    return { message: raw };
+  }
+}
+
+/**
+ * Only retries errors actually likely to succeed on a second try within a
+ * few seconds: 503 (transient overload) or a 429 whose own RetryInfo
+ * suggests a short wait. A 429 backed by an exhausted daily quota or a
+ * depleted prepayment balance won't recover by retrying — failing fast
+ * there saves the extraction's ~60s function budget instead of burning it
+ * on a retry that's certain to fail the same way.
+ */
+function isRetryableGeminiError(info: GeminiErrorInfo): boolean {
+  if (info.status === "UNAVAILABLE") return true;
+  if (info.status === "RESOURCE_EXHAUSTED") {
+    if (/prepayment credits/i.test(info.message)) return false;
+    if (/PerDay/i.test(info.message)) return false;
+    return (
+      typeof info.retryDelaySeconds === "number" &&
+      info.retryDelaySeconds <= MAX_RETRY_DELAY_MS / 1000
+    );
+  }
+  return false;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function generateContentWithRetry(
+  client: GoogleGenAI,
+  parts: { text?: string; inlineData?: { mimeType: string; data: string } }[],
+  responseSchema: Schema
+) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await client.models.generateContent({
+        model: MODEL,
+        contents: [{ role: "user", parts }],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema,
+        },
+      });
+    } catch (e) {
+      lastError = e;
+      const info = parseGeminiError(e);
+      if (attempt === MAX_RETRIES || !isRetryableGeminiError(info)) throw e;
+      const delayMs = Math.min((info.retryDelaySeconds ?? 2) * 1000, MAX_RETRY_DELAY_MS);
+      console.warn(
+        `[gemini] ${info.status ?? "error"} on attempt ${attempt + 1}/${MAX_RETRIES + 1}, retrying in ${delayMs}ms:`,
+        info.message
+      );
+      await sleep(delayMs);
+    }
+  }
+  throw lastError;
+}
+
 /** Runs a Gemini structured-output call and validates the result against a zod schema. */
 async function generateStructured<T>(
   client: GoogleGenAI,
@@ -25,14 +116,7 @@ async function generateStructured<T>(
   responseSchema: Schema,
   zodSchema: z.ZodType<T>
 ): Promise<T> {
-  const response = await client.models.generateContent({
-    model: MODEL,
-    contents: [{ role: "user", parts }],
-    config: {
-      responseMimeType: "application/json",
-      responseSchema,
-    },
-  });
+  const response = await generateContentWithRetry(client, parts, responseSchema);
 
   const text = response.text;
   if (!text) {
