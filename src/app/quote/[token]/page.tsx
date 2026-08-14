@@ -6,6 +6,9 @@ import { formatDate } from "@/lib/format";
 import type { Rfq, RfqItem, RfqSupplier } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+// submitQuote now awaits maybeAutoGenerateRecommendation, which can run a
+// Gemini call plus auto-approval emails — give the function room.
+export const maxDuration = 60;
 
 function PublicShell({ children }: { children: React.ReactNode }) {
   return (

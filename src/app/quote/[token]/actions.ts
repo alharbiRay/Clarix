@@ -122,7 +122,7 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
     contactName: supplier.contact_name,
   });
 
-  maybeAutoGenerateRecommendation(supplier.rfq_id).catch((e) =>
+  await maybeAutoGenerateRecommendation(supplier.rfq_id).catch((e) =>
     console.error("Auto-recommendation failed:", e)
   );
 

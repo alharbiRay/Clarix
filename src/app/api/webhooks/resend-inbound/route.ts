@@ -140,6 +140,15 @@ export async function POST(request: NextRequest) {
 
   if (result.error) {
     console.error("Failed to create quote from inbound email:", result.error);
+    const message = result.quotaExceeded
+      ? `A supplier's emailed quote for ${rfq.title} couldn't be processed — the Gemini API quota/rate limit was hit. Ask them to resend, or enter it manually.`
+      : `A supplier's emailed quote for ${rfq.title} couldn't be processed automatically: ${result.error}`;
+    await supabase.from("notifications").insert({
+      buyer_id: rfq.buyer_id,
+      rfq_id: supplier.rfq_id,
+      type: "review_needed",
+      message,
+    });
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 

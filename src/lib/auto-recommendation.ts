@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   DEFAULT_RECOMMENDATION_WEIGHTS,
   generateQuoteRecommendation,
+  isGeminiQuotaError,
   type RecommendationPreferences,
 } from "@/lib/gemini";
 import {
@@ -137,6 +138,15 @@ export async function maybeAutoGenerateRecommendation(rfqId: string) {
     result = await generateQuoteRecommendation(input);
   } catch (e) {
     console.error(`${TAG} rfq=${rfqId} generateQuoteRecommendation threw:`, e);
+    const message = isGeminiQuotaError(e)
+      ? `Auto-recommendation for ${rfq.title} failed — the Gemini API quota/rate limit was hit. Generate it manually from the compare page once it resets.`
+      : `Auto-recommendation for ${rfq.title} failed. Generate it manually from the compare page.`;
+    await supabase.from("notifications").insert({
+      buyer_id: rfq.buyer_id,
+      rfq_id: rfqId,
+      type: "review_needed",
+      message,
+    });
     return;
   }
   console.log(`${TAG} rfq=${rfqId} Gemini recommendation received (model=${result.model})`);

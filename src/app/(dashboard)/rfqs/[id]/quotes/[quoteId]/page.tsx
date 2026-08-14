@@ -7,6 +7,10 @@ import { FadeIn } from "@/components/motion";
 import { extractionSchema } from "@/lib/validations/quote";
 import type { Quote, QuoteItem, RfqItem, RfqSupplier } from "@/lib/types";
 
+// confirmQuote now awaits maybeAutoGenerateRecommendation, which can run a
+// Gemini call plus auto-approval emails — give the function room.
+export const maxDuration = 60;
+
 export default async function QuoteReviewPage({
   params,
 }: {
