@@ -54,6 +54,21 @@ function parseGeminiError(e: unknown): GeminiErrorInfo {
 }
 
 /**
+ * True if a Gemini call failed because the free-tier quota (20 requests/day,
+ * 5/min) is exhausted or the account's prepayment balance is depleted — a
+ * 429 that retrying can't fix. We're on the free tier, so this is expected
+ * to happen under real load; callers use this to log loudly and surface the
+ * failure to the buyer instead of letting it disappear into a generic error.
+ */
+export function isGeminiQuotaError(e: unknown): boolean {
+  const info = parseGeminiError(e);
+  return (
+    info.status === "RESOURCE_EXHAUSTED" &&
+    (/prepayment credits/i.test(info.message) || /PerDay/i.test(info.message))
+  );
+}
+
+/**
  * Only retries errors actually likely to succeed on a second try within a
  * few seconds: 503 (transient overload) or a 429 whose own RetryInfo
  * suggests a short wait. A 429 backed by an exhausted daily quota or a
@@ -97,7 +112,15 @@ async function generateContentWithRetry(
     } catch (e) {
       lastError = e;
       const info = parseGeminiError(e);
-      if (attempt === MAX_RETRIES || !isRetryableGeminiError(info)) throw e;
+      if (attempt === MAX_RETRIES || !isRetryableGeminiError(info)) {
+        if (isGeminiQuotaError(e)) {
+          console.error(
+            `[GEMINI_QUOTA_EXCEEDED] Gemini call rejected — free-tier quota exhausted (model: ${MODEL}):`,
+            info.message
+          );
+        }
+        throw e;
+      }
       const delayMs = Math.min((info.retryDelaySeconds ?? 2) * 1000, MAX_RETRY_DELAY_MS);
       console.warn(
         `[gemini] ${info.status ?? "error"} on attempt ${attempt + 1}/${MAX_RETRIES + 1}, retrying in ${delayMs}ms:`,

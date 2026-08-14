@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { extractQuoteFromPdf } from "@/lib/gemini";
+import { extractQuoteFromPdf, isGeminiQuotaError } from "@/lib/gemini";
 import { ensureSupplierProfile } from "@/lib/supplier-profile";
 import type { RfqItem } from "@/lib/types";
 
@@ -70,6 +70,7 @@ export async function createQuoteFromPdf(input: QuoteIntakeInput) {
   } catch (e) {
     return {
       error: `Extraction failed: ${e instanceof Error ? e.message : "unknown error"}`,
+      quotaExceeded: isGeminiQuotaError(e),
     };
   }
 
