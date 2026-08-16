@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { Logo } from "@/components/logo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,9 +52,7 @@ export function AppSidebar({
     <aside className="fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-slate-200 bg-white">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-6 py-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 text-sm font-bold text-white">
-          C
-        </div>
+        <Logo className="h-8 w-8" />
         <span className="text-lg font-bold tracking-tight">Clarix</span>
       </div>
 
