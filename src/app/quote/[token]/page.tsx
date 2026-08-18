@@ -2,6 +2,7 @@ import { CheckCircle2, Clock, FileQuestion } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { FadeIn } from "@/components/motion";
 import { SupplierQuoteForm } from "@/components/supplier-quote-form";
+import { Logo } from "@/components/logo";
 import { formatDate } from "@/lib/format";
 import type { Rfq, RfqItem, RfqSupplier } from "@/lib/types";
 
@@ -15,9 +16,7 @@ function PublicShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center gap-2.5 px-6 py-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 text-sm font-bold text-white">
-            C
-          </div>
+          <Logo className="h-8 w-8" />
           <span className="text-lg font-bold tracking-tight">Clarix</span>
           <span className="ml-auto text-xs text-slate-400">
             Supplier quote portal
