@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Toaster } from "@/components/ui/sonner";
+import { MotionProvider } from "@/components/motion-provider";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -30,7 +31,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
-        {children}
+        <MotionProvider>{children}</MotionProvider>
         <Toaster richColors position="top-right" />
       </body>
     </html>
