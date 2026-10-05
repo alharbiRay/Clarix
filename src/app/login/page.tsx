@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FadeIn } from "@/components/motion";
+import { Logo } from "@/components/logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -68,11 +69,12 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
       <FadeIn className="w-full max-w-sm space-y-6">
-        <div className="flex items-center justify-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 text-base font-bold text-white">
-            C
+        <div className="flex flex-col items-center gap-2 text-center">
+          <div className="flex items-center justify-center gap-2.5">
+            <Logo className="h-9 w-9" />
+            <span className="text-2xl font-bold tracking-tight">Clarix</span>
           </div>
-          <span className="text-2xl font-bold tracking-tight">Clarix</span>
+          <p className="text-sm text-slate-400">Procurement, simplified.</p>
         </div>
 
         <Tabs defaultValue="signin">
