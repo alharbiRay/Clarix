@@ -11,6 +11,9 @@ import {
   Trophy,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { loadMetricsRfqs } from "@/lib/metrics/load";
+import { scoreSuppliers } from "@/lib/scorecard";
+import { ScoreBadge } from "@/components/suppliers/score-badge";
 import { FadeIn } from "@/components/motion";
 import {
   GenerateRecommendationButton,
@@ -51,10 +54,13 @@ export default async function ComparePage({
   params: { id: string };
 }) {
   const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   // Every query keys off params.id alone — none depends on another's
   // result — so fire them concurrently instead of one after another.
-  const [rfqResult, recResult, prefsResult, awardResult, jobResult] = await Promise.all([
+  const [rfqResult, recResult, prefsResult, awardResult, jobResult, historyRfqs] = await Promise.all([
     supabase
       .from("rfqs")
       .select("*, rfq_items(*), rfq_suppliers(*), quotes(*, quote_items(*))")
@@ -78,6 +84,8 @@ export default async function ComparePage({
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // Supplier scorecards for the badges in the column headers.
+    user ? loadMetricsRfqs(supabase, user.id) : Promise.resolve([]),
   ]);
 
   const { data } = rfqResult;
@@ -140,6 +148,10 @@ export default async function ComparePage({
   ];
 
   const confirmedColumns = columns.filter((c) => !c.pending);
+  const supplierScores = scoreSuppliers(
+    historyRfqs,
+    rfq.rfq_suppliers.map((s) => s.supplier_id).filter((id): id is string => Boolean(id))
+  );
 
   // For the "choose different supplier" picker on the approve button —
   // every submitted/confirmed quote is a valid award target, not just the
@@ -478,8 +490,16 @@ export default async function ComparePage({
                           }`}
                         >
                           <div className="flex flex-col items-end gap-0.5">
-                            <span className="max-w-[160px] truncate">
-                              {col.label}
+                            <span className="flex items-center gap-1.5">
+                              <span className="max-w-[140px] truncate">
+                                <bdi>{col.label}</bdi>
+                              </span>
+                              {col.supplier.supplier_id && (
+                                <ScoreBadge
+                                  size="sm"
+                                  score={supplierScores.get(col.supplier.supplier_id)?.card?.score ?? null}
+                                />
+                              )}
                             </span>
                             <span className="inline-flex items-center gap-1 font-normal text-slate-400">
                               {col.quote.source === "pdf" && <FileText size={11} />}

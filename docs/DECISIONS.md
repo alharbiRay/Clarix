@@ -286,3 +286,32 @@ the real metrics module.
   unused indexes were dropped from the not-yet-applied 0009.
 - Deferred: precomputing totals in a SQL view/RPC. The paged loader is fine for SMB
   volumes; revisit past roughly 5,000 RFQs per buyer.
+
+---
+
+# Phase 4: Supplier scorecard
+
+## D-029: The scorecard replaces the star rating
+The old 1–5 star rating counted only *auto-approved* awards as wins, so manually
+approved purchase orders made a supplier look worse. The new score uses every
+purchase order actually sent and spells out every weight (`docs/METRICS.md`).
+
+## D-030: The weights are a stated opinion, not tuned to a story
+Price 30, responsiveness 20, delivery 20, warranty 15, win rate 15. In the demo, a
+supplier ~22% above the lowest price but always offering a warranty ends up *below* a
+cheap supplier that rarely offers one. That's the documented trade-off, not a bug, so the
+test asserts robust properties (the fast-and-cheap supplier ranks first; warranty and
+slowness weaknesses get called out) instead of a ranking that suits a hunch. Phase 7's
+approval policy is where a buyer encodes "warranty is mandatory".
+
+## D-031: "Delivery reliability" means promised vs typical
+We have no actual delivery dates, so reliability is measured honestly as the promised
+lead time against the median promise on the same RFQ. The UI calls it "Delivery vs typical".
+
+## D-032: There's no score until a supplier has 2 quotes
+Below that a score is noise. The badge says "New" and the detail page explains why.
+
+## D-033: Tooling: target ES2017 and a line-ending-safe patch helper
+`tsconfig.json` gets `"target": "ES2017"` (type-checking only; Next compiles with SWC),
+which ends the recurring Map/Set iteration errors. Scripted edits normalize CRLF first,
+because this checkout uses `core.autocrlf=true`.

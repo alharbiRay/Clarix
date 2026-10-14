@@ -9,7 +9,7 @@ export const METRICS_SELECT =
   "id, title, currency, created_at, " +
   "rfq_items(id, name, quantity), " +
   "rfq_suppliers(id, company_name, email, supplier_id, status, invited_at), " +
-  "quotes(id, supplier_id, status, submitted_at, quote_items(rfq_item_id, total_price)), " +
+  "quotes(id, supplier_id, status, submitted_at, delivery_days, warranty, quote_items(rfq_item_id, total_price)), " +
   "rfq_awards(decision, recommended_quote_id, po_sent_at, created_at, reason)";
 
 interface AwardRow {
@@ -39,6 +39,8 @@ export interface MetricsRow {
     supplier_id: string;
     status: string;
     submitted_at: string;
+    delivery_days?: number | null;
+    warranty?: string | null;
     quote_items: { rfq_item_id: string; total_price: number | string | null }[];
   }[];
   rfq_awards: AwardRow | AwardRow[] | null;
@@ -65,6 +67,8 @@ export function toMetricsRfq(row: MetricsRow): MetricsRfq {
       invite_id: q.supplier_id,
       status: q.status as QuoteStatusValue,
       submitted_at: q.submitted_at,
+      delivery_days: q.delivery_days ?? null,
+      warranty: q.warranty ?? null,
       lines: q.quote_items.map((qi) => ({
         item_id: qi.rfq_item_id,
         total: qi.total_price === null ? null : Number(qi.total_price),

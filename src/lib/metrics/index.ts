@@ -29,6 +29,9 @@ export interface MetricsRfq {
     status: QuoteStatusValue;
     submitted_at: string;
     lines: { item_id: string; total: number | null }[];
+    /** Promised delivery (days) and warranty text — used by the supplier scorecard. */
+    delivery_days?: number | null;
+    warranty?: string | null;
   }[];
   award: {
     decision: AwardDecision;
@@ -60,10 +63,16 @@ export function monthKey(iso: string | Date): string {
 }
 
 /** The `back`-th month before the one containing `now` (0 = this month). */
-function monthBefore(now: Date, back: number): string {
+export function monthBefore(now: Date, back: number): string {
   const shifted = new Date(now.getTime() + RIYADH_OFFSET_MS);
   const d = new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() - back, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Last instant of a "YYYY-MM" month in Saudi time. */
+export function monthEnd(key: string): Date {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(Date.UTC(y, m, 1) - RIYADH_OFFSET_MS - 1);
 }
 
 /** Total of a quote, or null if any RFQ line is unpriced. */
