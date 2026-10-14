@@ -11,9 +11,13 @@ import {
   Trophy,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { loadMetricsRfqs, rfqIdsForSuppliers } from "@/lib/metrics/load";
+import { loadMetricsRfqs, PRICE_HISTORY_SELECT, rfqIdsForSuppliers } from "@/lib/metrics/load";
 import { scoreSuppliers } from "@/lib/scorecard";
 import { ScoreBadge } from "@/components/suppliers/score-badge";
+import { PriceInsightBadges } from "@/components/compare/price-insight";
+import { ItemPriceHistory } from "@/components/compare/item-price-history";
+import { buildPriceHistory, DEFAULT_PRICE_ALERT_THRESHOLD, itemHistory, lineInsight } from "@/lib/pricing/history";
+import { normalizeItem, normalizeUnit } from "@/lib/pricing/normalize";
 import { FadeIn } from "@/components/motion";
 import {
   GenerateRecommendationButton,
@@ -149,15 +153,50 @@ export default async function ComparePage({
   const scoreRefs = rfq.rfq_suppliers
     .filter((s) => s.supplier_id)
     .map((s) => ({ id: s.supplier_id as string, email: s.email }));
-  const historyRfqs = scoreRefs.length
-    ? await rfqIdsForSuppliers(supabase, scoreRefs)
-        .then((ids) => loadMetricsRfqs(supabase, rfq.buyer_id, { rfqIds: ids }))
-        .catch((e) => {
-          console.error(JSON.stringify({ event: "compare.scores_unavailable", error: String(e) }));
-          return [];
-        })
-    : [];
+  // Price context: the last year of the buyer's quotes (also decorative, also fail-soft).
+  const yearAgo = new Date(Date.now() - 365 * 86_400_000).toISOString();
+  const [historyRfqs, priceRfqs, thresholdResult] = await Promise.all([
+    scoreRefs.length
+      ? rfqIdsForSuppliers(supabase, scoreRefs)
+          .then((ids) => loadMetricsRfqs(supabase, rfq.buyer_id, { rfqIds: ids }))
+          .catch((e) => {
+            console.error(JSON.stringify({ event: "compare.scores_unavailable", error: String(e) }));
+            return [];
+          })
+      : Promise.resolve([]),
+    loadMetricsRfqs(supabase, rfq.buyer_id, { since: yearAgo, select: PRICE_HISTORY_SELECT }).catch((e) => {
+      console.error(JSON.stringify({ event: "compare.price_history_unavailable", error: String(e) }));
+      return [];
+    }),
+    supabase.from("profiles").select("price_alert_threshold").eq("id", rfq.buyer_id).maybeSingle(),
+  ]);
   const supplierScores = scoreSuppliers(historyRfqs, scoreRefs);
+
+  const priceThreshold = Number(thresholdResult.data?.price_alert_threshold ?? DEFAULT_PRICE_ALERT_THRESHOLD);
+  const priceHistory = buildPriceHistory(priceRfqs);
+  const itemSeries = new Map(
+    items.map((i) => [i.id, { key: normalizeItem(i.name).key, unit: normalizeUnit(i.unit) }])
+  );
+  function insightFor(col: QuoteColumn, item: RfqItem) {
+    const series = itemSeries.get(item.id);
+    const cell = col.itemPrices.get(item.id);
+    if (!series?.key || col.pending || !cell) return null;
+    const unitPrice = cell.unit ?? (cell.total !== null && Number(item.quantity) > 0 ? cell.total / Number(item.quantity) : null);
+    if (unitPrice === null) return null;
+    return lineInsight(
+      priceHistory,
+      {
+        key: series.key,
+        unit: series.unit,
+        currency: rfq.currency,
+        rfqId: rfq.id,
+        supplierKey: col.supplier.supplier_id ?? col.label,
+        unitPrice,
+        at: col.quote.submitted_at,
+      },
+      { threshold: priceThreshold }
+    );
+  }
 
   // For the "choose different supplier" picker on the approve button —
   // every submitted/confirmed quote is a valid award target, not just the
@@ -541,9 +580,28 @@ export default async function ComparePage({
                             </span>
                             {item.name}
                           </p>
-                          <p className="mt-0.5 text-xs text-slate-400">
+                          <p className="mt-0.5 text-xs text-slate-500">
                             {Number(item.quantity)} {item.unit}
                           </p>
+                          {itemSeries.get(item.id)?.key && (
+                            <ItemPriceHistory
+                              itemName={item.name}
+                              unit={item.unit}
+                              currency={rfq.currency}
+                              points={itemHistory(
+                                priceHistory,
+                                itemSeries.get(item.id)!.key,
+                                itemSeries.get(item.id)!.unit,
+                                rfq.currency
+                              ).map((p) => ({
+                                at: p.at,
+                                unitPrice: p.unitPrice,
+                                supplierLabel: p.supplierLabel,
+                                rfqTitle: p.rfqTitle,
+                                current: p.rfqId === rfq.id,
+                              }))}
+                            />
+                          )}
                         </td>
                         {columns.map((col) => {
                           const cell = col.itemPrices.get(item.id);
@@ -581,6 +639,12 @@ export default async function ComparePage({
                                         {item.unit}
                                       </p>
                                     )}
+                                  {(() => {
+                                    const insight = insightFor(col, item);
+                                    return insight ? (
+                                      <PriceInsightBadges insight={insight} currency={rfq.currency} />
+                                    ) : null;
+                                  })()}
                                   {cell?.notes && (
                                     <p className="mt-0.5 max-w-[180px] text-xs text-slate-400">
                                       {cell.notes}

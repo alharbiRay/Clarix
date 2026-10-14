@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { FadeIn } from "@/components/motion";
 import { AutoApprovalToggle } from "@/components/settings/auto-approval-toggle";
+import { PriceAlertForm } from "@/components/settings/price-alert-form";
 import {
   Card,
   CardContent,
@@ -17,7 +18,7 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("auto_approval_enabled")
+    .select("auto_approval_enabled, price_alert_threshold")
     .eq("id", user!.id)
     .single();
 
@@ -46,6 +47,22 @@ export default async function SettingsPage() {
             <AutoApprovalToggle
               initialEnabled={profile?.auto_approval_enabled ?? true}
             />
+          </CardContent>
+        </Card>
+      </FadeIn>
+
+      <FadeIn delay={0.06}>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold">Price alerts</CardTitle>
+            <CardDescription className="text-xs text-slate-500">
+              On the comparison page, each quoted price is checked against that supplier&apos;s last price
+              for the same item and against the recent market average. Changes at or above this threshold
+              are highlighted.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PriceAlertForm initialPercent={Math.round(Number(profile?.price_alert_threshold ?? 0.1) * 100)} />
           </CardContent>
         </Card>
       </FadeIn>
