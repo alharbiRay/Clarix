@@ -57,7 +57,9 @@ export function buildJobHooks(supabase: SupabaseClient): JobHooks {
         job.type === JOB_TYPES.inboundEmailQuote
           ? `A supplier's emailed quote for ${title} couldn't be processed automatically. Ask them to resend it, or enter it manually.`
           : `The AI recommendation for ${title} couldn't be generated automatically. Generate it manually from the compare page.`;
-      await notify(supabase, job, "review_needed", message);
+      // Not "review_needed": that type renders an Approve button, which
+      // makes no sense for a failure notice.
+      await notify(supabase, job, "action_required", message);
     },
   };
 }
@@ -70,7 +72,9 @@ export function buildJobHandlers(supabase: SupabaseClient): Record<string, JobHa
     },
     [JOB_TYPES.inboundEmailQuote]: async (job) => {
       const result = await processInboundEmailQuote(supabase, job);
-      if (result.outcome === "created" && job.rfq_id && job.buyer_id) {
+      // Also on "already_processed": a previous run may have saved the quote
+      // and then died before chaining this (enqueue is idempotent).
+      if ((result.outcome === "created" || result.outcome === "already_processed") && job.rfq_id && job.buyer_id) {
         // Already in the background: chain the recommendation job directly.
         const next = await enqueueJob(supabase, autoRecommendationJob(job.rfq_id, job.buyer_id));
         await runJobs({ jobId: next, limit: 1 });
@@ -81,7 +85,7 @@ export function buildJobHandlers(supabase: SupabaseClient): Record<string, JobHa
 }
 
 /** Claims and runs due jobs (or one specific job). Safe to call concurrently. */
-export function runJobs(opts: { limit?: number; jobId?: string } = {}): Promise<ProcessSummary> {
+export function runJobs(opts: { limit?: number; jobId?: string; budgetMs?: number } = {}): Promise<ProcessSummary> {
   const supabase = createAdminClient();
   return processJobs({
     store: supabaseJobStore(supabase),

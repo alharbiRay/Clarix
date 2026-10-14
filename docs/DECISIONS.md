@@ -136,3 +136,28 @@ The new code calls `enqueue_job`/`claim_jobs` and writes
 `ai_recommendations.auto_generated`. If the deploy goes first, scheduling fails
 (logged, and the quote save still succeeds) and recommendations stop until the
 migration is applied. This is listed as a manual step in the PR and the final summary.
+
+## D-015: Code review of Phase 1, and what changed as a result
+An independent review (`requesting-code-review`) returned "ready with fixes".
+Changes made, each with a test written first:
+- Stale jobs past `max_attempts` now give up (the buyer is notified) instead of
+  being reclaimed forever. Gemini calls have a 45 s request timeout.
+- The sweep leases **one job at a time** within a 40 s budget, so unstarted jobs
+  aren't stranded or charged attempts they never ran.
+- Webhook: a DB error during the token lookup returns 500 so Resend retries.
+  The RFQ deadline is checked against the email's arrival time
+  (`payload.receivedAt`), not the retry time.
+- Middleware: auth-js *returns* `AuthRetryableFetchError` and 5xx responses
+  rather than throwing them. Both now count as "unavailable", so users see the
+  timeout explanation instead of a silent logout. Refreshed cookies carry over
+  onto redirects.
+- `safeNextPath` resolves against a fixed origin and rejects control
+  characters and backslashes. This closes an open redirect via `/%09/evil.com`.
+- Smaller fixes: the recommendation chain also runs on `already_processed`;
+  failure notices use a non-approvable `action_required` type; a profile load
+  failure throws instead of recording "auto-approval off"; `enqueue_job`
+  retries if its duplicate is claimed mid-call; buyers can read only the job
+  status columns; the `/demo` and `/pricing` placeholders were removed from the
+  public routes until those routes exist.
+- Noted but not changed: GitHub disables scheduled workflows in repos with no
+  activity for 60 days. The daily Vercel cron remains the backstop (see PROGRESS).

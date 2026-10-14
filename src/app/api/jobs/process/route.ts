@@ -28,7 +28,9 @@ async function handle(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
-    const summary = await runJobs({ limit: 10 });
+    // Leave headroom under maxDuration (60s): jobs are leased one at a time
+    // and nothing new is started after 40s.
+    const summary = await runJobs({ limit: 10, budgetMs: 40_000 });
     return NextResponse.json({ ok: true, ...summary });
   } catch (e) {
     console.error(JSON.stringify({ event: "jobs.sweep_failed", error: String(e) }));

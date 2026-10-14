@@ -80,7 +80,9 @@ export async function processInboundEmailQuote(
     buyer_id: string;
     rfq_items: RfqItem[];
   };
-  if ((rfq.status !== "sent" && rfq.status !== "draft") || (rfq.deadline && new Date(rfq.deadline).getTime() < Date.now())) {
+  const received = typeof job.payload.receivedAt === "string" ? Date.parse(job.payload.receivedAt) : NaN;
+  const arrivedAt = Number.isNaN(received) ? Date.now() : received;
+  if ((rfq.status !== "sent" && rfq.status !== "draft") || (rfq.deadline && new Date(rfq.deadline).getTime() < arrivedAt)) {
     return { outcome: "rfq_closed" };
   }
 

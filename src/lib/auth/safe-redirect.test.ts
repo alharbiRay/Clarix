@@ -12,6 +12,11 @@ describe("safeNextPath", () => {
     [String.raw`/\evil.example`, "/dashboard"],
     ["javascript:alert(1)", "/dashboard"],
     ["/login", "/dashboard"],
+    ["/\t/evil.com", "/dashboard"],
+    ["/%09/evil.com", "/%09/evil.com"],
+    ["/\n/evil.com", "/dashboard"],
+    ["/\u0000x", "/dashboard"],
+    ["/rfqs#x", "/rfqs#x"],
   ])("%s → %s", (input, expected) => {
     expect(safeNextPath(input)).toBe(expected);
   });

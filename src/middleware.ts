@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { isAuthRetryableFetchError } from "@supabase/auth-js";
 import { NextResponse, type NextRequest } from "next/server";
 import { decideAccess, type AuthOutcome } from "@/lib/auth/route-access";
 import { TimeoutError, withTimeout } from "@/lib/auth/with-timeout";
@@ -14,6 +15,13 @@ export const AUTH_TIMEOUT_MS = 2500;
 /** Supabase SSR stores the session in `sb-<project-ref>-auth-token` (optionally chunked `.0`, `.1`). */
 function hasSessionCookie(request: NextRequest) {
   return request.cookies.getAll().some((c) => c.name.startsWith("sb-") && c.name.includes("-auth-token"));
+}
+
+/** Network failure, abort, or a 5xx from Supabase Auth — as opposed to "you have no valid session". */
+function isOutage(error: unknown) {
+  if (isAuthRetryableFetchError(error)) return true;
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" && (status === 0 || status >= 500);
 }
 
 /** fetch that aborts itself at the deadline, so a hung socket is actually released. */
@@ -66,8 +74,17 @@ export async function middleware(request: NextRequest) {
           },
         }
       );
-      const { data } = await withTimeout(supabase.auth.getUser(), AUTH_TIMEOUT_MS, "auth.getUser");
-      auth = data.user ? { status: "authenticated", userId: data.user.id } : { status: "anonymous" };
+      const { data, error } = await withTimeout(supabase.auth.getUser(), AUTH_TIMEOUT_MS, "auth.getUser");
+      if (data.user) {
+        auth = { status: "authenticated", userId: data.user.id };
+      } else if (error && isOutage(error)) {
+        // auth-js doesn't throw on network failures, aborts or 5xx — it
+        // returns them. Only a definitive "no/invalid session" is anonymous.
+        logUnavailable(pathname, "error", error);
+        auth = { status: "unavailable", reason: "error" };
+      } else {
+        auth = { status: "anonymous" };
+      }
     } catch (e) {
       const isTimeout =
         e instanceof TimeoutError || (e instanceof Error && e.name === "TimeoutError");
@@ -79,7 +96,11 @@ export async function middleware(request: NextRequest) {
 
   const decision = decideAccess(pathname, auth);
   if (decision.type === "redirect") {
-    return NextResponse.redirect(new URL(decision.location, request.url));
+    const redirect = NextResponse.redirect(new URL(decision.location, request.url));
+    // A token refresh may have rotated the session cookies before we decided
+    // to redirect — dropping them would lose the new refresh token.
+    response.cookies.getAll().forEach((c) => redirect.cookies.set(c));
+    return redirect;
   }
   return response;
 }

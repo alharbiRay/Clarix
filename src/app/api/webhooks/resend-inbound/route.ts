@@ -11,6 +11,14 @@ export const maxDuration = 60;
 
 const INBOUND_TOKEN_RE = /^quotes\+([a-f0-9]+)@/i;
 
+function receivedAt(event: unknown): string {
+  const e = event as { created_at?: unknown; data?: { created_at?: unknown } };
+  const candidate = e.data?.created_at ?? e.created_at;
+  return typeof candidate === "string" && !Number.isNaN(Date.parse(candidate))
+    ? new Date(candidate).toISOString()
+    : new Date().toISOString();
+}
+
 /**
  * Resend inbound webhook — fires when a supplier replies to their invitation
  * email with a PDF quote attached.
@@ -57,11 +65,17 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = createAdminClient();
-  const { data: supplier } = await supabase
+  const { data: supplier, error: lookupError } = await supabase
     .from("rfq_suppliers")
     .select("id, rfq_id, rfqs(buyer_id)")
     .eq("token", token)
     .maybeSingle();
+  if (lookupError) {
+    // A transient DB error must not look like "unknown token" — answer 500
+    // so Resend retries the delivery instead of the quote being dropped.
+    console.error(JSON.stringify({ event: "webhook.token_lookup_failed", error: lookupError.message }));
+    return NextResponse.json({ error: "Temporary failure" }, { status: 500 });
+  }
   if (!supplier) {
     return NextResponse.json({ ok: true }); // unknown token, nothing to do
   }
@@ -71,7 +85,9 @@ export async function POST(request: NextRequest) {
     type: JOB_TYPES.inboundEmailQuote,
     buyerId,
     rfqId: supplier.rfq_id,
-    payload: { emailId: data.email_id, rfqSupplierId: supplier.id },
+    // receivedAt: the RFQ deadline is judged against arrival time, not
+    // against whenever a (possibly quota-delayed) retry happens to run.
+    payload: { emailId: data.email_id, rfqSupplierId: supplier.id, receivedAt: receivedAt(event) },
     dedupeKey: `inbound_email:${data.email_id}`,
     maxAttempts: 3,
   });

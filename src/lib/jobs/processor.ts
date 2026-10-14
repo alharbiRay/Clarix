@@ -68,8 +68,16 @@ export interface ProcessJobsOptions {
   store: JobStore;
   handlers: Record<string, JobHandler>;
   hooks?: JobHooks;
+  /** Max jobs to run in this call. */
   limit?: number;
   jobId?: string;
+  /**
+   * Stop claiming new jobs once this much time has passed. Jobs are leased
+   * one at a time, so anything not reached stays 'pending' for the next run
+   * instead of being leased, stranded by a function timeout, and charged an
+   * attempt it never got.
+   */
+  budgetMs?: number;
   now?: () => Date;
 }
 
@@ -86,12 +94,28 @@ export async function processJobs({
   hooks = {},
   limit = 5,
   jobId,
+  budgetMs = Infinity,
   now = () => new Date(),
 }: ProcessJobsOptions): Promise<ProcessSummary> {
-  const jobs = await store.claim(jobId ? { limit, jobId } : { limit });
-  const summary: ProcessSummary = { claimed: jobs.length, succeeded: 0, retried: 0, failed: 0 };
+  const summary: ProcessSummary = { claimed: 0, succeeded: 0, retried: 0, failed: 0 };
+  const startedAt = now().getTime();
 
-  for (const job of jobs) {
+  while (summary.claimed < limit && now().getTime() - startedAt < budgetMs) {
+    const [job] = await store.claim(jobId ? { limit: 1, jobId } : { limit: 1 });
+    if (!job) break;
+    summary.claimed++;
+
+    if (job.attempts > job.max_attempts) {
+      // Reclaimed after its lease went stale on the final attempt: the worker
+      // was killed every time (e.g. a function timeout). Don't try again.
+      const message = `Job did not finish after ${job.max_attempts} attempts (worker timed out or was stopped)`;
+      await store.fail(job.id, message);
+      summary.failed++;
+      console.error(JSON.stringify({ event: "jobs.abandoned", jobId: job.id, type: job.type, attempts: job.attempts }));
+      if (hooks.onGiveUp) await safely(() => hooks.onGiveUp!(job, new Error(message)), "onGiveUp");
+      continue;
+    }
+
     const handler = handlers[job.type];
     if (!handler) {
       await store.fail(job.id, `No handler for job type '${job.type}'`);

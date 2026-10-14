@@ -19,7 +19,7 @@ function job(overrides: Partial<Job> = {}): Job {
 function memoryStore(jobs: Job[]) {
   const store: JobStore & { log: string[] } = {
     log: [],
-    claim: vi.fn(async () => jobs),
+    claim: vi.fn(async ({ limit }: { limit: number }) => jobs.splice(0, limit)),
     complete: vi.fn(async (id: string) => void store.log.push(`complete:${id}`)),
     reschedule: vi.fn(async (id: string, runAfter: Date) => void store.log.push(`reschedule:${id}@${runAfter.toISOString()}`)),
     fail: vi.fn(async (id: string) => void store.log.push(`fail:${id}`)),
@@ -41,10 +41,35 @@ describe("processJobs", () => {
     expect(summary).toEqual({ claimed: 2, succeeded: 2, retried: 0, failed: 0 });
   });
 
-  it("passes limit and a specific job id through to the store", async () => {
+  it("claims one job at a time, passing a specific job id through to the store", async () => {
     const store = memoryStore([]);
     await processJobs({ store, handlers: {}, limit: 3, jobId: "only-me" });
-    expect(store.claim).toHaveBeenCalledWith({ limit: 3, jobId: "only-me" });
+    expect(store.claim).toHaveBeenCalledWith({ limit: 1, jobId: "only-me" });
+  });
+
+  it("stops claiming once the time budget is spent, so unstarted jobs are not leased and stranded", async () => {
+    let t = NOW.getTime();
+    const store = memoryStore([job({ id: "a" }), job({ id: "b" }), job({ id: "c" })]);
+    const summary = await processJobs({
+      store,
+      handlers: { auto_recommendation: async () => { t += 30_000; } },
+      now: () => new Date(t),
+      limit: 10,
+      budgetMs: 40_000,
+    });
+    expect(summary.claimed).toBe(2);
+    expect(store.claim).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up without running a job reclaimed past max_attempts (its worker kept dying)", async () => {
+    const onGiveUp = vi.fn();
+    const handler = vi.fn();
+    const store = memoryStore([job({ attempts: 6, max_attempts: 5 })]);
+    const summary = await processJobs({ store, handlers: { auto_recommendation: handler }, hooks: { onGiveUp } });
+    expect(handler).not.toHaveBeenCalled();
+    expect(store.fail).toHaveBeenCalledWith("job-1", expect.stringMatching(/did not finish/));
+    expect(onGiveUp).toHaveBeenCalled();
+    expect(summary.failed).toBe(1);
   });
 
   it("reschedules a failed job with backoff while attempts remain", async () => {

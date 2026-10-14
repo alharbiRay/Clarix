@@ -63,6 +63,14 @@ describe("processInboundEmailQuote", () => {
     expect(deps.createQuote).not.toHaveBeenCalled();
   });
 
+  it("judges the deadline by when the email arrived, not when a delayed retry runs", async () => {
+    const { db, deps } = setup({ deadline: "2026-05-01T12:00:00.000Z" });
+    const onTime = { ...job, payload: { ...job.payload, receivedAt: "2026-05-01T08:00:00.000Z" } };
+    expect((await processInboundEmailQuote(db as never, onTime, deps)).outcome).toBe("created");
+    const late = { ...job, payload: { ...job.payload, receivedAt: "2026-05-01T13:00:00.000Z" } };
+    expect((await processInboundEmailQuote(db as never, late, deps)).outcome).toBe("rfq_closed");
+  });
+
   it("is idempotent on the email id (webhook retries, job retries)", async () => {
     const { db, deps } = setup({ quotes: [{ id: "q-0", supplier_id: "other", source_email_id: "email-1", status: "confirmed" }] });
     expect((await processInboundEmailQuote(db as never, job, deps)).outcome).toBe("already_processed");

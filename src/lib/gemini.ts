@@ -27,6 +27,9 @@ function getClient() {
 }
 
 const MAX_RETRIES = 2;
+// Per-request ceiling. Without it a hung call can outlive the function's
+// maxDuration, so the job's lease goes stale and the attempt is wasted.
+const GEMINI_REQUEST_TIMEOUT_MS = 45_000;
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -45,6 +48,7 @@ async function generateContentWithRetry(
         config: {
           responseMimeType: "application/json",
           responseSchema,
+          httpOptions: { timeout: GEMINI_REQUEST_TIMEOUT_MS },
         },
       });
     } catch (e) {

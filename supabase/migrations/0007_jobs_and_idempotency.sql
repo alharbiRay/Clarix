@@ -47,11 +47,15 @@ create index jobs_buyer_id_idx on public.jobs (buyer_id);
 create trigger jobs_updated_at before update on public.jobs
   for each row execute function public.set_updated_at();
 
--- Buyers may see the status of their own jobs ("recommendation is being
--- generated…"); only the service role writes.
+-- Buyers may see the *status* of their own jobs ("recommendation is being
+-- generated…"), never payloads or error text; only the service role writes.
 alter table public.jobs enable row level security;
 create policy "own jobs: select" on public.jobs
   for select using (buyer_id = auth.uid());
+
+revoke all on public.jobs from anon, authenticated;
+grant select (id, type, buyer_id, rfq_id, status, attempts, max_attempts, run_after, created_at, updated_at)
+  on public.jobs to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- enqueue_job: insert, or return the already-pending job with the same key.
@@ -71,18 +75,22 @@ as $$
 declare
   v_id uuid;
 begin
-  insert into public.jobs (type, buyer_id, rfq_id, payload, dedupe_key, max_attempts)
-  values (p_type, p_buyer_id, p_rfq_id, coalesce(p_payload, '{}'::jsonb), p_dedupe_key, p_max_attempts)
-  on conflict (dedupe_key) where status = 'pending' and dedupe_key is not null
-  do nothing
-  returning id into v_id;
+  -- Retry loop: if the pending duplicate we collided with gets claimed
+  -- between our insert and our lookup, insert again rather than return null.
+  for i in 1..5 loop
+    insert into public.jobs (type, buyer_id, rfq_id, payload, dedupe_key, max_attempts)
+    values (p_type, p_buyer_id, p_rfq_id, coalesce(p_payload, '{}'::jsonb), p_dedupe_key, p_max_attempts)
+    on conflict (dedupe_key) where status = 'pending' and dedupe_key is not null
+    do nothing
+    returning id into v_id;
+    exit when v_id is not null;
 
-  if v_id is null then
     select id into v_id
     from public.jobs
     where dedupe_key = p_dedupe_key and status = 'pending'
     limit 1;
-  end if;
+    exit when v_id is not null;
+  end loop;
 
   return v_id;
 end;

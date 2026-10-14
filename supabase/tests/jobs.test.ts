@@ -87,7 +87,25 @@ describe("jobs queue (migration 0007)", () => {
     ).rejects.toThrow(/permission denied/);
     await expect(
       asUser(db, alice, () => db.query(`insert into jobs (type, buyer_id) values ('x', $1)`, [alice]))
-    ).rejects.toThrow(/row-level security/);
+    ).rejects.toThrow(/row-level security|permission denied/);
+  });
+
+  it("buyers can read a job's status but not its internals (payload, last_error, result)", async () => {
+    await enqueue(null, rfqA, alice);
+    const status = await asUser(db, alice, async () => (await db.query(`select status, attempts, run_after from jobs`)).rows);
+    expect(status).toHaveLength(1);
+    await expect(asUser(db, alice, () => db.query(`select last_error from jobs`))).rejects.toThrow(/permission denied/);
+    await expect(asUser(db, alice, () => db.query(`select payload from jobs`))).rejects.toThrow(/permission denied/);
+  });
+
+  it("anonymous visitors can't read jobs at all", async () => {
+    await enqueue(null, rfqA, alice);
+    await db.exec(`set role anon`);
+    try {
+      await expect(db.query(`select status from jobs`)).rejects.toThrow(/permission denied/);
+    } finally {
+      await db.exec(`reset role`);
+    }
   });
 });
 

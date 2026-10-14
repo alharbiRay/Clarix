@@ -285,14 +285,14 @@ export default async function ComparePage({
             <span>
               {retryAt ? (
                 <>
-                  <strong>AI recommendation delayed</strong> — the AI service is
-                  rate-limited. Clarix retries automatically (next attempt
-                  around {new Date(retryAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}).
+                  <strong>AI recommendation delayed</strong> — the last
+                  attempt didn&apos;t finish. Clarix retries automatically (next
+                  attempt around {new Date(retryAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}).
                 </>
               ) : (
                 <>
-                  <strong>Preparing the AI recommendation…</strong> All quotes
-                  are in. Refresh in a moment to see it.
+                  <strong>Preparing the AI recommendation…</strong> Refresh in
+                  a moment to see it.
                 </>
               )}
             </span>

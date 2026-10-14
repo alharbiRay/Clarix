@@ -44,7 +44,7 @@ describe("job hooks", () => {
     const fake = db();
     await buildJobHooks(fake as never).onGiveUp!(job({ attempts: 5 }), new Error("x"));
     expect(fake.tables.notifications[0]).toMatchObject({
-      type: "review_needed",
+      type: "action_required",
       message: expect.stringMatching(/Office chairs.*generate it manually/i),
     });
   });
@@ -53,7 +53,7 @@ describe("job hooks", () => {
     const fake = db();
     await buildJobHooks(fake as never).onGiveUp!(job({ type: "inbound_email_quote" }), new Error("unreadable"));
     expect(fake.tables.notifications[0]).toMatchObject({
-      type: "review_needed",
+      type: "action_required",
       message: expect.stringMatching(/emailed quote for Office chairs couldn't be processed.*resend.*manually/i),
     });
   });

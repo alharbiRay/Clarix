@@ -36,7 +36,7 @@ describe("/api/jobs/process", () => {
     const res = await GET(req("Bearer s3cret-value-long-enough"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, claimed: 2, succeeded: 2, retried: 0, failed: 0 });
-    expect(runJobs).toHaveBeenCalledWith({ limit: 10 });
+    expect(runJobs).toHaveBeenCalledWith({ limit: 10, budgetMs: 40_000 });
   });
 
   it("accepts POST too (GitHub Actions / manual trigger)", async () => {

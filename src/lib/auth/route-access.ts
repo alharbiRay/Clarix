@@ -11,8 +11,6 @@ const PUBLIC_PREFIXES = [
   "/api/webhooks", // signature-verified
   "/api/health",
   "/api/jobs", // CRON_SECRET-protected
-  "/demo",
-  "/pricing",
 ];
 
 export function isPublicPath(pathname: string): boolean {

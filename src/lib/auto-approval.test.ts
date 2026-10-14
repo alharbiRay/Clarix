@@ -81,6 +81,13 @@ describe("evaluateAutoApproval", () => {
     expect(db.tables.notifications).toHaveLength(1);
   });
 
+  it("throws (so the job retries) instead of recording a decision when the buyer profile can't be loaded", async () => {
+    const db = seed({ profiles: [] });
+    await expect(evaluateAutoApproval(asClient(db), rfq, content)).rejects.toThrow(/profile/);
+    expect(db.tables.rfq_awards).toHaveLength(0);
+    expect(email.sendReviewNeededEmail).not.toHaveBeenCalled();
+  });
+
   it("does nothing when the RFQ already has an award", async () => {
     const db = seed({ rfq_awards: [{ rfq_id: "rfq-1", decision: "review_needed" }] });
     await evaluateAutoApproval(asClient(db), rfq, content);

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  Clock,
   CheckCircle2,
   Loader2,
   Sparkles,
@@ -54,6 +55,21 @@ const STYLES: Record<
     bg: "bg-amber-50",
     iconColor: "text-amber-600",
     text: "text-amber-900",
+  },
+  // Background job failures (src/lib/jobs/run.ts) — informational, never approvable.
+  action_required: {
+    icon: AlertTriangle,
+    border: "border-red-200",
+    bg: "bg-red-50",
+    iconColor: "text-red-600",
+    text: "text-red-900",
+  },
+  ai_delayed: {
+    icon: Clock,
+    border: "border-slate-200",
+    bg: "bg-slate-50",
+    iconColor: "text-slate-500",
+    text: "text-slate-800",
   },
 };
 

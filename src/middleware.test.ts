@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const getUser = vi.fn();
-const createServerClient = vi.fn((..._args: unknown[]) => ({ auth: { getUser } }));
+const createServerClient = vi.fn((..._args: unknown[]): unknown => ({ auth: { getUser } }));
 vi.mock("@supabase/ssr", () => ({
   createServerClient: (...args: unknown[]) => createServerClient(...args),
 }));
@@ -72,6 +72,35 @@ describe("middleware", () => {
     const pending = middleware(request("/login", AUTH_COOKIE));
     await vi.advanceTimersByTimeAsync(AUTH_TIMEOUT_MS);
     expect(location(await pending)).toBeNull();
+  });
+
+  it("treats auth-js's returned retryable fetch error (outage) as unavailable, not anonymous", async () => {
+    const { AuthRetryableFetchError } = await import("@supabase/auth-js");
+    getUser.mockResolvedValue({ data: { user: null }, error: new AuthRetryableFetchError("fetch failed", 0) });
+    const res = await middleware(request("/rfqs", AUTH_COOKIE));
+    expect(location(res)).toBe("/login?reason=session_unavailable&next=%2Frfqs");
+  });
+
+  it("treats a 5xx from Supabase Auth as unavailable", async () => {
+    getUser.mockResolvedValue({ data: { user: null }, error: { name: "AuthApiError", status: 503, message: "unavailable" } });
+    expect(location(await middleware(request("/rfqs", AUTH_COOKIE)))).toBe("/login?reason=session_unavailable&next=%2Frfqs");
+  });
+
+  it("keeps refreshed session cookies on a redirect", async () => {
+    createServerClient.mockImplementationOnce((...args: unknown[]) => {
+      const opts = args[2] as { cookies: { setAll: (c: { name: string; value: string; options: object }[]) => void } };
+      return {
+        auth: {
+          getUser: async () => {
+            opts.cookies.setAll([{ name: "sb-abcd-auth-token", value: "rotated", options: {} }]);
+            return { data: { user: { id: "u1" } }, error: null };
+          },
+        },
+      };
+    });
+    const res = await middleware(request("/login", AUTH_COOKIE));
+    expect(location(res)).toBe("/dashboard");
+    expect(res.headers.get("set-cookie")).toContain("sb-abcd-auth-token=rotated");
   });
 
   it("never throws when the auth call throws", async () => {

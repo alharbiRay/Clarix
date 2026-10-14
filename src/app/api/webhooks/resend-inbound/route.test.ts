@@ -23,7 +23,11 @@ function post(body: unknown) {
   );
 }
 
-const received = (to: string[]) => ({ type: "email.received", data: { email_id: "email-1", to } });
+const received = (to: string[]) => ({
+  type: "email.received",
+  created_at: "2026-05-01T08:00:00.000Z",
+  data: { email_id: "email-1", to, created_at: "2026-05-01T08:00:00.000Z" },
+});
 
 describe("POST /api/webhooks/resend-inbound", () => {
   beforeEach(() => {
@@ -72,10 +76,25 @@ describe("POST /api/webhooks/resend-inbound", () => {
       type: "inbound_email_quote",
       buyerId: "buyer-1",
       rfqId: "rfq-1",
-      payload: { emailId: "email-1", rfqSupplierId: "rs-1" },
+      payload: { emailId: "email-1", rfqSupplierId: "rs-1", receivedAt: "2026-05-01T08:00:00.000Z" },
       dedupeKey: "inbound_email:email-1",
       maxAttempts: 3,
     });
+  });
+
+  it("returns 500 when the token lookup fails, so a DB blip doesn't drop the quote", async () => {
+    verify.mockReturnValue(received(["quotes+abc123@in.clarix.test"]));
+    const realFrom = db.from.bind(db);
+    db.from = ((table: string) => {
+      const qb = realFrom(table);
+      (qb as unknown as { maybeSingle: () => Promise<unknown> }).maybeSingle = async () => ({
+        data: null,
+        error: { message: "connection reset" },
+      });
+      return qb;
+    }) as typeof db.from;
+    expect((await post({})).status).toBe(500);
+    expect(scheduleJob).not.toHaveBeenCalled();
   });
 
   it("returns 500 when the job cannot be recorded, so Resend retries the webhook", async () => {

@@ -75,8 +75,10 @@ export async function evaluateAutoApproval(
       .select("auto_approval_enabled, email")
       .eq("id", rfq.buyer_id)
       .single();
-    if (profileError) {
-      console.error(`${TAG} rfq=${rfq.id} failed to load buyer profile:`, profileError);
+    if (profileError || !profile) {
+      // Don't guess: falling through would record a permanent "auto-approval
+      // is turned off" decision. Throw so the job retries.
+      throw new Error(`failed to load buyer profile for rfq ${rfq.id}: ${profileError?.message ?? "not found"}`);
     }
     console.log(
       `${TAG} rfq=${rfq.id} auto_approval_enabled=${profile?.auto_approval_enabled} buyerEmail=${profile?.email ?? "(none)"}`
