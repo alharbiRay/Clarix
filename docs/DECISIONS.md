@@ -240,3 +240,32 @@ Accepted for now, not fixed:
 - Re-seeding upserts and never deletes. If a future generator drops or re-ids rows,
   delete the demo account's rows that are no longer in the dataset at that point.
 - Rate limiting on `startDemoSession` is handled by the Phase 11 rate-limit work.
+
+---
+
+# Phase 3: Savings dashboard
+
+## D-024: Savings = average of the other complete quotes − the awarded total
+See `docs/METRICS.md` for the comparison against "highest quote" and "second-lowest".
+Negative savings (a premium paid for a better supplier) are shown, never clamped. Month
+boundaries use Saudi time.
+
+## D-025: The dashboard leads with one number
+The savings figure is the product's promise, so it's the single hero figure, paired with
+the chart that explains it. The four operational KPIs sit in one hairline-divided strip
+rather than four look-alike icon cards. The old "quoted value" and stat cards were
+removed, because they measured activity, not outcomes.
+
+## D-026: Chart choices
+Savings by month uses columns in one validated accent (`#6D5FD6`, passing every check of
+the dataviz validator on white). It has a hover tooltip, a screen-reader table, and an
+animation that turns off under reduced motion. Spend by supplier is an HTML bar list,
+because labels and values are the content and a canvas chart would hide them. Light
+mode only, because the app has no dark theme yet.
+
+## D-027: The demo dataset spreads decisions across the timeline (follow-up to Phase 2)
+Feeding the demo through the metrics showed every purchase order landing in the first
+three months, so the demo would have opened on "Saved this month: SAR 0". The stage plan
+now spreads settled RFQs across the six months, with denser recent activity, and pending
+decisions stay recent. A test asserts the demo tells a coherent savings story through
+the real metrics module.

@@ -1,191 +1,131 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { FadeIn } from "@/components/motion";
-import { StatCards, type StatCard } from "@/components/dashboard/stat-cards";
-import {
-  DashboardCharts,
-  type MonthPoint,
-} from "@/components/dashboard/charts";
-import {
-  RfqActivity,
-  type ActivityRow,
-} from "@/components/dashboard/rfq-activity";
+import { RfqActivity, type ActivityRow } from "@/components/dashboard/rfq-activity";
 import { NotificationBanner } from "@/components/dashboard/notification-banner";
+import { SavingsPanel } from "@/components/dashboard/savings-panel";
+import {
+  OpsStrip,
+  ReviewQueue,
+  SupplierSpendPanel,
+  TopSavingsTable,
+} from "@/components/dashboard/metric-panels";
+import { computeKpis, reviewQueue, savingsSeries, spendBySupplier, topSavings } from "@/lib/metrics";
+import { loadMetricsRfqs } from "@/lib/metrics/load";
 
-interface RfqRow {
+interface ActivityRfqRow {
   id: string;
   title: string;
   project: string | null;
-  currency: string;
   deadline: string | null;
   status: "draft" | "sent" | "closed" | "awarded";
-  created_at: string;
-  rfq_suppliers: { id: string; created_at: string }[];
-  quotes: {
-    id: string;
-    status: string;
-    submitted_at: string;
-    quote_items: { total_price: number | null }[];
-  }[];
+  rfq_suppliers: { id: string }[];
+  quotes: { id: string }[];
 }
 
 const DAY = 86_400_000;
 
-function weeklyDelta(count: number) {
-  return count > 0 ? `+${count} this week` : null;
-}
-
 export default async function DashboardPage() {
   const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  // The notifications lookup depends on the signed-in user, but the RFQ
-  // query doesn't — run them concurrently instead of one after another.
-  const [{ data: unreadNotifications }, { data }] = await Promise.all([
-    (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return { data: [] };
-      return supabase
-        .from("notifications")
-        .select("id, rfq_id, type, message")
-        .eq("buyer_id", user.id)
-        .is("read_at", null)
-        .order("created_at", { ascending: false });
-    })(),
+  // Independent reads, all RLS-scoped to this buyer (plus explicit buyer_id).
+  const [notificationsResult, metricsRfqs, activityResult] = await Promise.all([
+    supabase
+      .from("notifications")
+      .select("id, rfq_id, type, message")
+      .eq("buyer_id", user.id)
+      .is("read_at", null)
+      .order("created_at", { ascending: false }),
+    loadMetricsRfqs(supabase, user.id),
     supabase
       .from("rfqs")
-      .select(
-        "id,title,project,currency,deadline,status,created_at," +
-          "rfq_suppliers(id,created_at)," +
-          "quotes(id,status,submitted_at,quote_items(total_price))"
-      )
-      .order("created_at", { ascending: false }),
+      .select("id, title, project, deadline, status, rfq_suppliers(id), quotes(id)")
+      .eq("buyer_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(6),
   ]);
 
-  const rfqs = (data ?? []) as unknown as RfqRow[];
-  const now = Date.now();
-  const weekAgo = now - 7 * DAY;
+  const now = new Date();
+  const kpis = computeKpis(metricsRfqs, now);
+  const series = savingsSeries(metricsRfqs, now, 6, kpis.currency);
+  const queue = reviewQueue(metricsRfqs);
+  const spend = spendBySupplier(metricsRfqs, kpis.currency);
+  const top = topSavings(metricsRfqs, 5, kpis.currency);
+  const hasAwards = metricsRfqs.some((r) => r.award?.po_sent_at);
 
-  const allQuotes = rfqs.flatMap((r) => r.quotes);
-  const allSuppliers = rfqs.flatMap((r) => r.rfq_suppliers);
-  const activeRfqs = rfqs.filter(
-    (r) => r.status === "draft" || r.status === "sent"
-  );
-  const needsReview = allQuotes.filter((q) => q.status === "needs_review");
-
-  const stats: StatCard[] = [
-    {
-      key: "rfqs",
-      label: "Active RFQs",
-      value: String(activeRfqs.length),
-      delta: weeklyDelta(
-        rfqs.filter((r) => new Date(r.created_at).getTime() > weekAgo).length
-      ),
-    },
-    {
-      key: "quotes",
-      label: "Quotes received",
-      value: String(allQuotes.length),
-      delta: weeklyDelta(
-        allQuotes.filter((q) => new Date(q.submitted_at).getTime() > weekAgo)
-          .length
-      ),
-    },
-    {
-      key: "review",
-      label: "Awaiting your review",
-      value: String(needsReview.length),
-      delta: weeklyDelta(
-        needsReview.filter(
-          (q) => new Date(q.submitted_at).getTime() > weekAgo
-        ).length
-      ),
-    },
-    {
-      key: "suppliers",
-      label: "Suppliers invited",
-      value: String(allSuppliers.length),
-      delta: weeklyDelta(
-        allSuppliers.filter(
-          (s) => new Date(s.created_at).getTime() > weekAgo
-        ).length
-      ),
-    },
-  ];
-
-  // Last 7 calendar months of quote activity
-  const months: MonthPoint[] = [];
-  const cursor = new Date();
-  cursor.setDate(1);
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(cursor.getFullYear(), cursor.getMonth() - i, 1);
-    const inMonth = allQuotes.filter((q) => {
-      const t = new Date(q.submitted_at);
-      return (
-        t.getFullYear() === d.getFullYear() && t.getMonth() === d.getMonth()
-      );
-    });
-    months.push({
-      month: d.toLocaleString("en-US", { month: "short" }),
-      quoted: inMonth.reduce(
-        (sum, q) =>
-          sum +
-          q.quote_items.reduce((s, item) => s + (item.total_price ?? 0), 0),
-        0
-      ),
-      quotes: inMonth.length,
-    });
-  }
-
-  const rows: ActivityRow[] = rfqs.slice(0, 6).map((r) => {
+  const rows: ActivityRow[] = ((activityResult.data ?? []) as unknown as ActivityRfqRow[]).map((r) => {
     const supplierCount = r.rfq_suppliers.length;
     const repliedCount = r.quotes.length;
-    const status: ActivityRow["status"] =
-      r.status === "draft"
-        ? "draft"
-        : r.status === "sent"
-          ? supplierCount > 0 && repliedCount >= supplierCount
-            ? "ready"
-            : "waiting"
-          : "closed";
     return {
       id: r.id,
       code: `RFQ-${r.id.slice(0, 4).toUpperCase()}`,
       title: r.title,
       project: r.project,
-      status,
-      daysLeft: r.deadline
-        ? Math.ceil((new Date(r.deadline).getTime() - now) / DAY)
-        : null,
+      status:
+        r.status === "draft"
+          ? "draft"
+          : r.status === "sent"
+            ? supplierCount > 0 && repliedCount >= supplierCount
+              ? "ready"
+              : "waiting"
+            : "closed",
+      daysLeft: r.deadline ? Math.ceil((new Date(r.deadline).getTime() - now.getTime()) / DAY) : null,
       repliedCount,
       supplierCount,
     };
   });
 
-  const currency = rfqs[0]?.currency ?? "SAR";
-  const today = new Date().toLocaleDateString("en-US", {
+  const today = now.toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
+    timeZone: "Asia/Riyadh",
   });
+  const unread = notificationsResult.data ?? [];
 
   return (
-    <div className="space-y-7">
+    <div className="mx-auto max-w-7xl space-y-6">
       <FadeIn>
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          {today} — here&apos;s your procurement overview.
-        </p>
+        <p className="mt-1 text-sm text-slate-500">{today} — what your procurement saved, and what needs you.</p>
       </FadeIn>
 
-      {unreadNotifications && unreadNotifications.length > 0 && (
+      {unread.length > 0 && (
         <FadeIn>
-          <NotificationBanner notifications={unreadNotifications} />
+          <NotificationBanner notifications={unread} />
         </FadeIn>
       )}
 
-      <StatCards stats={stats} />
-      <DashboardCharts data={months} currency={currency} />
+      <FadeIn delay={0.03}>
+        <SavingsPanel
+          currency={kpis.currency}
+          savingsThisMonth={kpis.savingsThisMonth}
+          savingsLastMonth={kpis.savingsLastMonth}
+          savingsChange={kpis.savingsChange}
+          savingsPctThisMonth={kpis.savingsPctThisMonth}
+          excludedOtherCurrency={kpis.excludedOtherCurrency}
+          series={series}
+          hasAwards={hasAwards}
+        />
+      </FadeIn>
+
+      <FadeIn delay={0.06}>
+        <OpsStrip kpis={kpis} />
+      </FadeIn>
+
+      <FadeIn delay={0.09} className="grid gap-6 lg:grid-cols-2">
+        <ReviewQueue items={queue} />
+        <SupplierSpendPanel rows={spend} currency={kpis.currency} />
+      </FadeIn>
+
+      <FadeIn delay={0.12}>
+        <TopSavingsTable rows={top} />
+      </FadeIn>
+
       <RfqActivity rows={rows} />
     </div>
   );

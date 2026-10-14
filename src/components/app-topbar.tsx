@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, Bell, Plus } from "lucide-react";
 
-export function AppTopbar() {
+export function AppTopbar({ unreadCount = 0 }: { unreadCount?: number }) {
   const router = useRouter();
 
   return (
@@ -28,13 +28,16 @@ export function AppTopbar() {
         />
       </form>
       <div className="flex items-center gap-3">
-        <button
-          className="relative rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-          title="Notifications"
+        <Link
+          href="/dashboard"
+          className="relative rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0]"
+          aria-label={unreadCount > 0 ? `Notifications: ${unreadCount} unread` : "Notifications: none unread"}
         >
-          <Bell size={18} />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
-        </button>
+          <Bell size={18} aria-hidden />
+          {unreadCount > 0 && (
+            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" aria-hidden />
+          )}
+        </Link>
         <Link
           href="/rfqs/new"
           className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800"

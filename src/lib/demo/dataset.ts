@@ -557,27 +557,22 @@ export interface GenerateOptions {
   tokenSecret?: string;
 }
 
-/** Oldest → newest. Pending decisions sit near the present, as they would in real life. */
-function stagePlan(random: Random): DemoStage[] {
-  const settled: DemoStage[] = random.shuffle([
-    ...Array<DemoStage>(8).fill("auto_approved"),
-    ...Array<DemoStage>(4).fill("awarded"),
-    ...Array<DemoStage>(2).fill("compared"),
-  ]);
-  return [
-    ...settled,
-    "needs_review",
-    "needs_review",
-    "needs_review",
-    "needs_review",
-    "partially_replied",
-    "sent",
-    "partially_replied",
-    "partially_replied",
-    "sent",
-    "draft",
-    "draft",
-  ];
+/**
+ * Oldest → newest. Settled RFQs run through the whole timeline (so every
+ * month has purchase orders, including the current one); open requests and
+ * pending decisions sit near the present, as they would in real life.
+ */
+const STAGE_PLAN: DemoStage[] = [
+  "auto_approved", "awarded", "auto_approved", "compared", "auto_approved",
+  "awarded", "auto_approved", "compared", "awarded", "auto_approved",
+  "needs_review", "awarded", "needs_review", "auto_approved", "needs_review",
+  "partially_replied", "needs_review", "sent", "auto_approved", "partially_replied",
+  "auto_approved", "partially_replied", "auto_approved", "sent", "draft",
+];
+
+/** Position on the 175-day timeline: denser towards the present (recent activity). */
+function timelineFraction(index: number, count: number) {
+  return 1 - Math.pow(1 - index / (count - 1), 1.4);
 }
 
 const DEFAULT_WEIGHTS = { price: 50, delivery: 50, warranty: 50, paymentTerms: 50 };
@@ -621,15 +616,19 @@ export function generateDemoDataset({ seed, now, buyerId, tokenSecret = seed }: 
     });
   }
 
-  const stages = stagePlan(random);
+  const stages = STAGE_PLAN;
   const categories: Category[] = ["construction", "office", "packaging", "spare_parts"];
   const titleCursor: Record<Category, number> = { construction: 0, office: 0, packaging: 0, spare_parts: 0 };
 
+  // Per-stage occurrence counter: review-type stages alternate between
+  // "cheapest fails a rule" and "AI prefers a pricier supplier".
+  const seen: Partial<Record<DemoStage, number>> = {};
   stages.forEach((stage, index) => {
+    const occurrence = (seen[stage] = (seen[stage] ?? 0) + 1);
     const rfqId = id(`rfq:${index}`);
     const category = index < 4 ? categories[index] : random.pick(categories);
-    const spacing = (175 * DAY) / (stages.length - 1);
-    const createdMs = Math.min(start + index * spacing + random.float(-1.2, 1.2) * DAY, nowMs - 10 * HOUR);
+    const jitter = index === 0 || index === stages.length - 1 ? 0 : random.float(-0.8, 0.8) * DAY;
+    const createdMs = Math.min(start + timelineFraction(index, stages.length) * 175 * DAY + jitter, nowMs - 10 * HOUR);
     const title = TITLES[category][titleCursor[category]++ % TITLES[category].length];
     const deadlineMs = createdMs + random.int(10, 18) * DAY;
 
@@ -785,7 +784,7 @@ export function generateDemoDataset({ seed, now, buyerId, tokenSecret = seed }: 
     let decision: DemoAwardRow["decision"] | null = null;
     let reason: string | null = null;
 
-    const wantsDiffers = (stage === "needs_review" || stage === "awarded") && index % 2 === 1;
+    const wantsDiffers = (stage === "needs_review" || stage === "awarded") && occurrence % 2 === 0;
     const wantsReview = (stage === "needs_review" || stage === "awarded") && !wantsDiffers;
 
     if (stage === "auto_approved" || stage === "compared") {
