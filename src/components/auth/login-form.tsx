@@ -18,14 +18,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FadeIn } from "@/components/motion";
 import { Logo } from "@/components/logo";
 import { safeNextPath } from "@/lib/auth/safe-redirect";
+import { DemoEntry } from "@/components/demo/demo-entry";
 
 /** Message for /login?reason=… — set by src/middleware.ts when the session check fails. */
 const REASONS: Record<string, string> = {
   session_unavailable:
     "We couldn't confirm your session just now — our sign-in service was slow to respond. Please sign in again.",
+  demo_unavailable:
+    "The demo workspace isn't available right now. You can still create a free account below.",
 };
 
-export function LoginForm({ reason, next }: { reason?: string; next?: string }) {
+export function LoginForm({ reason, next, tab }: { reason?: string; next?: string; tab?: string }) {
   const router = useRouter();
   const supabase = createClient();
   const [loading, setLoading] = useState(false);
@@ -93,7 +96,7 @@ export function LoginForm({ reason, next }: { reason?: string; next?: string }) 
           </p>
         )}
 
-        <Tabs defaultValue="signin">
+        <Tabs defaultValue={tab === "signup" ? "signup" : "signin"}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="signin">Sign in</TabsTrigger>
             <TabsTrigger value="signup">Create account</TabsTrigger>
@@ -171,6 +174,8 @@ export function LoginForm({ reason, next }: { reason?: string; next?: string }) 
             </Card>
           </TabsContent>
         </Tabs>
+
+        <DemoEntry />
       </FadeIn>
     </div>
   );

@@ -15,7 +15,9 @@ const job: Job = {
   max_attempts: 3,
 };
 
-function setup(overrides: { rfqStatus?: string; deadline?: string | null; quotes?: Record<string, unknown>[] } = {}) {
+function setup(
+  overrides: { rfqStatus?: string; deadline?: string | null; quotes?: Record<string, unknown>[]; isDemo?: boolean } = {}
+) {
   const db = createFakeSupabase({
     rfq_suppliers: [
       {
@@ -30,6 +32,7 @@ function setup(overrides: { rfqStatus?: string; deadline?: string | null; quotes
           currency: "SAR",
           title: "Cement",
           buyer_id: "buyer-1",
+          is_demo: overrides.isDemo ?? false,
           rfq_items: [],
         },
       },
@@ -53,6 +56,12 @@ describe("processInboundEmailQuote", () => {
     expect(deps.createQuote).toHaveBeenCalledWith(
       expect.objectContaining({ rfqId: "rfq-1", buyerId: "buyer-1", source: "email", sourceEmailId: "email-1", pdfBuffer: PDF })
     );
+  });
+
+  it("ignores email replies to demo-workspace RFQs", async () => {
+    const { db, deps } = setup({ isDemo: true });
+    expect((await processInboundEmailQuote(db as never, job, deps)).outcome).toBe("demo_rfq");
+    expect(deps.listAttachments).not.toHaveBeenCalled();
   });
 
   it("skips RFQs that stopped accepting quotes", async () => {

@@ -21,7 +21,7 @@ export interface InboundEmailDeps {
 
 export type InboundEmailResult =
   | { outcome: "created"; quoteId: string }
-  | { outcome: "rfq_closed" | "already_processed" | "supplier_has_quote" | "no_pdf" | "unknown_supplier" };
+  | { outcome: "rfq_closed" | "already_processed" | "supplier_has_quote" | "no_pdf" | "unknown_supplier" | "demo_rfq" };
 
 function defaultDeps(): InboundEmailDeps {
   return {
@@ -66,7 +66,7 @@ export async function processInboundEmailQuote(
 
   const { data: supplier, error: supplierError } = await supabase
     .from("rfq_suppliers")
-    .select("id, rfq_id, email, company_name, contact_name, rfqs(status, deadline, currency, title, buyer_id, rfq_items(*))")
+    .select("id, rfq_id, email, company_name, contact_name, rfqs(status, deadline, currency, title, buyer_id, is_demo, rfq_items(*))")
     .eq("id", rfqSupplierId)
     .maybeSingle();
   if (supplierError) throw new Error(`Failed to load supplier: ${supplierError.message}`);
@@ -78,8 +78,10 @@ export async function processInboundEmailQuote(
     currency: string;
     title: string;
     buyer_id: string;
+    is_demo?: boolean;
     rfq_items: RfqItem[];
   };
+  if (rfq.is_demo) return { outcome: "demo_rfq" };
   const received = typeof job.payload.receivedAt === "string" ? Date.parse(job.payload.receivedAt) : NaN;
   const arrivedAt = Number.isNaN(received) ? Date.now() : received;
   if ((rfq.status !== "sent" && rfq.status !== "draft") || (rfq.deadline && new Date(rfq.deadline).getTime() < arrivedAt)) {
