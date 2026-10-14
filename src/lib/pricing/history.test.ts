@@ -107,3 +107,21 @@ describe("itemHistory", () => {
     expect(itemHistory(history, key, "bag", "SAR").map((p) => p.unitPrice)).toEqual([17, 19, 18, 20]);
   });
 });
+
+describe("lineInsight — thresholds at the boundary", () => {
+  it("alerts at exactly the threshold despite floating-point error", () => {
+    const hist = buildPriceHistory([rfq({ at: "2026-01-01T00:00:00Z", quotes: { A: { unit: 0.5 } } })]);
+    const key = hist[0].key;
+    const insight = lineInsight(hist, { key, unit: "bag", currency: "SAR", rfqId: "x", supplierKey: "A", unitPrice: 0.45, at: "2026-02-01T00:00:00Z" }, { threshold: 0.1 });
+    expect(insight.vsSupplierLast!.pct).toBeCloseTo(-0.1);
+    expect(insight.supplierAlert).toBe(true);
+    expect(insight.alert).toBe(true);
+  });
+
+  it("flags each comparison separately", () => {
+    const key = history.find((p) => p.unit === "bag")!.key;
+    const insight = lineInsight(history, { key, unit: "bag", currency: "SAR", rfqId: "now", supplierKey: "A", unitPrice: 20.16, at: "2026-04-01T00:00:00Z" }, { threshold: 0.1 });
+    expect(insight.supplierAlert).toBe(true); // +12% vs their 18
+    expect(insight.marketAlert).toBe(false); // +8.97% vs 18.5 rounds to 9% — under 10%
+  });
+});

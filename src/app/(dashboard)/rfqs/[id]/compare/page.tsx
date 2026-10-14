@@ -11,7 +11,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { loadMetricsRfqs, rfqIdsForSuppliers } from "@/lib/metrics/load";
+import { loadMetricsRfqs, PRICE_HISTORY_SELECT, rfqIdsForSuppliers } from "@/lib/metrics/load";
 import { scoreSuppliers } from "@/lib/scorecard";
 import { ScoreBadge } from "@/components/suppliers/score-badge";
 import { PriceInsightBadges } from "@/components/compare/price-insight";
@@ -164,7 +164,7 @@ export default async function ComparePage({
             return [];
           })
       : Promise.resolve([]),
-    loadMetricsRfqs(supabase, rfq.buyer_id, { since: yearAgo }).catch((e) => {
+    loadMetricsRfqs(supabase, rfq.buyer_id, { since: yearAgo, select: PRICE_HISTORY_SELECT }).catch((e) => {
       console.error(JSON.stringify({ event: "compare.price_history_unavailable", error: String(e) }));
       return [];
     }),
@@ -642,11 +642,7 @@ export default async function ComparePage({
                                   {(() => {
                                     const insight = insightFor(col, item);
                                     return insight ? (
-                                      <PriceInsightBadges
-                                        insight={insight}
-                                        threshold={priceThreshold}
-                                        currency={rfq.currency}
-                                      />
+                                      <PriceInsightBadges insight={insight} currency={rfq.currency} />
                                     ) : null;
                                   })()}
                                   {cell?.notes && (

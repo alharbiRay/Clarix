@@ -76,7 +76,10 @@ export function itemHistory(history: PricePoint[], key: string, unit: string, cu
 export interface LineInsight {
   vsSupplierLast: { pct: number; previous: PricePoint } | null;
   vsMarket: { pct: number; average: number; samples: number } | null;
-  /** True when either change crosses the buyer's alert threshold. */
+  /** Each comparison crossed the buyer's alert threshold (in whole percents, as displayed). */
+  supplierAlert: boolean;
+  marketAlert: boolean;
+  /** Either one did. */
   alert: boolean;
 }
 
@@ -95,25 +98,28 @@ export function lineInsight(
   line: LineContext,
   { threshold = DEFAULT_PRICE_ALERT_THRESHOLD, windowDays = MARKET_WINDOW_DAYS }: { threshold?: number; windowDays?: number } = {}
 ): LineInsight {
+  const unitPrice = round2(line.unitPrice);
   const prior = history.filter(
     (p) => sameSeries(p, line.key, line.unit, line.currency) && p.rfqId !== line.rfqId && p.at < line.at
   );
 
   const previous = prior.filter((p) => p.supplierKey === line.supplierKey).at(-1) ?? null;
   const vsSupplierLast =
-    previous && previous.unitPrice > 0 ? { pct: (line.unitPrice - previous.unitPrice) / previous.unitPrice, previous } : null;
+    previous && previous.unitPrice > 0 ? { pct: (unitPrice - previous.unitPrice) / previous.unitPrice, previous } : null;
 
   const windowStart = new Date(new Date(line.at).getTime() - windowDays * DAY).toISOString();
   const market = prior.filter((p) => p.at >= windowStart);
   const average = market.length ? market.reduce((s, p) => s + p.unitPrice, 0) / market.length : 0;
   const vsMarket =
     market.length >= MIN_MARKET_SAMPLES && average > 0
-      ? { pct: (line.unitPrice - average) / average, average: round2(average), samples: market.length }
+      ? { pct: (unitPrice - average) / average, average: round2(average), samples: market.length }
       : null;
 
-  const alert =
-    (vsSupplierLast !== null && Math.abs(vsSupplierLast.pct) >= threshold) ||
-    (vsMarket !== null && Math.abs(vsMarket.pct) >= threshold);
+  // Compare whole percents — exactly what the badge shows — so a displayed
+  // "−10%" never fails a 10% threshold through floating-point error.
+  const crosses = (pct: number) => Math.round(Math.abs(pct) * 100) >= Math.round(threshold * 100);
+  const supplierAlert = vsSupplierLast !== null && crosses(vsSupplierLast.pct);
+  const marketAlert = vsMarket !== null && crosses(vsMarket.pct);
 
-  return { vsSupplierLast, vsMarket, alert };
+  return { vsSupplierLast, vsMarket, supplierAlert, marketAlert, alert: supplierAlert || marketAlert };
 }

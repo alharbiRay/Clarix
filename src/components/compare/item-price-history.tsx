@@ -33,6 +33,12 @@ function PriceDots({ points }: { points: HistoryPoint[] }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="h-[88px] w-full" aria-hidden>
       <line x1={PAD} x2={W - PAD} y1={H - PAD} y2={H - PAD} stroke="#E2E8F0" strokeWidth={1} />
+      <text x={W - PAD} y={y(Math.max(...prices)) - 6} textAnchor="end" fontSize={9} fill="#64748B">
+        {Math.max(...prices).toFixed(2)}
+      </text>
+      <text x={W - PAD} y={Math.min(H - 2, y(Math.min(...prices)) + 12)} textAnchor="end" fontSize={9} fill="#64748B">
+        {Math.min(...prices).toFixed(2)}
+      </text>
       {points.map((p, i) => (
         <circle
           key={i}

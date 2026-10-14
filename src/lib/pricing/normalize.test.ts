@@ -69,3 +69,33 @@ describe("normalizeItem", () => {
     expect(normalizeItem("(-)").key).toBe("");
   });
 });
+
+describe("normalizeItem — review regressions", () => {
+  it("matches glossary terms on whole words only", () => {
+    expect(normalizeItem("جهاز تحديد المواقع").tokens).not.toContain("steel");
+    expect(normalizeItem("فرملة").tokens).not.toContain("sand");
+  });
+
+  it("strips the Arabic definite article and attached prepositions", () => {
+    expect(normalizeItem("الاسمنت البورتلاندي 50 كجم").key).toBe(normalizeItem("اسمنت بورتلاندي 50 كجم").key);
+    expect(normalizeItem("حديد التسليح 12 مم").key).toBe(normalizeItem("Rebar 12mm").key);
+    expect(normalizeItem("فلتر هواء للمولد").key).toBe(normalizeItem("فلتر هواء مولد").key);
+  });
+
+  it("does not mangle words that merely start with و or ب", () => {
+    expect(normalizeItem("ورق تصوير A4").key).toBe(normalizeItem("A4 copy paper").key);
+    expect(normalizeItem("بلك خرساني 20 سم").tokens).toContain("20cm");
+  });
+
+  it("canonicalizes numbers and more units", () => {
+    expect(normalizeItem("Rebar 12.0mm").key).toBe(normalizeItem("Rebar 12mm").key);
+    expect(normalizeItem('Valve 2 inch').key).toBe(normalizeItem("Valve 2in").key);
+    expect(normalizeItem("Oil 20 litre").tokens).toContain("20l");
+  });
+});
+
+describe("normalizeUnit — review regressions", () => {
+  it.each([["Nos.", "pcs"], ["pcs.", "pcs"], ["قطع", "pcs"], ["ltr", "l"], ["inch", "in"]])("%s → %s", (a, b) => {
+    expect(normalizeUnit(a)).toBe(b);
+  });
+});

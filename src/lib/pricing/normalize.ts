@@ -1,12 +1,14 @@
 /**
  * Deterministic item-name normalization for price history: two line items
  * that describe the same product (in Arabic or English, any word order,
- * "50 كجم" vs "50kg") get the same key. No AI involved — a small bilingual
- * procurement glossary covers the common cross-language cases.
+ * "50 كجم" vs "50kg", with or without the Arabic article) get the same key.
+ * No AI involved — a small bilingual procurement glossary, matched on whole
+ * words, covers the common cross-language cases.
  */
 
 const ARABIC_DIACRITICS = /[ً-ٰٟۖ-ۭ]/g;
 const TATWEEL = /ـ/g;
+const ARABIC_CHAR = /[؀-ۿ]/;
 
 export function normalizeArabic(input: string): string {
   return input
@@ -34,9 +36,10 @@ const UNIT_ALIASES: Record<string, string[]> = {
   cm: ["cm", "سم", "سنتيمتر"],
   m: ["m", "meter", "meters", "metre", "metres", "م", "متر"],
   m3: ["m3", "cbm", "cubic meter", "cubic meters", "م3", "متر مكعب"],
+  in: ["in", "inch", "inches", "انش", "بوصه"],
   ton: ["ton", "tons", "tonne", "tonnes", "t", "طن"],
-  l: ["l", "liter", "liters", "litre", "litres", "لتر"],
-  pcs: ["pcs", "pc", "piece", "pieces", "unit", "units", "ea", "each", "nos", "قطعه", "حبه", "عدد"],
+  l: ["l", "ltr", "liter", "liters", "litre", "litres", "لتر"],
+  pcs: ["pcs", "pc", "piece", "pieces", "unit", "units", "ea", "each", "nos", "no", "قطعه", "قطع", "حبه", "عدد"],
   box: ["box", "boxes", "كرتون", "علبه"],
   roll: ["roll", "rolls", "رول", "لفه"],
   set: ["set", "sets", "kit", "kits", "طقم"],
@@ -48,15 +51,15 @@ for (const [canonical, aliases] of Object.entries(UNIT_ALIASES)) {
 }
 
 export function normalizeUnit(unit: string): string {
-  const c = clean(unit);
+  const c = clean(unit).replace(/\.+$/, "");
   return UNIT_LOOKUP.get(c) ?? c;
 }
 
 /**
- * Bilingual glossary: normalized Arabic (or English variant) phrase → the
- * canonical English words. Longest phrases are applied first.
+ * Bilingual glossary over whole words: normalized phrase (article already
+ * stripped) → canonical English words. Longest phrases win.
  */
-const GLOSSARY: [string, string][] = [
+const GLOSSARY_SOURCE: [string, string][] = [
   ["طقم جوانات مضخه هيدروليك", "hydraulic pump seal kit"],
   ["رول تغليف استرتش", "stretch film"],
   ["رول تغليف", "stretch film"],
@@ -88,16 +91,30 @@ const GLOSSARY: [string, string][] = [
   ["مغسول", "washed"],
   ["كرسي", "chair"],
   ["مولد", "generator"],
-  ["للمولد", "generator"],
   ["مضخه", "pump"],
   ["حديد", "steel"],
-].sort((a, b) => b[0].length - a[0].length) as [string, string][];
+];
+const GLOSSARY = GLOSSARY_SOURCE.map(([phrase, canonical]) => ({ from: phrase.split(" "), to: canonical.split(" ") })).sort(
+  (a, b) => b.from.length - a.from.length
+);
 
-const STOPWORDS = new Set(["supply", "of", "for", "the", "and", "with", "a", "an", "توريد", "و", "من", "الى", "مع"]);
+/** Leading article / article-with-preposition, stripped when enough of the word remains. */
+const ARABIC_PREFIXES = ["وال", "بال", "فال", "كال", "لل", "ال"];
+function stripArabicPrefix(token: string): string {
+  if (!ARABIC_CHAR.test(token)) return token;
+  for (const p of ARABIC_PREFIXES) {
+    if (token.startsWith(p) && token.length - p.length >= 2) return token.slice(p.length);
+  }
+  return token;
+}
 
-const SIZE_UNITS = "kg|kgs|g|mm|cm|ml|m|l|ton|tons|كجم|كغ|كيلو|جم|مم|ملم|سم|م|لتر|طن|inch|in";
+const STOPWORDS = new Set(["supply", "of", "for", "the", "and", "with", "a", "an", "توريد", "و", "من", "الى", "الي", "مع"]);
+
+const SIZE_UNITS =
+  "litres|liters|litre|liter|ltr|inches|inch|in|kgs|kg|mm|cm|ml|g|m|l|tons|ton|كجم|كغ|كيلو|جم|ملم|مم|سم|م|لتر|طن|انش|بوصه";
 const SIZE_RE = new RegExp(`(\\d+(?:\\.\\d+)?)\\s*(${SIZE_UNITS})(?=$|[^a-z0-9\\u0600-\\u06ff])`, "g");
 const DIMENSION_RE = /(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)(?:\s*[x×*]\s*(\d+(?:\.\d+)?))?/g;
+const num = (n: string) => String(parseFloat(n));
 
 export interface NormalizedItem {
   /** Order-insensitive identity key ("" when the name carries no identifying words). */
@@ -107,22 +124,28 @@ export interface NormalizedItem {
 
 export function normalizeItem(name: string): NormalizedItem {
   let s = clean(name).replace(/×/g, "x");
+  s = s.replace(DIMENSION_RE, (_m, a: string, b: string, c?: string) => ` ${[a, b, c].filter((x): x is string => Boolean(x)).map(num).join("x")} `);
+  s = s.replace(SIZE_RE, (_m, n: string, unit: string) => ` ${num(n)}${normalizeUnit(unit)} `);
 
-  s = s.replace(DIMENSION_RE, (_m, a: string, b: string, c?: string) => ` ${[a, b, c].filter(Boolean).join("x")} `);
-  s = s.replace(SIZE_RE, (_m, n: string, unit: string) => ` ${n}${normalizeUnit(unit)} `);
+  const raw = s
+    .split(/[^a-z0-9؀-ۿ.\-]+/)
+    .map((t) => t.replace(/^[.\-]+|[.\-]+$/g, ""))
+    .filter((t) => t.length > 0)
+    .map(stripArabicPrefix);
 
-  for (const [phrase, canonical] of GLOSSARY) {
-    if (s.includes(phrase)) s = s.split(phrase).join(` ${canonical} `);
+  // Whole-word glossary matching, longest phrase first.
+  const words: string[] = [];
+  for (let i = 0; i < raw.length; ) {
+    const hit = GLOSSARY.find((g) => g.from.every((w, k) => raw[i + k] === w));
+    if (hit) {
+      words.push(...hit.to);
+      i += hit.from.length;
+    } else {
+      words.push(raw[i]);
+      i += 1;
+    }
   }
 
-  const tokens = Array.from(
-    new Set(
-      s
-        .split(/[^a-z0-9؀-ۿ.\-]+/)
-        .map((t) => t.replace(/^[.\-]+|[.\-]+$/g, ""))
-        .filter((t) => t.length > 0 && !STOPWORDS.has(t))
-    )
-  ).sort();
-
+  const tokens = Array.from(new Set(words.filter((t) => !STOPWORDS.has(t)))).sort();
   return { key: tokens.join(" "), tokens };
 }

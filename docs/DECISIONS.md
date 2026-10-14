@@ -355,3 +355,21 @@ the organization's approval policy if that table lands.
 
 ## D-038: The history chart is dots only
 Joining prices from different suppliers with a line implies a series that doesn't exist.
+
+## D-039: Code review of Phase 5, and what changed as a result
+"Ready with fixes". The reviewer probed the normalizer with real Arabic words and found:
+- Glossary terms matched inside words ("تحديد" contains "حديد", so it became "steel"). Matching now runs on
+  whole-word token sequences.
+- The Arabic definite article wasn't stripped, so "الاسمنت البورتلاندي" didn't match "اسمنت بورتلاندي",
+  even though the article is the most common way these names are written. Leading "ال/لل/وال/بال/فال/كال"
+  is now stripped when at least two letters remain. Bare "و/ب" are left alone, because "ورق" must survive.
+- Exact-threshold changes sometimes missed the alert through floating-point error. Alerts now
+  compare whole percents, which is exactly what the badge shows.
+- Badge details were in `title` only (mouse-only). The badges are now one focusable popover
+  button per line.
+- The compare page's one-year price load uses a narrow select (no awards, warranties or invite
+  statuses).
+- Also: canonical numbers ("12.0mm" = "12mm"), inch/litre sizes, unit aliases with trailing dots,
+  a price scale on the dot plot, and the settings error shows only after interaction (announced politely).
+- Not changed: the market average weights every quote equally (a frequent quoter counts more).
+  That's simple and explainable; revisit with per-supplier averaging if it skews real data.
