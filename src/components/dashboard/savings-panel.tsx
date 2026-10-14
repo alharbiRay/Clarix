@@ -35,7 +35,9 @@ export interface SavingsPanelProps {
 
 function CountUp({ value, currency }: { value: number; currency: string }) {
   const reduce = useReducedMotion();
-  const [shown, setShown] = useState(reduce ? value : 0);
+  // Start from 0 on both server and client so the first render matches;
+  // the effect then jumps (reduced motion) or animates to the real value.
+  const [shown, setShown] = useState(0);
   const from = useRef(0);
   useEffect(() => {
     if (reduce) {
@@ -128,10 +130,17 @@ export function SavingsPanel(props: SavingsPanelProps) {
         </div>
 
         <div className="space-y-1.5 text-sm text-slate-600">
-          {savingsPctThisMonth !== null && (
+          {savingsPctThisMonth !== null && savingsPctThisMonth >= 0 && (
             <p>
               <span className="font-semibold text-slate-900">{formatPct(savingsPctThisMonth)}</span> below the
               average competing quote on this month&apos;s purchase orders.
+            </p>
+          )}
+          {savingsPctThisMonth !== null && savingsPctThisMonth < 0 && (
+            <p>
+              This month&apos;s purchase orders cost{" "}
+              <span className="font-semibold text-slate-900">{formatPct(-savingsPctThisMonth)}</span> more than the
+              average alternative — a premium paid for better delivery or warranty.
             </p>
           )}
           <p className="text-xs text-slate-500">
@@ -139,8 +148,8 @@ export function SavingsPanel(props: SavingsPanelProps) {
           </p>
           {props.excludedOtherCurrency > 0 && (
             <p className="text-xs text-amber-700">
-              {props.excludedOtherCurrency} awarded RFQ{props.excludedOtherCurrency === 1 ? "" : "s"} in other
-              currencies {props.excludedOtherCurrency === 1 ? "is" : "are"} not included.
+              {props.excludedOtherCurrency} awarded RFQ{props.excludedOtherCurrency === 1 ? "" : "s"} (all time) in
+              other currencies {props.excludedOtherCurrency === 1 ? "is" : "are"} left out of these figures.
             </p>
           )}
         </div>

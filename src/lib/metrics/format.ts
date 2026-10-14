@@ -17,13 +17,16 @@ export function formatChange(change: number | null): string | null {
 }
 
 export function formatPct(ratio: number | null): string {
-  return ratio === null ? "—" : `${Math.round(ratio * 100)}%`;
+  if (ratio === null) return "—";
+  const pct = Math.round(ratio * 100);
+  return pct < 0 ? `${MINUS}${Math.abs(pct)}%` : `${pct}%`;
 }
 
 /** "SAR 12,341" — headline figures drop the halalas. Uses a true minus sign. */
 export function formatMoneyWhole(value: number, currency: string): string {
-  const abs = Math.abs(Math.round(value)).toLocaleString("en-US");
-  return `${value < 0 ? MINUS : ""}${currency} ${abs}`;
+  const rounded = Math.round(value);
+  const abs = Math.abs(rounded).toLocaleString("en-US");
+  return `${rounded < 0 ? MINUS : ""}${currency} ${abs}`;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

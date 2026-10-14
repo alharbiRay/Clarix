@@ -3,7 +3,8 @@ import { Pulse } from "@/components/ui/skeleton-pulse";
 /** Mirrors the dashboard layout so nothing jumps when data arrives. */
 export default function DashboardLoading() {
   return (
-    <div className="mx-auto max-w-7xl space-y-6" aria-busy="true" aria-label="Loading dashboard">
+    <div className="mx-auto max-w-7xl space-y-6" role="status" aria-busy="true">
+      <span className="sr-only">Loading your dashboard…</span>
       <div className="space-y-2">
         <Pulse className="h-7 w-40" />
         <Pulse className="h-4 w-80" />

@@ -31,6 +31,7 @@ export function AppTopbar({ unreadCount = 0 }: { unreadCount?: number }) {
         <Link
           href="/dashboard"
           className="relative rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0]"
+          title="Notifications"
           aria-label={unreadCount > 0 ? `Notifications: ${unreadCount} unread` : "Notifications: none unread"}
         >
           <Bell size={18} aria-hidden />

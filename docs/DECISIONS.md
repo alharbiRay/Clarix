@@ -269,3 +269,20 @@ three months, so the demo would have opened on "Saved this month: SAR 0". The st
 now spreads settled RFQs across the six months, with denser recent activity, and pending
 decisions stay recent. A test asserts the demo tells a coherent savings story through
 the real metrics module.
+
+## D-028: Code review of Phase 3, and what changed as a result
+"Ready with fixes". Fixed, test-first where testable:
+- Unconfirmed AI-extracted quotes (`needs_review`) are back on the dashboard, in
+  the review queue and linked to the confirm page. The removed stat card had been
+  the only place they showed.
+- Hydration: the count-up always starts at 0, so server and client render the same text.
+- The metrics loader pages through PostgREST's max-rows cap, so all-time figures can't
+  silently drop older RFQs (tested against a fake that enforces the cap).
+- Review-queue rows get a visible focus ring.
+- Smaller fixes: premiums aren't listed as "biggest savings" and get their own wording;
+  negative durations from clock skew are ignored; money signs are decided after
+  rounding; dates render in Saudi time on the (UTC) server; failed reads show the
+  error state instead of an empty dashboard; the loading skeleton is announced;
+  unused indexes were dropped from the not-yet-applied 0009.
+- Deferred: precomputing totals in a SQL view/RPC. The paged loader is fine for SMB
+  volumes; revisit past roughly 5,000 RFQs per buyer.

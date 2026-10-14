@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, FileText } from "lucide-react";
 import { formatHours, formatMoneyWhole, formatPct } from "@/lib/metrics/format";
-import type { Kpis, ReviewItem, RfqSavings, SupplierSpend } from "@/lib/metrics";
+import type { Kpis, PendingExtraction, ReviewItem, RfqSavings, SupplierSpend } from "@/lib/metrics";
 import { formatDate } from "@/lib/format";
 
 /** One bordered strip, hairline-divided — the operational vitals at a glance. */
@@ -12,9 +12,11 @@ export function OpsStrip({ kpis }: { kpis: Kpis }) {
       label: "RFQs created this month",
       value: String(kpis.rfqsCreatedThisMonth),
       context:
-        kpis.rfqsCreatedLastMonth === 0 && delta === 0
-          ? "None last month either"
-          : `${delta >= 0 ? "+" : "−"}${Math.abs(delta)} vs last month`,
+        delta === 0
+          ? kpis.rfqsCreatedLastMonth === 0
+            ? "None last month either"
+            : "Same as last month"
+          : `${delta > 0 ? "+" : "−"}${Math.abs(delta)} vs last month`,
     },
     {
       label: "Auto-approval rate",
@@ -62,43 +64,62 @@ function PanelHeader({ id, title, aside }: { id: string; title: string; aside?: 
   );
 }
 
-export function ReviewQueue({ items }: { items: ReviewItem[] }) {
+const ROW_LINK =
+  "group flex items-start gap-3 px-6 py-4 transition-colors hover:bg-slate-50 focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#7C6FE0]";
+
+export function ReviewQueue({ items, extractions = [] }: { items: ReviewItem[]; extractions?: PendingExtraction[] }) {
+  const total = items.length + extractions.length;
   return (
     <section aria-labelledby="review-heading" className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex items-baseline justify-between gap-4 border-b border-slate-100 px-6 py-4">
         <h2 id="review-heading" className="text-sm font-semibold text-slate-900">
           Needs your review
         </h2>
-        {items.length > 0 && (
+        {total > 0 && (
           <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-xs font-semibold text-amber-800 tabular">
-            {items.length} waiting
+            {total} waiting
           </span>
         )}
       </div>
-      {items.length === 0 ? (
+      {total === 0 ? (
         <div className="flex flex-1 items-center gap-3 px-6 py-8 text-sm text-slate-600">
           <CheckCircle2 size={18} className="shrink-0 text-emerald-600" aria-hidden />
-          Nothing is waiting on you. Every recommendation was either auto-approved or already decided.
+          Nothing is waiting on you. Every quote is confirmed and every recommendation is decided.
         </div>
       ) : (
         <ul className="divide-y divide-slate-100">
+          {extractions.slice(0, 3).map((x) => (
+            <li key={x.quoteId}>
+              <Link href={`/rfqs/${x.rfqId}/quotes/${x.quoteId}`} className={ROW_LINK}>
+                <FileText size={16} className="mt-0.5 shrink-0 text-indigo-500" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-900"><bdi>{x.title}</bdi></p>
+                  <p className="mt-0.5 text-xs text-slate-600">
+                    Confirm the AI-extracted quote from <bdi>{x.supplierLabel}</bdi> so it counts in the comparison
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">Received {formatDate(x.submittedAt)}</p>
+                </div>
+                <ArrowRight size={15} className="mt-1 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-500 motion-reduce:transition-none" aria-hidden />
+              </Link>
+            </li>
+          ))}
           {items.slice(0, 5).map((item) => (
             <li key={item.rfqId}>
-              <Link
-                href={`/rfqs/${item.rfqId}/compare`}
-                className="group flex items-start gap-3 px-6 py-4 transition-colors hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none"
-              >
+              <Link href={`/rfqs/${item.rfqId}/compare`} className={ROW_LINK}>
                 <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600" aria-hidden />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-slate-900"><bdi>{item.title}</bdi></p>
                   <p className="mt-0.5 text-xs text-slate-600 first-letter:uppercase">{item.reason ?? "Approval required"}</p>
-                  {item.recommendedLabel && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      AI pick: <bdi>{item.recommendedLabel}</bdi>
-                      {item.recommendedTotal !== null && ` · ${formatMoneyWhole(item.recommendedTotal, item.currency)}`}
-                      {" · "}since {formatDate(item.createdAt)}
-                    </p>
-                  )}
+                  <p className="mt-1 text-xs text-slate-500">
+                    {item.recommendedLabel && (
+                      <>
+                        AI pick: <bdi>{item.recommendedLabel}</bdi>
+                        {item.recommendedTotal !== null && ` · ${formatMoneyWhole(item.recommendedTotal, item.currency)}`}
+                        {" · "}
+                      </>
+                    )}
+                    Waiting since {formatDate(item.createdAt)}
+                  </p>
                 </div>
                 <ArrowRight
                   size={15}
@@ -157,7 +178,7 @@ export function TopSavingsTable({ rows }: { rows: RfqSavings[] }) {
         <h2 id="top-savings-heading" className="text-sm font-semibold text-slate-900">
           Biggest savings
         </h2>
-        <span className="text-xs text-slate-500">vs the average of the other quotes</span>
+        <span className="text-xs text-slate-500">All time · vs the average of the other quotes</span>
       </div>
       {rows.length === 0 ? (
         <p className="px-6 py-8 text-sm text-slate-600">

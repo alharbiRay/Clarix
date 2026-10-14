@@ -10,7 +10,14 @@ import {
   SupplierSpendPanel,
   TopSavingsTable,
 } from "@/components/dashboard/metric-panels";
-import { computeKpis, reviewQueue, savingsSeries, spendBySupplier, topSavings } from "@/lib/metrics";
+import {
+  computeKpis,
+  pendingExtractions,
+  reviewQueue,
+  savingsSeries,
+  spendBySupplier,
+  topSavings,
+} from "@/lib/metrics";
 import { loadMetricsRfqs } from "@/lib/metrics/load";
 
 interface ActivityRfqRow {
@@ -49,10 +56,15 @@ export default async function DashboardPage() {
       .limit(6),
   ]);
 
+  // A failed read must surface as the error state, not as an empty dashboard.
+  if (notificationsResult.error) throw new Error(`notifications: ${notificationsResult.error.message}`);
+  if (activityResult.error) throw new Error(`recent RFQs: ${activityResult.error.message}`);
+
   const now = new Date();
   const kpis = computeKpis(metricsRfqs, now);
   const series = savingsSeries(metricsRfqs, now, 6, kpis.currency);
   const queue = reviewQueue(metricsRfqs);
+  const extractions = pendingExtractions(metricsRfqs);
   const spend = spendBySupplier(metricsRfqs, kpis.currency);
   const top = topSavings(metricsRfqs, 5, kpis.currency);
   const hasAwards = metricsRfqs.some((r) => r.award?.po_sent_at);
@@ -118,7 +130,7 @@ export default async function DashboardPage() {
       </FadeIn>
 
       <FadeIn delay={0.09} className="grid gap-6 lg:grid-cols-2">
-        <ReviewQueue items={queue} />
+        <ReviewQueue items={queue} extractions={extractions} />
         <SupplierSpendPanel rows={spend} currency={kpis.currency} />
       </FadeIn>
 

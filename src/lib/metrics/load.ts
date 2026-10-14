@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AwardDecision, InviteStatus, MetricsRfq, QuoteStatusValue } from "@/lib/metrics";
 
+/** Rows per request — at or below PostgREST's max-rows so paging is exact. */
+export const METRICS_PAGE_SIZE = 1000;
+
 /** Columns the metrics need — nothing more (no notes, PDFs or extraction payloads). */
 export const METRICS_SELECT =
   "id, title, currency, created_at, " +
@@ -84,11 +87,21 @@ export function toMetricsRfq(row: MetricsRow): MetricsRfq {
  * RLS-scoped server client; the explicit buyer_id filter is defence in depth.
  */
 export async function loadMetricsRfqs(supabase: SupabaseClient, buyerId: string): Promise<MetricsRfq[]> {
-  const { data, error } = await supabase
-    .from("rfqs")
-    .select(METRICS_SELECT)
-    .eq("buyer_id", buyerId)
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(`Failed to load metrics data: ${error.message}`);
-  return ((data ?? []) as unknown as MetricsRow[]).map(toMetricsRfq);
+  // PostgREST caps each response (max-rows, 1000 on Supabase). Page through
+  // explicitly so all-time figures never silently drop older RFQs.
+  const rows: MetricsRow[] = [];
+  for (let from = 0; ; from += METRICS_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("rfqs")
+      .select(METRICS_SELECT)
+      .eq("buyer_id", buyerId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, from + METRICS_PAGE_SIZE - 1);
+    if (error) throw new Error(`Failed to load metrics data: ${error.message}`);
+    const page = (data ?? []) as unknown as MetricsRow[];
+    rows.push(...page);
+    if (page.length < METRICS_PAGE_SIZE) break;
+  }
+  return rows.map(toMetricsRfq);
 }

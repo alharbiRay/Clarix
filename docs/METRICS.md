@@ -59,8 +59,9 @@ set of quotes), so KPIs always use the RFQ-level figure.
 | --- | --- |
 | RFQs created | Count of RFQs whose `created_at` falls in the month. |
 | Auto-approval rate | Over the trailing 90 days: among RFQs whose rules-engine decision (`rfq_awards.created_at`) falls in the window, the share with `decision = auto_approved`. |
-| Sent → all replied | For RFQs where every invited supplier has resolved (submitted or declined) and at least one quoted: last quote `submitted_at` minus first `invited_at`. Reported as the mean, in hours. |
+| Sent → all replied | For RFQs where every invited supplier has resolved (submitted or declined) and at least one quoted: last quote `submitted_at` minus first `invited_at` (negative values from clock skew are ignored). Reported as the mean, in hours. |
 | Supplier response time | For each comparable quote with a known invite time: `submitted_at − invited_at`. Reported as the mean, in hours. |
 | Spend by supplier | Sum of awarded totals per supplier (the persistent supplier profile when linked, otherwise the invite label), primary currency only. |
-| Needs review | Awards with a decision other than `auto_approved` and no PO sent yet. |
-| Change vs last month | `(this − last) / |last|`. Shown as "new" when last month was zero. |
+| Needs review | Awards with a decision other than `auto_approved` and no PO sent yet, plus AI-extracted quotes (`needs_review`) waiting for the buyer to confirm them. |
+| Biggest savings | RFQs with positive measured savings, all time, largest first. A premium paid is not a saving and is never listed here. |
+| Change vs last month | `(this − last) / |last|`. When last month was zero there's nothing to compare against, so no percentage is shown. |

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { toMetricsRfq } from "@/lib/metrics/load";
+import { loadMetricsRfqs, METRICS_PAGE_SIZE, toMetricsRfq } from "@/lib/metrics/load";
+import { createFakeSupabase } from "@/test/fake-supabase";
 
 const row = {
   id: "r1",
@@ -29,5 +30,20 @@ describe("toMetricsRfq", () => {
     expect(toMetricsRfq({ ...row, rfq_awards: award }).award).toMatchObject({ quote_id: "q1", decision: "auto_approved" });
     expect(toMetricsRfq({ ...row, rfq_awards: [award] }).award).toMatchObject({ quote_id: "q1" });
     expect(toMetricsRfq({ ...row, rfq_awards: [] }).award).toBeNull();
+  });
+});
+
+describe("loadMetricsRfqs", () => {
+  it("pages past PostgREST's row limit instead of silently truncating", async () => {
+    const total = METRICS_PAGE_SIZE * 2 + 5;
+    const rows = Array.from({ length: total }, (_, i) => ({
+      ...row,
+      id: `r${i}`,
+      buyer_id: "b",
+      created_at: new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(),
+      rfq_awards: null,
+    }));
+    const db = createFakeSupabase({ rfqs: rows }, { rfqs: { maxRows: METRICS_PAGE_SIZE } });
+    expect(await loadMetricsRfqs(db as never, "b")).toHaveLength(total);
   });
 });

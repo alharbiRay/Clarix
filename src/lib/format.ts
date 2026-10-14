@@ -8,7 +8,9 @@ export function formatMoney(value: number, currency: string) {
 
 export function formatDate(iso: string | null) {
   if (!iso) return "—";
+  // Saudi time: on Vercel the server runs in UTC, which shifts dates near midnight.
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
+    timeZone: "Asia/Riyadh",
   }).format(new Date(iso));
 }

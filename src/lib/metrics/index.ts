@@ -245,7 +245,8 @@ export function computeKpis(rfqs: MetricsRfq[], now: Date): Kpis {
     const allResolved = invited.length > 0 && invited.every((i) => i.status === "submitted" || i.status === "declined");
     if (allResolved && comparable.length > 0 && invitedTimes.length > 0) {
       const last = Math.max(...comparable.map((q) => new Date(q.submitted_at).getTime()));
-      sentToReplied.push((last - Math.min(...invitedTimes)) / HOUR);
+      const hours = (last - Math.min(...invitedTimes)) / HOUR;
+      if (hours >= 0) sentToReplied.push(hours);
     }
   }
 
@@ -304,10 +305,10 @@ export function spendBySupplier(rfqs: MetricsRfq[], currency = primaryCurrency(r
   return Array.from(map.values()).sort((a, b) => b.spend - a.spend);
 }
 
-/** Measured savings (average basis), largest first. Negative values (premiums) sort last. */
+/** RFQs with positive measured savings, largest first (premiums paid are not "savings"). */
 export function topSavings(rfqs: MetricsRfq[], limit = 5, currency = primaryCurrency(rfqs)): RfqSavings[] {
   return measuredSavings(rfqs, currency)
-    .filter((s) => s.basis === "average_of_other_quotes")
+    .filter((s) => s.basis === "average_of_other_quotes" && s.savings > 0)
     .sort((a, b) => b.savings - a.savings)
     .slice(0, limit);
 }
@@ -342,4 +343,32 @@ export function reviewQueue(rfqs: MetricsRfq[]): ReviewItem[] {
       };
     })
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+export interface PendingExtraction {
+  rfqId: string;
+  title: string;
+  quoteId: string;
+  supplierLabel: string;
+  submittedAt: string;
+}
+
+/**
+ * PDF/email quotes the AI extracted but the buyer hasn't confirmed yet.
+ * They hold back the comparison and auto-approval until reviewed.
+ */
+export function pendingExtractions(rfqs: MetricsRfq[]): PendingExtraction[] {
+  return rfqs
+    .flatMap((r) =>
+      r.quotes
+        .filter((q) => q.status === "needs_review")
+        .map((q) => ({
+          rfqId: r.id,
+          title: r.title,
+          quoteId: q.id,
+          supplierLabel: r.invites.find((i) => i.id === q.invite_id)?.label ?? "Unknown supplier",
+          submittedAt: q.submitted_at,
+        }))
+    )
+    .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt));
 }

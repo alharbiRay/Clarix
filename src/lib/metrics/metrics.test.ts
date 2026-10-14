@@ -5,6 +5,7 @@ import {
   itemSavings,
   monthKey,
   primaryCurrency,
+  pendingExtractions,
   reviewQueue,
   savingsSeries,
   spendBySupplier,
@@ -223,13 +224,34 @@ describe("spendBySupplier / topSavings / reviewQueue", () => {
 
   it("ranks the RFQs that saved the most", () => {
     const top = topSavings([r1, r2, r3], 5);
-    expect(top.map((t) => [t.title, t.savings])).toEqual([
-      [r1.title, 200],
-      [r2.title, -10],
-    ]);
+    expect(top.map((t) => [t.title, t.savings])).toEqual([[r1.title, 200]]);
+  });
+
+  it("never lists a premium paid under biggest savings", () => {
+    expect(topSavings([r1, r2, r3], 5).every((t) => t.savings > 0)).toBe(true);
   });
 
   it("lists awards waiting on a human, oldest first", () => {
     expect(reviewQueue([r1, r2, r3]).map((q) => q.rfqId)).toEqual([r3.id]);
+  });
+});
+
+describe("pendingExtractions", () => {
+  it("lists PDF/email quotes still waiting for the buyer to confirm them, oldest first", () => {
+    const r = rfq({
+      quotes: { A: [10], B: [12] },
+      statuses: { B: "needs_review" },
+      submittedAt: { B: "2026-10-03T08:00:00Z" },
+    });
+    expect(pendingExtractions([r])).toEqual([
+      { rfqId: r.id, title: r.title, quoteId: `${r.id}-q-B`, supplierLabel: "B", submittedAt: "2026-10-03T08:00:00Z" },
+    ]);
+  });
+});
+
+describe("computeKpis edge cases", () => {
+  it("ignores negative sent → replied durations caused by clock skew", () => {
+    const skewed = rfq({ quotes: { A: [1] }, invitedAt: "2026-10-02T00:00:00Z", submittedAt: { A: "2026-10-01T00:00:00Z" } });
+    expect(computeKpis([skewed], NOW).avgSentToAllRepliedHours).toBeNull();
   });
 });
