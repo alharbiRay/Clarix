@@ -70,13 +70,18 @@ set of quotes), so KPIs always use the RFQ-level figure.
 
 `src/lib/scorecard` is pure and unit-tested. It uses the same snapshot as the dashboard.
 A supplier is the buyer's persistent supplier profile (`suppliers.id`), followed through
-every RFQ invitation linked to it.
+every RFQ invitation linked to it. Invitations are linked to the profile only once the supplier
+quotes, so unlinked invitations are matched by **email** too. Otherwise ignored and declined
+invitations would be invisible and the response rate would always look perfect.
+
+"Quoted" means a comparable quote (`submitted` or `confirmed`). An AI extraction still waiting for review
+doesn't count yet.
 
 | Metric | Definition |
 | --- | --- |
-| Response rate | quotes ÷ invitations sent (pending invites, never sent, don't count) |
+| Response rate | quotes ÷ invitations sent. Excluded: invitations never sent, and unanswered invitations on RFQs that are still open (deadline not passed), which aren't a miss yet. |
 | Median response time | median of `submitted_at − invited_at`, in hours |
-| Win rate | purchase orders received ÷ quotes submitted (manual approvals count) |
+| Win rate | purchase orders received ÷ quotes on **decided** RFQs (PO sent, or RFQ closed/awarded). Manual approvals count, and open RFQs are neither wins nor losses. |
 | Price vs lowest | mean of `(my total − lowest complete total) ÷ lowest`, over RFQs where at least two complete quotes competed. 0% means always the cheapest. |
 | Delivery vs typical | the supplier's promised days compared with the median promised days on the same RFQ. We have no actual delivery dates, so "reliability" means promising at or faster than the market. |
 | Warranty rate | share of quotes that include a warranty |
@@ -86,12 +91,12 @@ every RFQ invitation linked to it.
 | Component | Weight | Component score (0–1) |
 | --- | --- | --- |
 | Price | 30 | `1 − priceVsLowest ÷ 25%`, clamped (25% above the lowest scores 0) |
-| Responsiveness | 20 | `0.6 × responseRate + 0.4 × (1 − medianHours ÷ 120)`, clamped |
+| Responsiveness | 20 | `0.6 × responseRate + 0.4 × (1 − medianHours ÷ 120)`, clamped. With no measurable response time, the response rate alone. |
 | Delivery | 20 | share of quotes at or faster than the RFQ's median days |
 | Warranty | 15 | warranty rate |
 | Win rate | 15 | `winRate ÷ 50%`, clamped (winning half the time earns full marks) |
 
-`score = round(100 × Σ weight·component ÷ Σ weight of the components with data)`.
+`score = round(100 × Σ weight·component ÷ Σ weight of the components with data)`. The breakdown's whole-number points are allocated by largest remainder, so they always add up to the score.
 A component with no data (for example, the supplier never faced competition on price) is left
 out and the remaining weights are renormalized. The breakdown shows which components counted.
 With fewer than **2 quotes** the score is withheld and the supplier is shown as "New".
@@ -100,3 +105,5 @@ Strengths and weaknesses are plain-language rules on the raw metrics. For exampl
 within 3% of the lowest is a strength and 10% or more above it is a weakness; a warranty on
 half the quotes or fewer is a weakness. The trend recomputes the score from what was known at
 the end of each of the last six months.
+
+**Last active** is the supplier's own last quote, or the last invitation if they never quoted.

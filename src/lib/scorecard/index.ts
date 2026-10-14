@@ -19,7 +19,9 @@ export interface SupplierMetrics {
   medianResponseHours: number | null;
   /** RFQs whose purchase order went to this supplier. */
   awarded: number;
-  /** awarded / quoted. */
+  /** Quotes on RFQs that have been decided (PO sent, or RFQ closed/awarded). */
+  decidedQuotes: number;
+  /** awarded / decidedQuotes — open RFQs don't count as losses. */
   winRate: number | null;
   /** Mean of (my total − lowest complete total) / lowest, over RFQs with competition. 0 = always cheapest. */
   avgPriceVsLowest: number | null;
@@ -41,40 +43,77 @@ function median(xs: number[]): number | null {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 const hasWarranty = (w: string | null | undefined) => Boolean(w && w.trim());
+const ts = (iso: string) => Date.parse(iso);
 
-export function supplierMetrics(rfqs: MetricsRfq[], supplierId: string): SupplierMetrics {
+/** A supplier profile: id plus email, so invites not yet linked to the profile still count. */
+export type SupplierRef = string | { id: string; email?: string | null };
+
+function refOf(supplier: SupplierRef) {
+  return typeof supplier === "string" ? { id: supplier, email: null } : { id: supplier.id, email: supplier.email ?? null };
+}
+
+/**
+ * Invites are linked to the persistent profile only once the supplier quotes
+ * (ensureSupplierProfile), so an ignored or declined invitation usually has
+ * supplier_id = null — match those by email.
+ */
+function isTheirs(invite: MetricsRfq["invites"][number], id: string, email: string | null) {
+  if (invite.supplier_id) return invite.supplier_id === id;
+  return Boolean(email && invite.email && invite.email.trim().toLowerCase() === email.trim().toLowerCase());
+}
+
+/** Still accepting quotes: an unanswered invitation here isn't a non-response (yet). */
+function isOpen(rfq: MetricsRfq, now: number) {
+  if (rfq.status !== "draft" && rfq.status !== "sent") return false;
+  return !rfq.deadline || ts(rfq.deadline) > now;
+}
+
+/** The buyer has made a decision on this RFQ. */
+function isDecided(rfq: MetricsRfq) {
+  return Boolean(rfq.award?.po_sent_at) || rfq.status === "awarded" || rfq.status === "closed";
+}
+
+export function supplierMetrics(rfqs: MetricsRfq[], supplier: SupplierRef, now: Date = new Date()): SupplierMetrics {
+  const { id: supplierId, email } = refOf(supplier);
+  const nowMs = now.getTime();
   let invited = 0;
   let quoted = 0;
   let declined = 0;
   let awarded = 0;
+  let decidedQuotes = 0;
   let withWarranty = 0;
   const responseHours: number[] = [];
   const priceGaps: number[] = [];
   const deliveryDiffs: number[] = [];
   let atOrFaster = 0;
   let deliverySamples = 0;
-  let lastActive: string | null = null;
-  const touch = (iso: string | null) => {
-    if (iso && (!lastActive || iso > lastActive)) lastActive = iso;
-  };
+  let lastQuote: string | null = null;
+  let lastInvite: string | null = null;
+  const later = (a: string | null, b: string | null) => (b && (!a || ts(b) > ts(a)) ? b : a);
 
   for (const rfq of rfqs) {
-    const invites = rfq.invites.filter((i) => i.supplier_id === supplierId && i.status !== "pending");
+    const invites = rfq.invites.filter((i) => isTheirs(i, supplierId, email) && i.status !== "pending");
     for (const invite of invites) {
-      invited++;
-      touch(invite.invited_at);
-      if (invite.status === "declined") declined++;
       const mine = rfq.quotes.find((q) => q.invite_id === invite.id && isComparable(q));
+      lastInvite = later(lastInvite, invite.invited_at);
+      // An unanswered invitation on an RFQ that is still open isn't a miss yet.
+      if (!mine && invite.status !== "declined" && isOpen(rfq, nowMs)) continue;
+
+      invited++;
+      if (invite.status === "declined") declined++;
       if (!mine) continue;
 
       quoted++;
-      touch(mine.submitted_at);
+      lastQuote = later(lastQuote, mine.submitted_at);
       if (hasWarranty(mine.warranty)) withWarranty++;
       if (invite.invited_at) {
         const h = (new Date(mine.submitted_at).getTime() - new Date(invite.invited_at).getTime()) / HOUR;
         if (h >= 0) responseHours.push(h);
       }
-      if (rfq.award?.po_sent_at && rfq.award.quote_id === mine.id) awarded++;
+      if (isDecided(rfq)) {
+        decidedQuotes++;
+        if (rfq.award?.po_sent_at && rfq.award.quote_id === mine.id) awarded++;
+      }
 
       const comparable = rfq.quotes.filter(isComparable);
       const myTotal = completeTotal(rfq, mine);
@@ -101,13 +140,15 @@ export function supplierMetrics(rfqs: MetricsRfq[], supplierId: string): Supplie
     responseRate: invited ? quoted / invited : null,
     medianResponseHours: median(responseHours),
     awarded,
-    winRate: quoted ? awarded / quoted : null,
+    decidedQuotes,
+    winRate: decidedQuotes ? awarded / decidedQuotes : null,
     avgPriceVsLowest: mean(priceGaps),
     priceSamples: priceGaps.length,
     deliveryVsTypicalDays: mean(deliveryDiffs),
     fasterThanTypicalRate: deliverySamples ? atOrFaster / deliverySamples : null,
     warrantyRate: quoted ? withWarranty / quoted : null,
-    lastActive,
+    // The supplier's own last quote; if they never quoted, when we last invited them.
+    lastActive: lastQuote ?? lastInvite,
   };
 }
 
@@ -129,6 +170,25 @@ export const WIN_RATE_FOR_FULL = 0.5;
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
+/**
+ * Whole-number points that add up exactly to the rounded total (largest
+ * remainder), so the visible breakdown always matches the score.
+ */
+export function allocatePoints(raw: number[]): number[] {
+  const target = Math.round(raw.reduce((s, x) => s + x, 0));
+  const floors = raw.map(Math.floor);
+  let remaining = target - floors.reduce((s, x) => s + x, 0);
+  const order = raw
+    .map((x, i) => ({ i, frac: x - Math.floor(x) }))
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+  for (const { i } of order) {
+    if (remaining <= 0) break;
+    floors[i] += 1;
+    remaining -= 1;
+  }
+  return floors;
+}
+
 export interface ScoreComponent {
   key: ScoreComponentKey;
   label: string;
@@ -136,7 +196,7 @@ export interface ScoreComponent {
   available: boolean;
   /** 0-1 */
   score: number;
-  /** Contribution to the 0-100 total after renormalization. */
+  /** Whole-number contribution to the 0-100 total (they sum to the score). */
   points: number;
 }
 
@@ -174,19 +234,17 @@ export function scoreSupplier(m: SupplierMetrics): Scorecard | null {
   const availableWeight = keys.reduce((s, k) => s + (raw[k] === null ? 0 : SCORE_WEIGHTS[k]), 0);
   if (availableWeight === 0) return null;
 
-  const components = keys.map((k) => {
-    const available = raw[k] !== null;
-    const score = raw[k] ?? 0;
-    return {
-      key: k,
-      label: LABELS[k],
-      weight: SCORE_WEIGHTS[k],
-      available,
-      score,
-      points: available ? (score * SCORE_WEIGHTS[k] * 100) / availableWeight : 0,
-    };
-  });
-  return { score: Math.round(components.reduce((s, c) => s + c.points, 0)), components };
+  const rawPoints = keys.map((k) => (raw[k] === null ? 0 : ((raw[k] as number) * SCORE_WEIGHTS[k] * 100) / availableWeight));
+  const points = allocatePoints(rawPoints);
+  const components = keys.map((k, i) => ({
+    key: k,
+    label: LABELS[k],
+    weight: SCORE_WEIGHTS[k],
+    available: raw[k] !== null,
+    score: raw[k] ?? 0,
+    points: points[i],
+  }));
+  return { score: points.reduce((s, p) => s + p, 0), components };
 }
 
 // ---------------------------------------------------------------------------
@@ -235,8 +293,9 @@ export function describeSupplier(m: SupplierMetrics, _card: Scorecard | null) {
   }
 
   if (m.winRate !== null) {
-    if (m.winRate >= 0.4 && m.awarded >= 2) strengths.push(`Wins ${pct(m.winRate)} of the RFQs it quotes on`);
-    else if (m.awarded === 0 && m.quoted >= 4) weaknesses.push(`Hasn't won any of its ${m.quoted} quotes`);
+    if (m.winRate >= 0.4 && m.awarded >= 2) strengths.push(`Wins ${pct(m.winRate)} of the decided RFQs it quotes on`);
+    else if (m.awarded === 0 && m.decidedQuotes >= 4)
+      weaknesses.push(`Hasn't won any of its ${m.decidedQuotes} quotes on decided RFQs`);
   }
 
   return { strengths, weaknesses };
@@ -246,36 +305,39 @@ export function describeSupplier(m: SupplierMetrics, _card: Scorecard | null) {
 // Trend: the score as it stood at the end of each month
 // ---------------------------------------------------------------------------
 
-/** What was known about an RFQ at `cutoff`. */
-function asOf(rfq: MetricsRfq, cutoff: string): MetricsRfq | null {
-  if (rfq.created_at > cutoff) return null;
-  const quotes = rfq.quotes.filter((q) => q.submitted_at <= cutoff);
+/** What was known about an RFQ at `cutoff` (an instant, compared numerically). */
+function asOf(rfq: MetricsRfq, cutoff: number): MetricsRfq | null {
+  if (ts(rfq.created_at) > cutoff) return null;
+  const quotes = rfq.quotes.filter((q) => ts(q.submitted_at) <= cutoff);
   const quotedInvites = new Set(quotes.map((q) => q.invite_id));
+  const award = rfq.award?.po_sent_at && ts(rfq.award.po_sent_at) <= cutoff ? rfq.award : null;
   return {
     ...rfq,
+    // Undecided at the cutoff → treat as still open (the RFQ's real status is "now").
+    status: award ? "awarded" : rfq.status === "awarded" || rfq.status === "closed" ? "sent" : rfq.status,
     invites: rfq.invites
-      .filter((i) => !i.invited_at || i.invited_at <= cutoff)
+      .filter((i) => !i.invited_at || ts(i.invited_at) <= cutoff)
       .map((i) => (i.status === "submitted" && !quotedInvites.has(i.id) ? { ...i, status: "sent" as const } : i)),
     quotes,
-    award: rfq.award?.po_sent_at && rfq.award.po_sent_at <= cutoff ? rfq.award : null,
+    award,
   };
 }
 
-export function scoreTrend(rfqs: MetricsRfq[], supplierId: string, now: Date, months = 6) {
+export function scoreTrend(rfqs: MetricsRfq[], supplier: SupplierRef, now: Date, months = 6) {
   return Array.from({ length: months }, (_, i) => {
     const month = monthBefore(now, months - 1 - i);
-    const cutoff = monthEnd(month).toISOString();
-    const snapshot = rfqs.map((r) => asOf(r, cutoff)).filter((r): r is MetricsRfq => r !== null);
-    return { month, score: scoreSupplier(supplierMetrics(snapshot, supplierId))?.score ?? null };
+    const cutoff = monthEnd(month);
+    const snapshot = rfqs.map((r) => asOf(r, cutoff.getTime())).filter((r): r is MetricsRfq => r !== null);
+    return { month, score: scoreSupplier(supplierMetrics(snapshot, supplier, cutoff))?.score ?? null };
   });
 }
 
-/** Scores for many suppliers at once (list page, comparison badges). */
-export function scoreSuppliers(rfqs: MetricsRfq[], supplierIds: string[]) {
+/** Scores for many suppliers at once (list page, comparison badges). Keyed by supplier id. */
+export function scoreSuppliers(rfqs: MetricsRfq[], suppliers: SupplierRef[], now: Date = new Date()) {
   const out = new Map<string, { metrics: SupplierMetrics; card: Scorecard | null }>();
-  for (const id of supplierIds) {
-    const metrics = supplierMetrics(rfqs, id);
-    out.set(id, { metrics, card: scoreSupplier(metrics) });
+  for (const s of suppliers) {
+    const metrics = supplierMetrics(rfqs, s, now);
+    out.set(refOf(s).id, { metrics, card: scoreSupplier(metrics) });
   }
   return out;
 }

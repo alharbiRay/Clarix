@@ -14,11 +14,16 @@ export interface MetricsRfq {
   title: string;
   currency: string;
   created_at: string;
+  /** RFQ status and deadline — the scorecard ignores invitations still open. */
+  status?: "draft" | "sent" | "closed" | "awarded";
+  deadline?: string | null;
   items: { id: string; name: string; quantity: number }[];
   invites: {
     id: string;
     label: string;
-    /** Persistent supplier profile, when linked. */
+    /** Invited email — matches invites not yet linked to a supplier profile. */
+    email?: string;
+    /** Persistent supplier profile, when linked (set once the supplier quotes). */
     supplier_id: string | null;
     status: InviteStatus;
     invited_at: string | null;

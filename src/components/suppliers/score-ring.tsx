@@ -30,7 +30,7 @@ export function ScoreRing({ score, size = 120 }: { score: number | null; size?: 
           strokeDasharray={`${filled} ${c}`}
         />
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
+      <div className="absolute inset-0 flex flex-col items-center justify-center" aria-hidden>
         <span className="text-3xl font-semibold leading-none tracking-tight text-slate-900">{score ?? "—"}</span>
         <span className="mt-1 text-xs font-medium text-slate-500">{tier.label}</span>
       </div>

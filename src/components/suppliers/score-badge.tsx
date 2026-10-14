@@ -29,11 +29,18 @@ export function ScoreBadge({
         tier.className,
         className
       )}
-      aria-label={score === null ? "No score yet — not enough history" : `Supplier score ${score} out of 100 (${tier.label})`}
       title={score === null ? "Not enough history to score yet" : `Score ${score}/100 · ${tier.label}`}
     >
-      {score === null ? "New" : score}
-      {showLabel && score !== null && <span className="font-medium opacity-80">{tier.label}</span>}
+      {/* aria-label isn't announced on a plain span — use real text for screen readers. */}
+      <span className="sr-only">
+        {score === null ? "Supplier score: new, not enough history yet" : `Supplier score ${score} out of 100, ${tier.label}`}
+      </span>
+      <span aria-hidden>{score === null ? "New" : score}</span>
+      {showLabel && score !== null && (
+        <span aria-hidden className="font-medium opacity-80">
+          {tier.label}
+        </span>
+      )}
     </span>
   );
 }

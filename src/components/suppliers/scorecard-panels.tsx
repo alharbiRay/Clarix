@@ -18,7 +18,7 @@ export function ScoreBreakdown({ card }: { card: Scorecard | null }) {
         <li key={c.key}>
           <div className="flex items-baseline justify-between gap-3 text-sm">
             <span className="font-medium text-slate-800">
-              {c.label} <span className="font-normal text-slate-400">· weight {c.weight}</span>
+              {c.label} <span className="font-normal text-slate-500">· weight {c.weight}</span>
             </span>
             <span className="tabular text-slate-600">
               {c.available ? (
@@ -26,18 +26,22 @@ export function ScoreBreakdown({ card }: { card: Scorecard | null }) {
                   <span className="font-semibold text-slate-900">{Math.round(c.points)}</span> pts
                 </>
               ) : (
-                <span className="text-slate-400">No data yet</span>
+                <span className="text-slate-500">No data yet</span>
               )}
             </span>
           </div>
           <div
             className="mt-1.5 h-2 rounded-full bg-slate-100"
-            role="meter"
-            aria-label={`${c.label} score`}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={c.available ? Math.round(c.score * 100) : undefined}
-            aria-valuetext={c.available ? `${Math.round(c.score * 100)} out of 100` : "no data"}
+            {...(c.available
+              ? {
+                  role: "meter",
+                  "aria-label": `${c.label} score`,
+                  "aria-valuemin": 0,
+                  "aria-valuemax": 100,
+                  "aria-valuenow": Math.round(c.score * 100),
+                  "aria-valuetext": `${Math.round(c.score * 100)} out of 100`,
+                }
+              : { "aria-hidden": true })}
           >
             {c.available && (
               <div className="h-2 rounded-full bg-[#6D5FD6]" style={{ width: `${Math.max(c.score * 100, 2)}%` }} />
@@ -108,7 +112,7 @@ export function StrengthsWeaknesses({ strengths, weaknesses }: { strengths: stri
       <div>
         <h3 className="text-xs font-semibold text-slate-500">Strengths</h3>
         <ul className="mt-2 space-y-2">
-          {strengths.length === 0 && <li className="text-sm text-slate-400">None yet</li>}
+          {strengths.length === 0 && <li className="text-sm text-slate-500">None yet</li>}
           {strengths.map((s) => (
             <li key={s} className="flex gap-2 text-sm text-slate-700">
               <Check size={15} className="mt-0.5 shrink-0 text-emerald-600" aria-hidden />
@@ -120,7 +124,7 @@ export function StrengthsWeaknesses({ strengths, weaknesses }: { strengths: stri
       <div>
         <h3 className="text-xs font-semibold text-slate-500">Watch out for</h3>
         <ul className="mt-2 space-y-2">
-          {weaknesses.length === 0 && <li className="text-sm text-slate-400">Nothing so far</li>}
+          {weaknesses.length === 0 && <li className="text-sm text-slate-500">Nothing so far</li>}
           {weaknesses.map((s) => (
             <li key={s} className="flex gap-2 text-sm text-slate-700">
               <Minus size={15} className="mt-0.5 shrink-0 text-amber-600" aria-hidden />

@@ -90,7 +90,8 @@ describe("supplierMetrics", () => {
     const m = supplierMetrics(history, "A");
     expect(m).toMatchObject({ awarded: 1, winRate: 0.5 });
     const unsent = [rfq({ quotes: { A: { total: 1 }, B: { total: 2 } }, awardedTo: "A", poSent: false })];
-    expect(supplierMetrics(unsent, "A")).toMatchObject({ awarded: 0, winRate: 0 });
+    // Pending approval: not decided yet, so neither a win nor a loss.
+    expect(supplierMetrics(unsent, "A")).toMatchObject({ awarded: 0, decidedQuotes: 0, winRate: null });
   });
 
   it("measures price vs the lowest complete quote, only where there was competition", () => {
@@ -119,7 +120,7 @@ describe("supplierMetrics", () => {
 describe("scoreSupplier", () => {
   const base: SupplierMetrics = {
     invited: 10, quoted: 10, declined: 0, responseRate: 1, medianResponseHours: 0,
-    awarded: 5, winRate: 0.5, avgPriceVsLowest: 0, priceSamples: 10,
+    awarded: 5, decidedQuotes: 10, winRate: 0.5, avgPriceVsLowest: 0, priceSamples: 10,
     deliveryVsTypicalDays: -1, fasterThanTypicalRate: 1, warrantyRate: 1, lastActive: null,
   };
 
@@ -167,7 +168,7 @@ describe("describeSupplier", () => {
   it("turns strong and weak components into plain language", () => {
     const m: SupplierMetrics = {
       invited: 6, quoted: 5, declined: 1, responseRate: 5 / 6, medianResponseHours: 80,
-      awarded: 2, winRate: 0.4, avgPriceVsLowest: 0.02, priceSamples: 5,
+      awarded: 2, decidedQuotes: 5, winRate: 0.4, avgPriceVsLowest: 0.02, priceSamples: 5,
       deliveryVsTypicalDays: 4, fasterThanTypicalRate: 0.2, warrantyRate: 0.2, lastActive: null,
     };
     const { strengths, weaknesses } = describeSupplier(m, scoreSupplier(m)!);

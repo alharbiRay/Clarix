@@ -6,7 +6,7 @@ export const METRICS_PAGE_SIZE = 1000;
 
 /** Columns the metrics need — nothing more (no notes, PDFs or extraction payloads). */
 export const METRICS_SELECT =
-  "id, title, currency, created_at, " +
+  "id, title, currency, created_at, status, deadline, " +
   "rfq_items(id, name, quantity), " +
   "rfq_suppliers(id, company_name, email, supplier_id, status, invited_at), " +
   "quotes(id, supplier_id, status, submitted_at, delivery_days, warranty, quote_items(rfq_item_id, total_price)), " +
@@ -25,6 +25,8 @@ export interface MetricsRow {
   title: string;
   currency: string;
   created_at: string;
+  status?: "draft" | "sent" | "closed" | "awarded";
+  deadline?: string | null;
   rfq_items: { id: string; name: string; quantity: number | string }[];
   rfq_suppliers: {
     id: string;
@@ -54,10 +56,13 @@ export function toMetricsRfq(row: MetricsRow): MetricsRfq {
     title: row.title,
     currency: row.currency,
     created_at: row.created_at,
+    status: row.status,
+    deadline: row.deadline ?? null,
     items: row.rfq_items.map((i) => ({ id: i.id, name: i.name, quantity: Number(i.quantity) })),
     invites: row.rfq_suppliers.map((s) => ({
       id: s.id,
       label: s.company_name || s.email,
+      email: s.email,
       supplier_id: s.supplier_id,
       status: s.status as InviteStatus,
       invited_at: s.invited_at,
@@ -90,7 +95,23 @@ export function toMetricsRfq(row: MetricsRow): MetricsRfq {
  * Loads the signed-in buyer's RFQs for metrics. `supabase` must be the
  * RLS-scoped server client; the explicit buyer_id filter is defence in depth.
  */
-export async function loadMetricsRfqs(supabase: SupabaseClient, buyerId: string): Promise<MetricsRfq[]> {
+export async function loadMetricsRfqs(
+  supabase: SupabaseClient,
+  buyerId: string,
+  opts: { rfqIds?: string[] } = {}
+): Promise<MetricsRfq[]> {
+  if (opts.rfqIds) {
+    // Targeted load (compare page, supplier detail): only the RFQs asked for.
+    const rows: MetricsRow[] = [];
+    for (let i = 0; i < opts.rfqIds.length; i += ID_CHUNK) {
+      const ids = opts.rfqIds.slice(i, i + ID_CHUNK);
+      const { data, error } = await supabase.from("rfqs").select(METRICS_SELECT).eq("buyer_id", buyerId).in("id", ids);
+      if (error) throw new Error(`Failed to load metrics data: ${error.message}`);
+      rows.push(...((data ?? []) as unknown as MetricsRow[]));
+    }
+    return rows.map(toMetricsRfq);
+  }
+
   // PostgREST caps each response (max-rows, 1000 on Supabase). Page through
   // explicitly so all-time figures never silently drop older RFQs.
   const rows: MetricsRow[] = [];
@@ -108,4 +129,24 @@ export async function loadMetricsRfqs(supabase: SupabaseClient, buyerId: string)
     if (page.length < METRICS_PAGE_SIZE) break;
   }
   return rows.map(toMetricsRfq);
+}
+
+const ID_CHUNK = 100;
+
+/**
+ * RFQ ids a set of suppliers took part in — by linked profile or, for
+ * invitations not yet linked, by email. RLS scopes this to the buyer.
+ */
+export async function rfqIdsForSuppliers(
+  supabase: SupabaseClient,
+  suppliers: { id: string; email?: string | null }[]
+): Promise<string[]> {
+  const ids = suppliers.map((s) => s.id);
+  const emails = suppliers.map((s) => s.email?.trim().toLowerCase()).filter((e): e is string => Boolean(e));
+  const [byId, byEmail] = await Promise.all([
+    ids.length ? supabase.from("rfq_suppliers").select("rfq_id").in("supplier_id", ids) : { data: [], error: null },
+    emails.length ? supabase.from("rfq_suppliers").select("rfq_id").in("email", emails) : { data: [], error: null },
+  ]);
+  if (byId.error || byEmail.error) throw new Error("Failed to look up supplier history");
+  return Array.from(new Set([...(byId.data ?? []), ...(byEmail.data ?? [])].map((r) => r.rfq_id as string)));
 }

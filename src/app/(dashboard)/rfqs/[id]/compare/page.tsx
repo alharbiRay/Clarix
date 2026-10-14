@@ -11,7 +11,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { loadMetricsRfqs } from "@/lib/metrics/load";
+import { loadMetricsRfqs, rfqIdsForSuppliers } from "@/lib/metrics/load";
 import { scoreSuppliers } from "@/lib/scorecard";
 import { ScoreBadge } from "@/components/suppliers/score-badge";
 import { FadeIn } from "@/components/motion";
@@ -54,13 +54,10 @@ export default async function ComparePage({
   params: { id: string };
 }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   // Every query keys off params.id alone — none depends on another's
   // result — so fire them concurrently instead of one after another.
-  const [rfqResult, recResult, prefsResult, awardResult, jobResult, historyRfqs] = await Promise.all([
+  const [rfqResult, recResult, prefsResult, awardResult, jobResult] = await Promise.all([
     supabase
       .from("rfqs")
       .select("*, rfq_items(*), rfq_suppliers(*), quotes(*, quote_items(*))")
@@ -84,8 +81,6 @@ export default async function ComparePage({
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    // Supplier scorecards for the badges in the column headers.
-    user ? loadMetricsRfqs(supabase, user.id) : Promise.resolve([]),
   ]);
 
   const { data } = rfqResult;
@@ -148,10 +143,21 @@ export default async function ComparePage({
   ];
 
   const confirmedColumns = columns.filter((c) => !c.pending);
-  const supplierScores = scoreSuppliers(
-    historyRfqs,
-    rfq.rfq_suppliers.map((s) => s.supplier_id).filter((id): id is string => Boolean(id))
-  );
+
+  // Score badges: load only the RFQs these suppliers took part in. Decorative —
+  // if it fails, the comparison still renders, just without badges.
+  const scoreRefs = rfq.rfq_suppliers
+    .filter((s) => s.supplier_id)
+    .map((s) => ({ id: s.supplier_id as string, email: s.email }));
+  const historyRfqs = scoreRefs.length
+    ? await rfqIdsForSuppliers(supabase, scoreRefs)
+        .then((ids) => loadMetricsRfqs(supabase, rfq.buyer_id, { rfqIds: ids }))
+        .catch((e) => {
+          console.error(JSON.stringify({ event: "compare.scores_unavailable", error: String(e) }));
+          return [];
+        })
+    : [];
+  const supplierScores = scoreSuppliers(historyRfqs, scoreRefs);
 
   // For the "choose different supplier" picker on the approve button —
   // every submitted/confirmed quote is a valid award target, not just the

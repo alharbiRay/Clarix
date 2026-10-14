@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Mail, Phone } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { loadMetricsRfqs } from "@/lib/metrics/load";
+import { loadMetricsRfqs, rfqIdsForSuppliers } from "@/lib/metrics/load";
 import { describeSupplier, scoreSupplier, scoreTrend, supplierMetrics } from "@/lib/scorecard";
 import { formatHours, formatPct } from "@/lib/metrics/format";
 import { ScoreRing } from "@/components/suppliers/score-ring";
@@ -56,7 +56,9 @@ export default async function SupplierDetailPage({
 
   // Both only depend on supplier.id, not on each other — fetch concurrently.
   const [rfqs, { data: rfqSuppliersData }] = await Promise.all([
-    loadMetricsRfqs(supabase, user.id),
+    rfqIdsForSuppliers(supabase, [{ id: supplier.id, email: supplier.email }]).then((ids) =>
+      loadMetricsRfqs(supabase, user.id, { rfqIds: ids })
+    ),
     supabase
       .from("rfq_suppliers")
       .select("id, rfq_id, rfqs(id, title, currency, rfq_items(*)), quotes(*, quote_items(*))")
@@ -97,9 +99,10 @@ export default async function SupplierDetailPage({
   }
 
   const label = supplier.company_name || supplier.email;
-  const metrics = supplierMetrics(rfqs, supplier.id);
+  const ref = { id: supplier.id, email: supplier.email };
+  const metrics = supplierMetrics(rfqs, ref);
   const card = scoreSupplier(metrics);
-  const trend = scoreTrend(rfqs, supplier.id, new Date(), 6);
+  const trend = scoreTrend(rfqs, ref, new Date(), 6);
   const { strengths, weaknesses } = describeSupplier(metrics, card);
 
   return (

@@ -315,3 +315,20 @@ Below that a score is noise. The badge says "New" and the detail page explains w
 `tsconfig.json` gets `"target": "ES2017"` (type-checking only; Next compiles with SWC),
 which ends the recurring Map/Set iteration errors. Scripted edits normalize CRLF first,
 because this checkout uses `core.autocrlf=true`.
+
+## D-034: Code review of Phase 4, and what changed as a result
+"Ready with fixes". The review caught two metrics that would mislead on real data, which
+the demo data couldn't reveal because it links every invitation:
+- Invitations are linked to a supplier profile only once the supplier quotes, so
+  unanswered and declined invitations were invisible and the response rate was about 100%. Now
+  they're matched by email too (tested with unlinked invites).
+- Open RFQs counted as losses and non-responses. The win rate now uses decided RFQs only,
+  and unanswered invitations on still-open RFQs are excluded.
+- The compare page and the supplier detail page load only the RFQs these suppliers took part in
+  (not the buyer's whole history), and the compare page's badges fail soft.
+- Accessibility: the badge's accessible name is real sr-only text (`aria-label` on a span
+  isn't announced), the ring isn't read twice, the meter role is only used when there's data,
+  and low-contrast `slate-400` text moved to `slate-500`.
+- Also: instant comparisons in the trend (no ISO string comparisons), breakdown points
+  that add up exactly, "last active" is the supplier's own activity again, an empty `?min=` is
+  "Any", and METRICS.md gaps are filled.

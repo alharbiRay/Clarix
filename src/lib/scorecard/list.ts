@@ -16,7 +16,7 @@ export interface SupplierListRow {
 /** Search params → validated options (anything unexpected falls back to defaults). */
 export function parseSupplierListParams(params: { sort?: string; min?: string }): SupplierListParams {
   const sort: SupplierSort = params.sort === "name" || params.sort === "recent" ? params.sort : "score";
-  const n = params.min === undefined ? NaN : Number(params.min);
+  const n = params.min === undefined || params.min.trim() === "" ? NaN : Number(params.min);
   const min = Number.isInteger(n) && n >= 0 && n <= 100 ? n : null;
   return { sort, min };
 }

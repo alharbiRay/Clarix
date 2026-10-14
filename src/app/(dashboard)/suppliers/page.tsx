@@ -69,7 +69,7 @@ export default async function SuppliersPage({
 
   const suppliers = (suppliersData ?? []) as Supplier[];
   const openRfqs = openRfqsData ?? [];
-  const scores = scoreSuppliers(rfqs, suppliers.map((s) => s.id));
+  const scores = scoreSuppliers(rfqs, suppliers.map((s) => ({ id: s.id, email: s.email })));
 
   const rows = sortAndFilterSuppliers(
     suppliers.map((s) => {
@@ -145,7 +145,7 @@ export default async function SuppliersPage({
                     <td className="px-3 py-3"><ScoreBadge score={score} /></td>
                     <td className="px-3 py-3 tabular text-slate-700">
                       {metrics.quoted}
-                      <span className="text-slate-400"> / {metrics.invited}</span>
+                      <span className="text-slate-500"> / {metrics.invited}</span>
                     </td>
                     <td className="px-3 py-3 tabular text-slate-700">{formatPct(metrics.winRate)}</td>
                     <td className="px-3 py-3 tabular text-slate-700">{formatHours(metrics.medianResponseHours)}</td>
@@ -153,7 +153,7 @@ export default async function SuppliersPage({
                       className={cn(
                         "px-3 py-3 tabular font-medium",
                         metrics.avgPriceVsLowest === null
-                          ? "text-slate-400"
+                          ? "text-slate-500"
                           : metrics.avgPriceVsLowest <= 0.03
                             ? "text-emerald-700"
                             : metrics.avgPriceVsLowest >= 0.1

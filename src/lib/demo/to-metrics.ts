@@ -10,10 +10,12 @@ export function demoToMetricsRfqs(d: DemoDataset): MetricsRfq[] {
       title: r.title,
       currency: r.currency,
       created_at: r.created_at,
+      status: r.status,
+      deadline: r.deadline,
       items: d.rfq_items.filter((i) => i.rfq_id === r.id).map((i) => ({ id: i.id, name: i.name, quantity: i.quantity })),
       invites: d.rfq_suppliers
         .filter((s) => s.rfq_id === r.id)
-        .map((s) => ({ id: s.id, label: s.company_name, supplier_id: s.supplier_id, status: s.status, invited_at: s.invited_at })),
+        .map((s) => ({ id: s.id, label: s.company_name, email: s.email, supplier_id: s.supplier_id, status: s.status, invited_at: s.invited_at })),
       quotes: d.quotes
         .filter((q) => q.rfq_id === r.id)
         .map((q) => ({

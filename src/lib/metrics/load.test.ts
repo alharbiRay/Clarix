@@ -47,3 +47,31 @@ describe("loadMetricsRfqs", () => {
     expect(await loadMetricsRfqs(db as never, "b")).toHaveLength(total);
   });
 });
+
+describe("rfqIdsForSuppliers + targeted load", () => {
+  it("finds RFQs by linked profile or (for unlinked invites) by email, without duplicates", async () => {
+    const { rfqIdsForSuppliers } = await import("@/lib/metrics/load");
+    const db = createFakeSupabase({
+      rfq_suppliers: [
+        { rfq_id: "r1", supplier_id: "s1", email: "a@x.example" },
+        { rfq_id: "r2", supplier_id: null, email: "a@x.example" },
+        { rfq_id: "r3", supplier_id: "s2", email: "b@x.example" },
+        { rfq_id: "r1", supplier_id: null, email: "a@x.example" },
+      ],
+    });
+    const ids = await rfqIdsForSuppliers(db as never, [{ id: "s1", email: "A@x.example" }]);
+    expect(ids.sort()).toEqual(["r1", "r2"]);
+  });
+
+  it("loads only the requested RFQs for the buyer", async () => {
+    const db = createFakeSupabase({
+      rfqs: [
+        { ...row, id: "r1", buyer_id: "b", rfq_awards: null },
+        { ...row, id: "r2", buyer_id: "b", rfq_awards: null },
+        { ...row, id: "r3", buyer_id: "someone-else", rfq_awards: null },
+      ],
+    });
+    const rfqs = await loadMetricsRfqs(db as never, "b", { rfqIds: ["r2", "r3"] });
+    expect(rfqs.map((r) => r.id)).toEqual(["r2"]);
+  });
+});
