@@ -332,3 +332,26 @@ the demo data couldn't reveal because it links every invitation:
 - Also: instant comparisons in the trend (no ISO string comparisons), breakdown points
   that add up exactly, "last active" is the supplier's own activity again, an empty `?min=` is
   "Any", and METRICS.md gaps are filled.
+
+---
+
+# Phase 5: Price history and alerts
+
+## D-035: The normalizer is deterministic plus a glossary, and AI matching is skipped
+The brief made AI-assisted matching optional. A small bilingual glossary handles the common
+cross-language cases deterministically, at no cost and testably, so there's no new Gemini path
+(quota, latency, privacy) to justify. Add it behind a flag later if real data shows
+unmatched pairs.
+
+## D-036: Price history is a derived query, not a table
+Points come from quote lines already loaded for metrics, so there's nothing to keep in sync
+and no migration beyond the threshold column. The compare page bounds it to the last 365 days.
+
+## D-037: Badges show context; color shows alerts
+Both "vs their last" and "vs market" are shown when available, as muted text. Only changes at or
+above the threshold get color and an icon, which gives the "alert" meaning without hiding the
+context. The threshold is per buyer (`profiles.price_alert_threshold`). Phase 7 can move it into
+the organization's approval policy if that table lands.
+
+## D-038: The history chart is dots only
+Joining prices from different suppliers with a line implies a series that doesn't exist.

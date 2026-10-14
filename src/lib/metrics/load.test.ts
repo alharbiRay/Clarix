@@ -12,7 +12,7 @@ const row = {
     { id: "s1", company_name: null, email: "a@x.example", supplier_id: "sup1", status: "submitted", invited_at: "2026-10-01T01:00:00Z" },
   ],
   quotes: [
-    { id: "q1", supplier_id: "s1", status: "submitted", submitted_at: "2026-10-02T00:00:00Z", quote_items: [{ rfq_item_id: "i1", total_price: "125.50" }] },
+    { id: "q1", supplier_id: "s1", status: "submitted", submitted_at: "2026-10-02T00:00:00Z", quote_items: [{ rfq_item_id: "i1", unit_price: "12.55", total_price: "125.50" }] },
   ],
 };
 
@@ -21,7 +21,7 @@ describe("toMetricsRfq", () => {
     const m = toMetricsRfq({ ...row, rfq_awards: null });
     expect(m.items).toEqual([{ id: "i1", name: "Cement", quantity: 10 }]);
     expect(m.invites[0]).toMatchObject({ id: "s1", label: "a@x.example", supplier_id: "sup1" });
-    expect(m.quotes[0].lines).toEqual([{ item_id: "i1", total: 125.5 }]);
+    expect(m.quotes[0].lines).toEqual([{ item_id: "i1", total: 125.5, unit: 12.55 }]);
     expect(m.award).toBeNull();
   });
 

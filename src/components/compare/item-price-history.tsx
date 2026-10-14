@@ -1,0 +1,100 @@
+"use client";
+
+import { LineChart } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { formatDate, formatMoney } from "@/lib/format";
+
+export interface HistoryPoint {
+  at: string;
+  unitPrice: number;
+  supplierLabel: string;
+  rfqTitle: string;
+  current: boolean;
+}
+
+const W = 248;
+const H = 88;
+const PAD = 8;
+
+/**
+ * A small time-scaled dot plot of every quoted unit price for one item. Dots
+ * only — joining quotes from different suppliers with a line would imply a
+ * series that doesn't exist.
+ */
+function PriceDots({ points }: { points: HistoryPoint[] }) {
+  const times = points.map((p) => Date.parse(p.at));
+  const prices = points.map((p) => p.unitPrice);
+  const t0 = Math.min(...times);
+  const t1 = Math.max(...times);
+  const lo = Math.min(...prices) * 0.97;
+  const hi = Math.max(...prices) * 1.03;
+  const x = (t: number) => (t1 === t0 ? W / 2 : PAD + ((t - t0) / (t1 - t0)) * (W - PAD * 2));
+  const y = (v: number) => (hi === lo ? H / 2 : H - PAD - ((v - lo) / (hi - lo)) * (H - PAD * 2));
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-[88px] w-full" aria-hidden>
+      <line x1={PAD} x2={W - PAD} y1={H - PAD} y2={H - PAD} stroke="#E2E8F0" strokeWidth={1} />
+      {points.map((p, i) => (
+        <circle
+          key={i}
+          cx={x(Date.parse(p.at))}
+          cy={y(p.unitPrice)}
+          r={p.current ? 5 : 4}
+          fill={p.current ? "#0F172A" : "#6D5FD6"}
+          stroke="#fff"
+          strokeWidth={2}
+        />
+      ))}
+    </svg>
+  );
+}
+
+export function ItemPriceHistory({
+  itemName,
+  unit,
+  currency,
+  points,
+}: {
+  itemName: string;
+  unit: string;
+  currency: string;
+  points: HistoryPoint[];
+}) {
+  const pastCount = points.filter((p) => !p.current).length;
+  if (pastCount === 0) return null;
+  const recent = [...points].reverse().slice(0, 6);
+  return (
+    <Popover>
+      <PopoverTrigger
+        className="mt-1 inline-flex items-center gap-1 rounded text-[11px] font-medium text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0]"
+        aria-label={`Price history for ${itemName}: ${pastCount} quotes on other RFQs`}
+      >
+        <LineChart size={11} aria-hidden /> Price history · {pastCount}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 border-slate-200 bg-white p-4 text-slate-900">
+        <p className="text-sm font-semibold">
+          <bdi>{itemName}</bdi>
+        </p>
+        <p className="text-xs text-slate-500">
+          Unit price per {unit} · {currency} · dark dot = this RFQ
+        </p>
+        <div className="mt-2">
+          <PriceDots points={points} />
+        </div>
+        <table className="mt-2 w-full text-xs">
+          <caption className="sr-only">Recent unit prices for {itemName}</caption>
+          <tbody className="divide-y divide-slate-100">
+            {recent.map((p, i) => (
+              <tr key={i} className={p.current ? "font-semibold" : undefined}>
+                <td className="py-1 pr-2 text-slate-500">{formatDate(p.at)}</td>
+                <td className="max-w-[120px] truncate py-1 pr-2">
+                  <bdi>{p.supplierLabel}</bdi>
+                </td>
+                <td className="py-1 text-right tabular">{formatMoney(p.unitPrice, currency)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </PopoverContent>
+    </Popover>
+  );
+}

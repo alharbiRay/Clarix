@@ -12,7 +12,7 @@ export function demoToMetricsRfqs(d: DemoDataset): MetricsRfq[] {
       created_at: r.created_at,
       status: r.status,
       deadline: r.deadline,
-      items: d.rfq_items.filter((i) => i.rfq_id === r.id).map((i) => ({ id: i.id, name: i.name, quantity: i.quantity })),
+      items: d.rfq_items.filter((i) => i.rfq_id === r.id).map((i) => ({ id: i.id, name: i.name, quantity: i.quantity, unit: i.unit })),
       invites: d.rfq_suppliers
         .filter((s) => s.rfq_id === r.id)
         .map((s) => ({ id: s.id, label: s.company_name, email: s.email, supplier_id: s.supplier_id, status: s.status, invited_at: s.invited_at })),
@@ -25,7 +25,7 @@ export function demoToMetricsRfqs(d: DemoDataset): MetricsRfq[] {
           submitted_at: q.submitted_at,
           delivery_days: q.delivery_days,
           warranty: q.warranty,
-          lines: d.quote_items.filter((qi) => qi.quote_id === q.id).map((qi) => ({ item_id: qi.rfq_item_id, total: qi.total_price })),
+          lines: d.quote_items.filter((qi) => qi.quote_id === q.id).map((qi) => ({ item_id: qi.rfq_item_id, total: qi.total_price, unit: qi.unit_price })),
         })),
       award: award
         ? { decision: award.decision, quote_id: award.recommended_quote_id, po_sent_at: award.po_sent_at, created_at: award.created_at, reason: award.reason }
