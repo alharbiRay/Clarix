@@ -14,7 +14,7 @@ import {
   type RfqWithComparisonData,
 } from "@/lib/recommendation-input";
 import { createQuoteFromPdf } from "@/lib/quote-intake";
-import { maybeAutoGenerateRecommendation } from "@/lib/auto-recommendation";
+import { scheduleAutoRecommendation } from "@/lib/jobs/schedule";
 import { ensureSupplierProfile } from "@/lib/supplier-profile";
 import { quoteSchema, type QuoteFormValues } from "@/lib/validations/quote";
 import type { RfqItem } from "@/lib/types";
@@ -79,18 +79,13 @@ export async function uploadQuotePdf(formData: FormData) {
     pdfBuffer: buffer,
     source: "pdf",
   });
-  if (result.error) return { error: result.error };
+  if (result.error !== undefined) return { error: result.error };
 
   revalidatePath(`/rfqs/${rfqId}`);
   revalidatePath(`/rfqs/${rfqId}/compare`);
-  console.log(`[uploadQuotePdf] rfq=${rfqId} quote=${result.quoteId} confirmed — awaiting maybeAutoGenerateRecommendation`);
-  // Must be awaited, not fire-and-forget: on a serverless runtime the
-  // function instance can be frozen/torn down the moment this action
-  // returns, silently killing an un-awaited background promise before the
-  // Gemini call and auto-approval evaluation ever run.
-  await maybeAutoGenerateRecommendation(rfqId).catch((e) =>
-    console.error(`[uploadQuotePdf] rfq=${rfqId} auto-recommendation failed:`, e)
-  );
+  // Durable job (src/lib/jobs): recorded now, run in the background, swept
+  // up by /api/jobs/process if this instance is torn down first.
+  await scheduleAutoRecommendation(rfqId, user.id);
   return { quoteId: result.quoteId };
 }
 
@@ -201,10 +196,7 @@ export async function addManualQuote(
 
   revalidatePath(`/rfqs/${rfqId}`);
   revalidatePath(`/rfqs/${rfqId}/compare`);
-  console.log(`[addManualQuote] rfq=${rfqId} supplier=${supplierId} saved — awaiting maybeAutoGenerateRecommendation`);
-  await maybeAutoGenerateRecommendation(rfqId).catch((e) =>
-    console.error(`[addManualQuote] rfq=${rfqId} auto-recommendation failed:`, e)
-  );
+  await scheduleAutoRecommendation(rfqId, user.id);
   return { success: true };
 }
 
@@ -287,10 +279,7 @@ export async function confirmQuote(quoteId: string, values: QuoteFormValues) {
 
   revalidatePath(`/rfqs/${quote.rfq_id}`);
   revalidatePath(`/rfqs/${quote.rfq_id}/compare`);
-  console.log(`[confirmQuote] rfq=${quote.rfq_id} quote=${quoteId} confirmed — awaiting maybeAutoGenerateRecommendation`);
-  await maybeAutoGenerateRecommendation(quote.rfq_id).catch((e) =>
-    console.error(`[confirmQuote] rfq=${quote.rfq_id} auto-recommendation failed:`, e)
-  );
+  await scheduleAutoRecommendation(quote.rfq_id, user.id);
   return { success: true, rfqId: quote.rfq_id };
 }
 

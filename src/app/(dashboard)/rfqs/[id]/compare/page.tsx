@@ -52,9 +52,9 @@ export default async function ComparePage({
 }) {
   const supabase = createClient();
 
-  // All four queries key off params.id alone — none depends on another's
+  // Every query keys off params.id alone — none depends on another's
   // result — so fire them concurrently instead of one after another.
-  const [rfqResult, recResult, prefsResult, awardResult] = await Promise.all([
+  const [rfqResult, recResult, prefsResult, awardResult, jobResult] = await Promise.all([
     supabase
       .from("rfqs")
       .select("*, rfq_items(*), rfq_suppliers(*), quotes(*, quote_items(*))")
@@ -69,6 +69,15 @@ export default async function ComparePage({
       .maybeSingle(),
     supabase.from("rfq_preferences").select("*").eq("rfq_id", params.id).maybeSingle(),
     supabase.from("rfq_awards").select("*").eq("rfq_id", params.id).maybeSingle(),
+    supabase
+      .from("jobs")
+      .select("status, attempts, run_after")
+      .eq("rfq_id", params.id)
+      .eq("type", "auto_recommendation")
+      .in("status", ["pending", "running"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const { data } = rfqResult;
@@ -196,6 +205,11 @@ export default async function ComparePage({
     : null;
 
   const award = awardResult.data as RfqAward | null;
+  const activeJob = jobResult.data as { status: string; attempts: number; run_after: string } | null;
+  const retryAt =
+    activeJob && activeJob.attempts > 0 && new Date(activeJob.run_after).getTime() > Date.now()
+      ? activeJob.run_after
+      : null;
 
   const quotesById = new Map(rfq.quotes.map((q) => [q.id, q]));
 
@@ -256,6 +270,35 @@ export default async function ComparePage({
           )}
         </div>
       </FadeIn>
+
+      {activeJob && !award && (
+        <FadeIn>
+          <div
+            role="status"
+            className="flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-sm text-indigo-900"
+          >
+            {retryAt ? (
+              <Clock size={15} className="shrink-0 text-indigo-500" />
+            ) : (
+              <Sparkles size={15} className="shrink-0 animate-pulse text-indigo-500 motion-reduce:animate-none" />
+            )}
+            <span>
+              {retryAt ? (
+                <>
+                  <strong>AI recommendation delayed</strong> — the last
+                  attempt didn&apos;t finish. Clarix retries automatically (next
+                  attempt around {new Date(retryAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}).
+                </>
+              ) : (
+                <>
+                  <strong>Preparing the AI recommendation…</strong> Refresh in
+                  a moment to see it.
+                </>
+              )}
+            </span>
+          </div>
+        </FadeIn>
+      )}
 
       {award && award.decision === "auto_approved" && awardRecommended && (
         <FadeIn>

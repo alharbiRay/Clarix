@@ -1,9 +1,10 @@
-// v2: wired into all three quote submission paths (form, manual, PDF confirm)
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   DEFAULT_RECOMMENDATION_WEIGHTS,
   generateQuoteRecommendation,
-  isGeminiQuotaError,
+  recommendationContentSchema,
+  type RecommendationContent,
   type RecommendationPreferences,
 } from "@/lib/gemini";
 import {
@@ -11,97 +12,90 @@ import {
   type RfqWithComparisonData,
 } from "@/lib/recommendation-input";
 import { evaluateAutoApproval } from "@/lib/auto-approval";
+import { PermanentJobError } from "@/lib/jobs/processor";
 
 const TAG = "[auto-reco]";
 
+export interface AutoRecommendationDeps {
+  /** Service-role client: runs for buyer actions, the no-login supplier form, and the webhook alike. */
+  supabase: SupabaseClient;
+  generate: typeof generateQuoteRecommendation;
+  evaluate: typeof evaluateAutoApproval;
+}
+
+export type AutoRecommendationResult =
+  | { outcome: "not_ready" }
+  | { outcome: "manual_recommendation_exists" }
+  | { outcome: "no_comparable_quotes" }
+  | { outcome: "resumed" }
+  | { outcome: "generated"; model: string };
+
+function defaultDeps(): AutoRecommendationDeps {
+  return {
+    supabase: createAdminClient(),
+    generate: generateQuoteRecommendation,
+    evaluate: evaluateAutoApproval,
+  };
+}
+
 /**
- * Fires whenever a supplier's quote lands (form submit, manual entry, or a
- * PDF extraction — now auto-confirmed, see src/lib/quote-intake.ts) — the
- * places rfq_suppliers.status flips to 'submitted'. If every invited
- * supplier has now resolved (submitted or declined) and no recommendation
- * exists yet for this RFQ, generates one automatically (using saved
+ * The `auto_recommendation` job handler (see src/lib/jobs). Enqueued
+ * whenever a supplier's quote lands — form submit, manual entry, buyer PDF
+ * upload, or an emailed PDF. Once every invited supplier has resolved
+ * (submitted or declined), it generates the AI recommendation (using saved
  * rfq_preferences if the buyer set any, defaults otherwise) and hands off to
- * evaluateAutoApproval, which sends the buyer their one and only
- * notification for this RFQ — "Auto-approved: ... — PO sent" or "Review
- * needed: ...".
+ * evaluateAutoApproval, which sends the buyer their one notification for
+ * this RFQ.
  *
- * Runs on the admin client since it's called from buyer-authenticated
- * actions, the token-based (no-login) supplier submission flow, and the
- * inbound-email webhook. Never throws past a logged, best-effort attempt —
- * this is a side effect of a quote submission and must not break that
- * submission.
+ * Idempotent, so the job runner may run it any number of times:
+ * - at most one auto-generated recommendation per RFQ (unique index from
+ *   migration 0007); a repeat run, or one that loses a race, "resumes" with
+ *   the stored recommendation instead of calling Gemini again;
+ * - evaluateAutoApproval gates every side effect on its rfq_awards insert,
+ *   so resuming can never send a second PO or notification.
  *
- * All call sites MUST `await` this (see src/app/(dashboard)/rfqs/quote-actions.ts
- * and the inbound-email webhook) — a fire-and-forget call left running past
- * the point where the caller returns its response is not guaranteed to
- * finish on a serverless runtime, which silently drops this entire flow.
+ * Gemini errors propagate — the job runner reschedules with backoff and
+ * tells the buyer about quota problems (src/lib/jobs/run.ts).
  */
-export async function maybeAutoGenerateRecommendation(rfqId: string) {
-  console.log(`${TAG} called for rfq=${rfqId}`);
-  const supabase = createAdminClient();
+export async function runAutoRecommendation(
+  rfqId: string,
+  deps: AutoRecommendationDeps = defaultDeps()
+): Promise<AutoRecommendationResult> {
+  const { supabase } = deps;
 
   const { data: suppliers, error: suppliersError } = await supabase
     .from("rfq_suppliers")
     .select("id, status")
     .eq("rfq_id", rfqId);
-  if (suppliersError) {
-    console.error(`${TAG} rfq=${rfqId} failed to load rfq_suppliers:`, suppliersError);
-    return;
-  }
-
-  const statuses = (suppliers ?? []).map((s) => s.status);
-  console.log(`${TAG} rfq=${rfqId} supplier statuses:`, statuses);
+  if (suppliersError) throw new Error(`failed to load rfq_suppliers: ${suppliersError.message}`);
 
   const invited = (suppliers ?? []).filter((s) => s.status !== "pending");
-  if (invited.length === 0) {
-    console.log(`${TAG} rfq=${rfqId} bail: no invited suppliers yet`);
-    return;
+  const unresolved = invited.filter((s) => s.status !== "submitted" && s.status !== "declined");
+  if (invited.length === 0 || unresolved.length > 0 || !invited.some((s) => s.status === "submitted")) {
+    console.log(`${TAG} rfq=${rfqId} not ready (invited=${invited.length}, unresolved=${unresolved.length})`);
+    return { outcome: "not_ready" };
   }
-  const unresolved = invited.filter(
-    (s) => s.status !== "submitted" && s.status !== "declined"
-  );
-  if (unresolved.length > 0) {
-    console.log(
-      `${TAG} rfq=${rfqId} bail: ${unresolved.length} supplier(s) still unresolved (sent/viewed):`,
-      unresolved.map((s) => s.id)
-    );
-    return;
-  }
-  if (!invited.some((s) => s.status === "submitted")) {
-    console.log(`${TAG} rfq=${rfqId} bail: no supplier has submitted (all declined)`);
-    return;
-  }
-
-  const { data: existingRec, error: existingRecError } = await supabase
-    .from("ai_recommendations")
-    .select("id")
-    .eq("rfq_id", rfqId)
-    .limit(1)
-    .maybeSingle();
-  if (existingRecError) {
-    console.error(
-      `${TAG} rfq=${rfqId} failed to check existing recommendation:`,
-      existingRecError
-    );
-    return;
-  }
-  if (existingRec) {
-    console.log(
-      `${TAG} rfq=${rfqId} bail: recommendation already exists (id=${existingRec.id}) — auto-trigger only fires once per RFQ`
-    );
-    return;
-  }
-
-  console.log(`${TAG} rfq=${rfqId} all suppliers resolved, no existing recommendation — proceeding`);
 
   const { data: rfq, error: rfqError } = await supabase
     .from("rfqs")
     .select("*, rfq_items(*), rfq_suppliers(*), quotes(*, quote_items(*))")
     .eq("id", rfqId)
-    .single();
-  if (rfqError || !rfq) {
-    console.error(`${TAG} rfq=${rfqId} failed to load full RFQ:`, rfqError);
-    return;
+    .maybeSingle();
+  if (rfqError) throw new Error(`failed to load RFQ: ${rfqError.message}`);
+  if (!rfq) throw new PermanentJobError(`RFQ ${rfqId} not found`);
+  const fullRfq = rfq as unknown as RfqWithComparisonData;
+
+  const existing = await loadAutoRecommendation(supabase, rfqId);
+  if (existing === "manual") {
+    // Preserves the original contract: the auto flow fires once per RFQ,
+    // and never after the buyer has started driving it by hand.
+    console.log(`${TAG} rfq=${rfqId} skip: buyer already generated a recommendation manually`);
+    return { outcome: "manual_recommendation_exists" };
+  }
+  if (existing) {
+    console.log(`${TAG} rfq=${rfqId} auto recommendation exists — resuming approval evaluation`);
+    await deps.evaluate(supabase, fullRfq, existing);
+    return { outcome: "resumed" };
   }
 
   const { data: prefsRow } = await supabase
@@ -109,7 +103,6 @@ export async function maybeAutoGenerateRecommendation(rfqId: string) {
     .select("*")
     .eq("rfq_id", rfqId)
     .maybeSingle();
-
   const weights = prefsRow?.weights ?? DEFAULT_RECOMMENDATION_WEIGHTS;
   const preferences: RecommendationPreferences = prefsRow
     ? {
@@ -119,51 +112,47 @@ export async function maybeAutoGenerateRecommendation(rfqId: string) {
       }
     : { hasDeadline: false, deadlineDate: null, maxBudget: null };
 
-  const input = buildRecommendationInput(
-    rfq as unknown as RfqWithComparisonData,
-    weights,
-    preferences
-  );
-  if (!input) {
-    console.log(
-      `${TAG} rfq=${rfqId} bail: buildRecommendationInput returned null (no comparable submitted/confirmed quotes)`
-    );
-    return;
-  }
+  const input = buildRecommendationInput(fullRfq, weights, preferences);
+  if (!input) return { outcome: "no_comparable_quotes" };
 
   console.log(`${TAG} rfq=${rfqId} calling Gemini with ${input.quotes.length} comparable quote(s)`);
+  const result = await deps.generate(input);
 
-  let result;
-  try {
-    result = await generateQuoteRecommendation(input);
-  } catch (e) {
-    console.error(`${TAG} rfq=${rfqId} generateQuoteRecommendation threw:`, e);
-    const message = isGeminiQuotaError(e)
-      ? `Auto-recommendation for ${rfq.title} failed — the Gemini API quota/rate limit was hit. Generate it manually from the compare page once it resets.`
-      : `Auto-recommendation for ${rfq.title} failed. Generate it manually from the compare page.`;
-    await supabase.from("notifications").insert({
-      buyer_id: rfq.buyer_id,
-      rfq_id: rfqId,
-      type: "review_needed",
-      message,
-    });
-    return;
+  const { error: insertError } = await supabase.from("ai_recommendations").insert({
+    rfq_id: rfqId,
+    content: result.content,
+    model: result.model,
+    auto_generated: true,
+  });
+  if (insertError?.code === "23505") {
+    const winner = await loadAutoRecommendation(supabase, rfqId);
+    if (!winner || winner === "manual") throw new Error("auto recommendation conflict but none found");
+    console.log(`${TAG} rfq=${rfqId} lost the race to a concurrent run — resuming with its recommendation`);
+    await deps.evaluate(supabase, fullRfq, winner);
+    return { outcome: "resumed" };
   }
-  console.log(`${TAG} rfq=${rfqId} Gemini recommendation received (model=${result.model})`);
+  if (insertError) throw new Error(`failed to insert recommendation: ${insertError.message}`);
 
-  const { error: insertError } = await supabase
+  await deps.evaluate(supabase, fullRfq, result.content);
+  return { outcome: "generated", model: result.model };
+}
+
+/** The stored auto recommendation, "manual" if only buyer-generated ones exist, or null. */
+async function loadAutoRecommendation(
+  supabase: SupabaseClient,
+  rfqId: string
+): Promise<RecommendationContent | "manual" | null> {
+  const { data, error } = await supabase
     .from("ai_recommendations")
-    .insert({ rfq_id: rfqId, content: result.content, model: result.model });
-  if (insertError) {
-    console.error(`${TAG} rfq=${rfqId} failed to insert ai_recommendations:`, insertError);
-    return;
+    .select("content, auto_generated")
+    .eq("rfq_id", rfqId);
+  if (error) throw new Error(`failed to load recommendations: ${error.message}`);
+  const rows = (data ?? []) as { content: unknown; auto_generated: boolean | null }[];
+  const auto = rows.find((r) => r.auto_generated);
+  if (auto) {
+    const parsed = recommendationContentSchema.safeParse(auto.content);
+    if (!parsed.success) throw new PermanentJobError("stored auto recommendation is malformed");
+    return parsed.data;
   }
-  console.log(`${TAG} rfq=${rfqId} ai_recommendations row inserted — calling evaluateAutoApproval`);
-
-  await evaluateAutoApproval(
-    supabase,
-    rfq as unknown as RfqWithComparisonData,
-    result.content
-  );
-  console.log(`${TAG} rfq=${rfqId} evaluateAutoApproval finished`);
+  return rows.length > 0 ? "manual" : null;
 }

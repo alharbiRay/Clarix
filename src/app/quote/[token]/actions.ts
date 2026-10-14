@@ -1,7 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { maybeAutoGenerateRecommendation } from "@/lib/auto-recommendation";
+import { scheduleAutoRecommendation } from "@/lib/jobs/schedule";
 import { ensureSupplierProfile } from "@/lib/supplier-profile";
 import { quoteSchema, type QuoteFormValues } from "@/lib/validations/quote";
 
@@ -122,9 +122,9 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
     contactName: supplier.contact_name,
   });
 
-  await maybeAutoGenerateRecommendation(supplier.rfq_id).catch((e) =>
-    console.error("Auto-recommendation failed:", e)
-  );
+  // Recorded as a durable job and run in the background — the supplier no
+  // longer waits on a Gemini call (or loses it to a timeout).
+  await scheduleAutoRecommendation(supplier.rfq_id, rfq.buyer_id);
 
   return { success: true };
 }

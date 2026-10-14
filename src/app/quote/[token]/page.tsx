@@ -7,8 +7,9 @@ import { formatDate } from "@/lib/format";
 import type { Rfq, RfqItem, RfqSupplier } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-// submitQuote now awaits maybeAutoGenerateRecommendation, which can run a
-// Gemini call plus auto-approval emails — give the function room.
+// Quote saves record a durable recommendation job and start it in the
+// background with waitUntil (src/lib/jobs/schedule.ts), which runs within
+// this function's time budget — give it room for a Gemini call.
 export const maxDuration = 60;
 
 function PublicShell({ children }: { children: React.ReactNode }) {

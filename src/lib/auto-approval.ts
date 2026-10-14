@@ -18,6 +18,28 @@ function supplierLabel(s: Pick<RfqSupplier, "company_name" | "email">) {
 }
 
 /**
+ * Records the RFQ's single rfq_awards row (rfq_id is its primary key) and
+ * reports whether THIS run owns the decision. The insert itself is the
+ * idempotency gate: a concurrent or repeated run gets a unique violation
+ * and must skip every side effect (status change, notification, PO email).
+ * The earlier "does an award exist?" read is only a fast path — it can't
+ * prevent the race on its own. Other insert errors throw so the job retries.
+ */
+async function claimAward(
+  supabase: SupabaseClient,
+  rfqId: string,
+  row: Record<string, unknown>
+): Promise<boolean> {
+  const { error } = await supabase.from("rfq_awards").insert(row);
+  if (!error) return true;
+  if (error.code === "23505") {
+    console.log(`${TAG} rfq=${rfqId} award already recorded by a concurrent run — skipping side effects`);
+    return false;
+  }
+  throw new Error(`rfq_awards insert failed for rfq ${rfqId}: ${error.message}`);
+}
+
+/**
  * Runs the auto-approval rules engine right after a recommendation is
  * auto-generated (src/lib/auto-recommendation.ts). Never called from the
  * buyer's manual "Get/Regenerate recommendation" button — that's explicit
@@ -37,8 +59,9 @@ function supplierLabel(s: Pick<RfqSupplier, "company_name" | "email">) {
  * Disabled: profiles.auto_approval_enabled is off
  *   → "Review needed" — comparison is ready, but nothing is auto-sent.
  *
- * Idempotent via the rfq_awards row (one per RFQ). Never throws — this is a
- * best-effort side effect of recommendation generation.
+ * Idempotent via the rfq_awards row (one per RFQ): see claimAward. Email
+ * failures are logged and swallowed; database failures throw so the
+ * auto_recommendation job (src/lib/jobs) retries the evaluation.
  */
 export async function evaluateAutoApproval(
   supabase: SupabaseClient,
@@ -52,8 +75,10 @@ export async function evaluateAutoApproval(
       .select("auto_approval_enabled, email")
       .eq("id", rfq.buyer_id)
       .single();
-    if (profileError) {
-      console.error(`${TAG} rfq=${rfq.id} failed to load buyer profile:`, profileError);
+    if (profileError || !profile) {
+      // Don't guess: falling through would record a permanent "auto-approval
+      // is turned off" decision. Throw so the job retries.
+      throw new Error(`failed to load buyer profile for rfq ${rfq.id}: ${profileError?.message ?? "not found"}`);
     }
     console.log(
       `${TAG} rfq=${rfq.id} auto_approval_enabled=${profile?.auto_approval_enabled} buyerEmail=${profile?.email ?? "(none)"}`
@@ -79,7 +104,7 @@ export async function evaluateAutoApproval(
     if (!profile?.auto_approval_enabled) {
       console.log(`${TAG} rfq=${rfq.id} auto-approval disabled for this buyer — sending fallback review-needed notification`);
       const reason = "auto-approval is turned off — review and approve manually";
-      const { error: awardError } = await supabase.from("rfq_awards").insert({
+      if (!(await claimAward(supabase, rfq.id, {
         rfq_id: rfq.id,
         decision: "review_needed",
         recommended_supplier_id: null,
@@ -87,8 +112,7 @@ export async function evaluateAutoApproval(
         cheapest_supplier_id: null,
         cheapest_quote_id: null,
         reason,
-      });
-      if (awardError) console.error(`${TAG} rfq=${rfq.id} rfq_awards insert failed:`, awardError);
+      }))) return;
 
       const { error: notifError } = await supabase.from("notifications").insert({
         buyer_id: rfq.buyer_id,
@@ -166,7 +190,7 @@ export async function evaluateAutoApproval(
         const label = supplierLabel(recommendedSupplier);
         const total = computeQuoteTotal(items, recommendedQuote).total;
 
-        const { error: awardError } = await supabase.from("rfq_awards").insert({
+        if (!(await claimAward(supabase, rfq.id, {
           rfq_id: rfq.id,
           decision: "auto_approved",
           recommended_supplier_id: recommendedSupplier.id,
@@ -175,8 +199,7 @@ export async function evaluateAutoApproval(
           cheapest_quote_id: cheapestQuote.id,
           reason: null,
           po_sent_at: new Date().toISOString(),
-        });
-        if (awardError) console.error(`${TAG} rfq=${rfq.id} rfq_awards insert failed:`, awardError);
+        }))) return;
 
         const { error: rfqUpdateError } = await supabase
           .from("rfqs")
@@ -239,7 +262,7 @@ export async function evaluateAutoApproval(
         if (!warrantyOk) reasons.push("no warranty provided");
         const reason = `cheapest option has issues — ${reasons.join("; ")}`;
 
-        const { error: awardError } = await supabase.from("rfq_awards").insert({
+        if (!(await claimAward(supabase, rfq.id, {
           rfq_id: rfq.id,
           decision: "review_needed",
           recommended_supplier_id: recommendedSupplier.id,
@@ -247,8 +270,7 @@ export async function evaluateAutoApproval(
           cheapest_supplier_id: cheapestSupplier.id,
           cheapest_quote_id: cheapestQuote.id,
           reason,
-        });
-        if (awardError) console.error(`${TAG} rfq=${rfq.id} rfq_awards insert failed:`, awardError);
+        }))) return;
 
         const { error: notifError } = await supabase.from("notifications").insert({
           buyer_id: rfq.buyer_id,
@@ -285,7 +307,7 @@ export async function evaluateAutoApproval(
           ? `recommended supplier is ${formatMoney(diff, rfq.currency)} more than the cheapest quote`
           : "recommended supplier differs from the cheapest and needs approval";
 
-      const { error: awardError } = await supabase.from("rfq_awards").insert({
+      if (!(await claimAward(supabase, rfq.id, {
         rfq_id: rfq.id,
         decision: "differs_from_cheapest",
         recommended_supplier_id: recommendedSupplier.id,
@@ -293,8 +315,7 @@ export async function evaluateAutoApproval(
         cheapest_supplier_id: cheapestSupplier.id,
         cheapest_quote_id: cheapestQuote.id,
         reason,
-      });
-      if (awardError) console.error(`${TAG} rfq=${rfq.id} rfq_awards insert failed:`, awardError);
+      }))) return;
 
       const { error: notifError } = await supabase.from("notifications").insert({
         buyer_id: rfq.buyer_id,
@@ -320,5 +341,6 @@ export async function evaluateAutoApproval(
     console.log(`${TAG} rfq=${rfq.id} finished`);
   } catch (e) {
     console.error(`${TAG} rfq=${rfq.id} evaluation threw:`, e);
+    throw e;
   }
 }

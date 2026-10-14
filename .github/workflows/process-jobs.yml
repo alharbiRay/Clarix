@@ -1,0 +1,34 @@
+# Sweeps Clarix's durable background jobs (retries after Gemini quota errors,
+# work an inline run didn't finish). Vercel Hobby crons run at most daily, so
+# this free GitHub Actions schedule provides the frequent sweep.
+#
+# Setup (repo → Settings → Secrets and variables → Actions):
+#   variable APP_URL      e.g. https://clarix.example.com
+#   secret   CRON_SECRET  same value as the CRON_SECRET env var in Vercel
+# Until both are set the job exits successfully without doing anything.
+name: Process background jobs
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Call the job runner
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL or CRON_SECRET not configured; skipping."
+            exit 0
+          fi
+          curl --fail-with-body --silent --show-error --max-time 90 \
+            -X POST -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/jobs/process"
