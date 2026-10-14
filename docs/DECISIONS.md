@@ -210,3 +210,33 @@ token color was invalid (for example, the primary Button rendered transparent wi
 black text). Colors now map to `var(--x)`. The Geist font loaded in `layout.tsx` was never
 applied either (`font-sans` wasn't mapped and `body` forced Arial); that's fixed too.
 Both were verified visually.
+
+## D-023: Code review of Phase 2, and what changed as a result
+The review returned "ready with fixes". Fixed, test-first:
+- **Demo identity hardening.** `profiles.email` is no longer user-editable (it was the
+  demo lookup key, so any user could squat it and break or hijack the demo). The
+  demo profile is found by email *and* `is_demo`, the minted token's auth user must
+  equal that profile, and the seed refuses any existing non-demo profile with the
+  demo email instead of adopting it.
+- **Sign-out is `scope: "local"`.** The default global sign-out from one demo visitor
+  revoked every visitor's refresh token. It's local for all users now: signing out
+  ends only this browser's session.
+- **Concurrent "Try the demo" clicks** retry up to three times, because GoTrue keeps
+  one magic-link token per user.
+- **Tailwind opacity modifiers** (`bg-primary/90`, `ring-ring/50`, …) emitted no CSS
+  on bare `var()` colors. Theme colors are now
+  `color-mix(in oklch, var(--x) calc(<alpha-value> * 100%), transparent)`, verified
+  by compiling a probe through the project config.
+- The supplier quote page shows a "demo RFQ" card for demo RFQs and no longer
+  writes "viewed" into shared data.
+
+Accepted for now, not fixed:
+- The demo JWT reaches the browser, so a visitor could call `auth.updateUser`
+  (password, metadata) or enroll MFA on the shared account. That's griefing, not
+  data access: RLS still blocks every table, and the next seed run refreshes the
+  data. Per-visitor ephemeral demo users would remove this but add account churn
+  and cleanup. Revisit if abused. Production should keep "Secure email change"
+  enabled in Supabase Auth (a manual check).
+- Re-seeding upserts and never deletes. If a future generator drops or re-ids rows,
+  delete the demo account's rows that are no longer in the dataset at that point.
+- Rate limiting on `startDemoSession` is handled by the Phase 11 rate-limit work.

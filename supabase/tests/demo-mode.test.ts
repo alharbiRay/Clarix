@@ -103,6 +103,12 @@ describe("demo mode (migration 0008)", () => {
     expect(rows).toEqual([{ title: "Renamed" }]);
   });
 
+  it("does not let a buyer change their profile email (it would impersonate the demo lookup)", async () => {
+    await asUser(db, buyer, () => db.query(`update profiles set email = 'demo@clarix.example' where id = $1`, [buyer])).catch(() => undefined);
+    const { rows } = await db.query<{ email: string }>(`select email from profiles where id = $1`, [buyer]);
+    expect(rows[0].email).toBe("real@buyer.example");
+  });
+
   it("does not let a real buyer flip themselves (or anyone) into or out of demo mode", async () => {
     await asUser(db, buyer, () => db.query(`update profiles set is_demo = true where id = $1`, [buyer])).catch(() => undefined);
     const { rows } = await db.query<{ is_demo: boolean }>(`select is_demo from profiles where id = $1`, [buyer]);

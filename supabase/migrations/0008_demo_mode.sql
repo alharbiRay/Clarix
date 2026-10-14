@@ -60,6 +60,8 @@ create policy "demo read-only: pdf upload" on storage.objects
   with check (not public.is_demo_account());
 
 -- Buyers may only change these profile columns themselves. is_demo (and the
--- role column added later) are managed by the service role.
+-- role column added later) are managed by the service role. email is not
+-- self-editable either: it mirrors auth.users and is how the demo account is
+-- located, so letting a user overwrite it would let them impersonate it.
 revoke update on public.profiles from anon, authenticated;
-grant update (email, full_name, company, auto_approval_enabled) on public.profiles to authenticated;
+grant update (full_name, company, auto_approval_enabled) on public.profiles to authenticated;

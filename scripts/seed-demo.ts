@@ -38,23 +38,16 @@ function summarize(data: ReturnType<typeof generateDemoDataset>) {
 
 /** Finds or creates the demo auth user. Refuses to take over a real account. */
 async function ensureDemoUser(admin: SupabaseClient, email: string): Promise<string> {
-  const { data: profile, error } = await admin
-    .from("profiles")
-    .select("id, is_demo")
-    .eq("email", email)
-    .maybeSingle();
+  const { data: profiles, error } = await admin.from("profiles").select("id, is_demo").eq("email", email);
+  // Prefer the flagged demo profile; otherwise any profile with this email blocks seeding.
+  const profile = (profiles ?? []).find((p) => p.is_demo) ?? (profiles ?? [])[0] ?? null;
   if (error) throw new Error(`profile lookup failed: ${error.message}`);
 
   if (profile) {
+    // Only ever reuse an account that is already the flagged demo account.
+    // Anything else with this email is a real (or squatting) account.
     if (!profile.is_demo) {
-      const { count } = await admin
-        .from("rfqs")
-        .select("id", { count: "exact", head: true })
-        .eq("buyer_id", profile.id)
-        .eq("is_demo", false);
-      if ((count ?? 0) > 0) {
-        throw new Error(`${email} belongs to a real account with RFQs — refusing to turn it into the demo account.`);
-      }
+      throw new Error(`${email} belongs to an existing non-demo account — refusing to turn it into the demo account.`);
     }
     return profile.id as string;
   }

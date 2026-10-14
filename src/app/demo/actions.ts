@@ -16,8 +16,10 @@ export async function startDemoSession() {
     email,
     async generateTokenHash(target) {
       const { data, error } = await admin.auth.admin.generateLink({ type: "magiclink", email: target });
-      if (error || !data.properties?.hashed_token) throw new Error(error?.message ?? "no token returned");
-      return data.properties.hashed_token;
+      if (error || !data.properties?.hashed_token || !data.user) {
+        throw new Error(error?.message ?? "no token returned");
+      }
+      return { tokenHash: data.properties.hashed_token, userId: data.user.id };
     },
     async verifyTokenHash(tokenHash) {
       const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "magiclink" });
@@ -32,6 +34,9 @@ export async function startDemoSession() {
 /** Leaves the demo and lands on the sign-up tab. */
 export async function exitDemoToSignup() {
   const supabase = createClient();
-  await supabase.auth.signOut();
+  // "local": end only THIS visitor's session. The default (global) would
+  // revoke every refresh token of the shared demo account and log out every
+  // other visitor at their next refresh.
+  await supabase.auth.signOut({ scope: "local" });
   redirect("/login?tab=signup");
 }

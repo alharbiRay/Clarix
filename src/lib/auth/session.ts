@@ -28,8 +28,3 @@ export async function requireWritableUser(
   return { user };
 }
 
-/** Read-only lookup for layouts/pages: is the signed-in buyer the demo account? */
-export async function isDemoUser(supabase: SupabaseClient, userId: string): Promise<boolean> {
-  const { data } = await supabase.from("profiles").select("is_demo").eq("id", userId).maybeSingle();
-  return Boolean(data?.is_demo);
-}
