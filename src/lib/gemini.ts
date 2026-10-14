@@ -8,6 +8,14 @@ import {
   rfqAutofillSchema,
   type RfqAutofillResult,
 } from "@/lib/validations/rfq";
+import {
+  MAX_IN_REQUEST_RETRY_DELAY_MS,
+  isGeminiQuotaError,
+  isRetryableGeminiError,
+  parseGeminiError,
+} from "@/lib/gemini-errors";
+
+export { isGeminiQuotaError } from "@/lib/gemini-errors";
 
 const MODEL = "gemini-2.5-flash";
 
@@ -19,76 +27,6 @@ function getClient() {
 }
 
 const MAX_RETRIES = 2;
-const MAX_RETRY_DELAY_MS = 10_000;
-
-interface GeminiErrorInfo {
-  status?: string;
-  message: string;
-  retryDelaySeconds?: number;
-}
-
-/** Best-effort parse of the Gemini SDK's error — its .message is the raw JSON API error body. */
-function parseGeminiError(e: unknown): GeminiErrorInfo {
-  const raw = e instanceof Error ? e.message : String(e);
-  try {
-    const parsed = JSON.parse(raw);
-    const err = parsed?.error;
-    if (!err || typeof err !== "object") return { message: raw };
-    const details = Array.isArray(err.details) ? err.details : [];
-    const retryInfo = details.find(
-      (d: unknown) =>
-        typeof d === "object" &&
-        d !== null &&
-        typeof (d as { "@type"?: unknown })["@type"] === "string" &&
-        (d as { "@type": string })["@type"].includes("RetryInfo")
-    ) as { retryDelay?: string } | undefined;
-    const match = retryInfo?.retryDelay ? /^([\d.]+)s$/.exec(retryInfo.retryDelay) : null;
-    return {
-      status: typeof err.status === "string" ? err.status : undefined,
-      message: typeof err.message === "string" ? err.message : raw,
-      retryDelaySeconds: match ? parseFloat(match[1]) : undefined,
-    };
-  } catch {
-    return { message: raw };
-  }
-}
-
-/**
- * True if a Gemini call failed because the free-tier quota (20 requests/day,
- * 5/min) is exhausted or the account's prepayment balance is depleted — a
- * 429 that retrying can't fix. We're on the free tier, so this is expected
- * to happen under real load; callers use this to log loudly and surface the
- * failure to the buyer instead of letting it disappear into a generic error.
- */
-export function isGeminiQuotaError(e: unknown): boolean {
-  const info = parseGeminiError(e);
-  return (
-    info.status === "RESOURCE_EXHAUSTED" &&
-    (/prepayment credits/i.test(info.message) || /PerDay/i.test(info.message))
-  );
-}
-
-/**
- * Only retries errors actually likely to succeed on a second try within a
- * few seconds: 503 (transient overload) or a 429 whose own RetryInfo
- * suggests a short wait. A 429 backed by an exhausted daily quota or a
- * depleted prepayment balance won't recover by retrying — failing fast
- * there saves the extraction's ~60s function budget instead of burning it
- * on a retry that's certain to fail the same way.
- */
-function isRetryableGeminiError(info: GeminiErrorInfo): boolean {
-  if (info.status === "UNAVAILABLE") return true;
-  if (info.status === "RESOURCE_EXHAUSTED") {
-    if (/prepayment credits/i.test(info.message)) return false;
-    if (/PerDay/i.test(info.message)) return false;
-    return (
-      typeof info.retryDelaySeconds === "number" &&
-      info.retryDelaySeconds <= MAX_RETRY_DELAY_MS / 1000
-    );
-  }
-  return false;
-}
-
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -121,7 +59,7 @@ async function generateContentWithRetry(
         }
         throw e;
       }
-      const delayMs = Math.min((info.retryDelaySeconds ?? 2) * 1000, MAX_RETRY_DELAY_MS);
+      const delayMs = Math.min((info.retryDelaySeconds ?? 2) * 1000, MAX_IN_REQUEST_RETRY_DELAY_MS);
       console.warn(
         `[gemini] ${info.status ?? "error"} on attempt ${attempt + 1}/${MAX_RETRIES + 1}, retrying in ${delayMs}ms:`,
         info.message

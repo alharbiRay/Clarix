@@ -1,0 +1,92 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { runAutoRecommendation } from "@/lib/auto-recommendation";
+import { processInboundEmailQuote } from "@/lib/inbound-email";
+import {
+  processJobs,
+  type Job,
+  type JobHandler,
+  type JobHooks,
+  type ProcessSummary,
+} from "@/lib/jobs/processor";
+import { supabaseJobStore } from "@/lib/jobs/supabase-store";
+import { JOB_TYPES, autoRecommendationJob, enqueueJob } from "@/lib/jobs/enqueue";
+
+export { JOB_TYPES };
+
+async function rfqTitle(supabase: SupabaseClient, rfqId: string | null) {
+  if (!rfqId) return "your RFQ";
+  const { data } = await supabase.from("rfqs").select("title").eq("id", rfqId).maybeSingle();
+  return (data?.title as string | undefined) ?? "your RFQ";
+}
+
+async function notify(supabase: SupabaseClient, job: Job, type: string, message: string) {
+  if (!job.buyer_id || !job.rfq_id) return;
+  const { error } = await supabase
+    .from("notifications")
+    .insert({ buyer_id: job.buyer_id, rfq_id: job.rfq_id, type, message });
+  if (error) throw new Error(`notification insert failed: ${error.message}`);
+}
+
+/**
+ * Buyer-facing side of job failures, so nothing fails silently:
+ * - first Gemini quota/rate-limit hit → "delayed, will retry automatically"
+ *   (once per job — later retries stay quiet);
+ * - a job that gives up → what to do by hand.
+ */
+export function buildJobHooks(supabase: SupabaseClient): JobHooks {
+  return {
+    async onRetry(job, _error, kind) {
+      if (kind !== "quota" || job.attempts !== 1 || !job.buyer_id) return;
+      const title = await rfqTitle(supabase, job.rfq_id);
+      const what =
+        job.type === JOB_TYPES.inboundEmailQuote
+          ? `Reading a supplier's emailed quote for ${title}`
+          : `The AI recommendation for ${title}`;
+      await notify(
+        supabase,
+        job,
+        "ai_delayed",
+        `${what} is delayed — the Gemini API quota/rate limit was hit. Clarix will retry automatically.`
+      );
+    },
+    async onGiveUp(job) {
+      if (!job.buyer_id) return;
+      const title = await rfqTitle(supabase, job.rfq_id);
+      const message =
+        job.type === JOB_TYPES.inboundEmailQuote
+          ? `A supplier's emailed quote for ${title} couldn't be processed automatically. Ask them to resend it, or enter it manually.`
+          : `The AI recommendation for ${title} couldn't be generated automatically. Generate it manually from the compare page.`;
+      await notify(supabase, job, "review_needed", message);
+    },
+  };
+}
+
+export function buildJobHandlers(supabase: SupabaseClient): Record<string, JobHandler> {
+  return {
+    [JOB_TYPES.autoRecommendation]: async (job) => {
+      if (!job.rfq_id) throw new Error("auto_recommendation job has no rfq_id");
+      return runAutoRecommendation(job.rfq_id);
+    },
+    [JOB_TYPES.inboundEmailQuote]: async (job) => {
+      const result = await processInboundEmailQuote(supabase, job);
+      if (result.outcome === "created" && job.rfq_id && job.buyer_id) {
+        // Already in the background: chain the recommendation job directly.
+        const next = await enqueueJob(supabase, autoRecommendationJob(job.rfq_id, job.buyer_id));
+        await runJobs({ jobId: next, limit: 1 });
+      }
+      return result;
+    },
+  };
+}
+
+/** Claims and runs due jobs (or one specific job). Safe to call concurrently. */
+export function runJobs(opts: { limit?: number; jobId?: string } = {}): Promise<ProcessSummary> {
+  const supabase = createAdminClient();
+  return processJobs({
+    store: supabaseJobStore(supabase),
+    handlers: buildJobHandlers(supabase),
+    hooks: buildJobHooks(supabase),
+    ...opts,
+  });
+}

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { extractQuoteFromPdf, isGeminiQuotaError } from "@/lib/gemini";
+import { extractQuoteFromPdf } from "@/lib/gemini";
+import { isGeminiRateLimited } from "@/lib/gemini-errors";
 import { ensureSupplierProfile } from "@/lib/supplier-profile";
 import type { RfqItem } from "@/lib/types";
 
@@ -30,7 +31,17 @@ export interface QuoteIntakeInput {
  * is where the PDF bytes and the supabase client (RLS-scoped vs.
  * service-role) come from.
  */
-export async function createQuoteFromPdf(input: QuoteIntakeInput) {
+export type QuoteIntakeResult =
+  | { quoteId: string; error?: undefined }
+  | {
+      error: string;
+      /** Gemini rejected the call with a 429 (quota or rate limit) — retrying later can succeed. */
+      quotaExceeded?: boolean;
+      /** The original error, so the job runner can classify it. */
+      cause?: unknown;
+    };
+
+export async function createQuoteFromPdf(input: QuoteIntakeInput): Promise<QuoteIntakeResult> {
   const { supabase, rfqId, buyerId, supplier, currency, items, pdfBuffer, source, sourceEmailId } =
     input;
 
@@ -70,7 +81,8 @@ export async function createQuoteFromPdf(input: QuoteIntakeInput) {
   } catch (e) {
     return {
       error: `Extraction failed: ${e instanceof Error ? e.message : "unknown error"}`,
-      quotaExceeded: isGeminiQuotaError(e),
+      quotaExceeded: isGeminiRateLimited(e),
+      cause: e,
     };
   }
 
