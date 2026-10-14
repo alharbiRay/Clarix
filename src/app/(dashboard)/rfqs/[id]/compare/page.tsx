@@ -11,6 +11,9 @@ import {
   Trophy,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { loadMetricsRfqs, rfqIdsForSuppliers } from "@/lib/metrics/load";
+import { scoreSuppliers } from "@/lib/scorecard";
+import { ScoreBadge } from "@/components/suppliers/score-badge";
 import { FadeIn } from "@/components/motion";
 import {
   GenerateRecommendationButton,
@@ -140,6 +143,21 @@ export default async function ComparePage({
   ];
 
   const confirmedColumns = columns.filter((c) => !c.pending);
+
+  // Score badges: load only the RFQs these suppliers took part in. Decorative —
+  // if it fails, the comparison still renders, just without badges.
+  const scoreRefs = rfq.rfq_suppliers
+    .filter((s) => s.supplier_id)
+    .map((s) => ({ id: s.supplier_id as string, email: s.email }));
+  const historyRfqs = scoreRefs.length
+    ? await rfqIdsForSuppliers(supabase, scoreRefs)
+        .then((ids) => loadMetricsRfqs(supabase, rfq.buyer_id, { rfqIds: ids }))
+        .catch((e) => {
+          console.error(JSON.stringify({ event: "compare.scores_unavailable", error: String(e) }));
+          return [];
+        })
+    : [];
+  const supplierScores = scoreSuppliers(historyRfqs, scoreRefs);
 
   // For the "choose different supplier" picker on the approve button —
   // every submitted/confirmed quote is a valid award target, not just the
@@ -478,8 +496,16 @@ export default async function ComparePage({
                           }`}
                         >
                           <div className="flex flex-col items-end gap-0.5">
-                            <span className="max-w-[160px] truncate">
-                              {col.label}
+                            <span className="flex items-center gap-1.5">
+                              <span className="max-w-[140px] truncate">
+                                <bdi>{col.label}</bdi>
+                              </span>
+                              {col.supplier.supplier_id && (
+                                <ScoreBadge
+                                  size="sm"
+                                  score={supplierScores.get(col.supplier.supplier_id)?.card?.score ?? null}
+                                />
+                              )}
                             </span>
                             <span className="inline-flex items-center gap-1 font-normal text-slate-400">
                               {col.quote.source === "pdf" && <FileText size={11} />}

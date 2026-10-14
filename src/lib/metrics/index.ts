@@ -14,11 +14,16 @@ export interface MetricsRfq {
   title: string;
   currency: string;
   created_at: string;
+  /** RFQ status and deadline — the scorecard ignores invitations still open. */
+  status?: "draft" | "sent" | "closed" | "awarded";
+  deadline?: string | null;
   items: { id: string; name: string; quantity: number }[];
   invites: {
     id: string;
     label: string;
-    /** Persistent supplier profile, when linked. */
+    /** Invited email — matches invites not yet linked to a supplier profile. */
+    email?: string;
+    /** Persistent supplier profile, when linked (set once the supplier quotes). */
     supplier_id: string | null;
     status: InviteStatus;
     invited_at: string | null;
@@ -29,6 +34,9 @@ export interface MetricsRfq {
     status: QuoteStatusValue;
     submitted_at: string;
     lines: { item_id: string; total: number | null }[];
+    /** Promised delivery (days) and warranty text — used by the supplier scorecard. */
+    delivery_days?: number | null;
+    warranty?: string | null;
   }[];
   award: {
     decision: AwardDecision;
@@ -60,10 +68,16 @@ export function monthKey(iso: string | Date): string {
 }
 
 /** The `back`-th month before the one containing `now` (0 = this month). */
-function monthBefore(now: Date, back: number): string {
+export function monthBefore(now: Date, back: number): string {
   const shifted = new Date(now.getTime() + RIYADH_OFFSET_MS);
   const d = new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() - back, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Last instant of a "YYYY-MM" month in Saudi time. */
+export function monthEnd(key: string): Date {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(Date.UTC(y, m, 1) - RIYADH_OFFSET_MS - 1);
 }
 
 /** Total of a quote, or null if any RFQ line is unpriced. */

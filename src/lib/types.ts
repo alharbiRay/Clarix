@@ -129,13 +129,3 @@ export interface Supplier {
   updated_at: string;
 }
 
-/** Computed from RFQ/quote/award history — see src/lib/supplier-stats.ts. */
-export interface SupplierStats {
-  rfqsParticipated: number;
-  timesAwarded: number;
-  winRate: number | null;
-  avgResponseDays: number | null;
-  priceCompetitivenessPct: number | null;
-  rating: number | null;
-  lastActive: string | null;
-}

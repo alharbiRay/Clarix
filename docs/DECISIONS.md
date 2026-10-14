@@ -286,3 +286,49 @@ the real metrics module.
   unused indexes were dropped from the not-yet-applied 0009.
 - Deferred: precomputing totals in a SQL view/RPC. The paged loader is fine for SMB
   volumes; revisit past roughly 5,000 RFQs per buyer.
+
+---
+
+# Phase 4: Supplier scorecard
+
+## D-029: The scorecard replaces the star rating
+The old 1–5 star rating counted only *auto-approved* awards as wins, so manually
+approved purchase orders made a supplier look worse. The new score uses every
+purchase order actually sent and spells out every weight (`docs/METRICS.md`).
+
+## D-030: The weights are a stated opinion, not tuned to a story
+Price 30, responsiveness 20, delivery 20, warranty 15, win rate 15. In the demo, a
+supplier ~22% above the lowest price but always offering a warranty ends up *below* a
+cheap supplier that rarely offers one. That's the documented trade-off, not a bug, so the
+test asserts robust properties (the fast-and-cheap supplier ranks first; warranty and
+slowness weaknesses get called out) instead of a ranking that suits a hunch. Phase 7's
+approval policy is where a buyer encodes "warranty is mandatory".
+
+## D-031: "Delivery reliability" means promised vs typical
+We have no actual delivery dates, so reliability is measured honestly as the promised
+lead time against the median promise on the same RFQ. The UI calls it "Delivery vs typical".
+
+## D-032: There's no score until a supplier has 2 quotes
+Below that a score is noise. The badge says "New" and the detail page explains why.
+
+## D-033: Tooling: target ES2017 and a line-ending-safe patch helper
+`tsconfig.json` gets `"target": "ES2017"` (type-checking only; Next compiles with SWC),
+which ends the recurring Map/Set iteration errors. Scripted edits normalize CRLF first,
+because this checkout uses `core.autocrlf=true`.
+
+## D-034: Code review of Phase 4, and what changed as a result
+"Ready with fixes". The review caught two metrics that would mislead on real data, which
+the demo data couldn't reveal because it links every invitation:
+- Invitations are linked to a supplier profile only once the supplier quotes, so
+  unanswered and declined invitations were invisible and the response rate was about 100%. Now
+  they're matched by email too (tested with unlinked invites).
+- Open RFQs counted as losses and non-responses. The win rate now uses decided RFQs only,
+  and unanswered invitations on still-open RFQs are excluded.
+- The compare page and the supplier detail page load only the RFQs these suppliers took part in
+  (not the buyer's whole history), and the compare page's badges fail soft.
+- Accessibility: the badge's accessible name is real sr-only text (`aria-label` on a span
+  isn't announced), the ring isn't read twice, the meter role is only used when there's data,
+  and low-contrast `slate-400` text moved to `slate-500`.
+- Also: instant comparisons in the trend (no ISO string comparisons), breakdown points
+  that add up exactly, "last active" is the supplier's own activity again, an empty `?min=` is
+  "Any", and METRICS.md gaps are filled.
