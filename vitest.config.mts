@@ -15,5 +15,8 @@ export default defineConfig({
     // fails loudly instead of hitting production.
     restoreMocks: true,
     testTimeout: 20_000,
+    // Each PGlite suite boots Postgres (WASM) and applies every migration in
+    // beforeAll; several run in parallel, which can exceed the 10s default.
+    hookTimeout: 60_000,
   },
 });

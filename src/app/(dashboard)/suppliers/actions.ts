@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireWritableUser } from "@/lib/auth/session";
 import { sendRfqInvitationEmail } from "@/lib/email";
 import { inboundAddressForToken } from "@/lib/resend";
 import type { RfqItem } from "@/lib/types";
@@ -22,10 +23,9 @@ export async function createSupplier(values: {
   }
 
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
+  const { user } = auth;
 
   const { data: existing } = await supabase
     .from("suppliers")
@@ -52,10 +52,8 @@ export async function createSupplier(values: {
 /** Persists the buyer's private notes on a supplier's detail page. */
 export async function updateSupplierNotes(supplierId: string, notes: string) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
 
   const { error } = await supabase
     .from("suppliers")
@@ -75,10 +73,8 @@ export async function updateSupplierNotes(supplierId: string, notes: string) {
  */
 export async function inviteSupplierToRfq(rfqId: string, supplierId: string) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
 
   const { data: supplier } = await supabase
     .from("suppliers")

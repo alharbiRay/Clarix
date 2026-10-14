@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireWritableUser } from "@/lib/auth/session";
 import {
   generateQuoteRecommendation,
   recommendationPreferencesSchema,
@@ -46,10 +47,9 @@ export async function uploadQuotePdf(formData: FormData) {
   }
 
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
+  const { user } = auth;
 
   // RLS scopes these to the buyer's own RFQs — a miss means not found or not owned
   const { data: rfq } = await supabase
@@ -105,10 +105,9 @@ export async function addManualQuote(
   }
 
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
+  const { user } = auth;
 
   const { data: supplier } = await supabase
     .from("rfq_suppliers")
@@ -211,10 +210,9 @@ export async function confirmQuote(quoteId: string, values: QuoteFormValues) {
   }
 
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
+  const { user } = auth;
 
   const { data: quote } = await supabase
     .from("quotes")
@@ -293,10 +291,8 @@ export async function confirmQuote(quoteId: string, values: QuoteFormValues) {
  */
 export async function deleteQuote(quoteId: string) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
 
   const { data: quote } = await supabase
     .from("quotes")
@@ -349,10 +345,8 @@ export async function deleteQuote(quoteId: string) {
 /** Buyer rejects an extracted PDF quote (bad scan, wrong document, etc.). */
 export async function rejectQuote(quoteId: string) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
 
   const { data: quote } = await supabase
     .from("quotes")
@@ -395,10 +389,8 @@ export async function generateRecommendation(
   }
 
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
 
   const { error: prefsError } = await supabase.from("rfq_preferences").upsert({
     rfq_id: rfqId,

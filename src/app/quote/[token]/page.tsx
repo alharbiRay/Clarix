@@ -81,6 +81,20 @@ export default async function SupplierQuotePage({
   const rfq = supplier.rfqs;
   const items = [...rfq.rfq_items].sort((a, b) => a.position - b.position);
 
+  // Shared, read-only demo workspace: don't record a "view" or offer a form
+  // that would only be refused on submit.
+  if ((rfq as Rfq & { is_demo?: boolean }).is_demo) {
+    return (
+      <PublicShell>
+        <StatusCard
+          icon={FileQuestion}
+          title="This is a demo RFQ"
+          body={`“${rfq.title}” belongs to the Clarix demo workspace. In a real workspace, the invited supplier fills in their prices here — no account needed.`}
+        />
+      </PublicShell>
+    );
+  }
+
   if (supplier.quotes.length > 0) {
     return (
       <PublicShell>

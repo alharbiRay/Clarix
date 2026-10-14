@@ -41,7 +41,9 @@ export function AppSidebar({
 
   async function signOut() {
     const supabase = createClient();
-    await supabase.auth.signOut();
+    // Sign out this browser only — never other devices (and, for the shared
+    // demo account, never every other visitor).
+    await supabase.auth.signOut({ scope: "local" });
     router.push("/login");
     router.refresh();
   }

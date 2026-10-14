@@ -7,59 +7,67 @@ const config: Config = {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  // Theme colors are full oklch() values in CSS variables (globals.css).
+  // color-mix with <alpha-value> lets Tailwind opacity modifiers (bg-primary/90,
+  // ring-ring/50) work on them; a bare var() would silently drop those classes.
   theme: {
   	extend: {
+  		fontFamily: {
+  			// The CSS variables are set by next/font in src/app/layout.tsx.
+  			sans: ['var(--font-geist-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+  			mono: ['var(--font-geist-mono)', 'ui-monospace', 'monospace'],
+  		},
   		colors: {
-  			background: 'hsl(var(--background))',
-  			foreground: 'hsl(var(--foreground))',
+  			background: 'color-mix(in oklch, var(--background) calc(<alpha-value> * 100%), transparent)',
+  			foreground: 'color-mix(in oklch, var(--foreground) calc(<alpha-value> * 100%), transparent)',
   			card: {
-  				DEFAULT: 'hsl(var(--card))',
-  				foreground: 'hsl(var(--card-foreground))'
+  				DEFAULT: 'color-mix(in oklch, var(--card) calc(<alpha-value> * 100%), transparent)',
+  				foreground: 'color-mix(in oklch, var(--card-foreground) calc(<alpha-value> * 100%), transparent)'
   			},
   			popover: {
-  				DEFAULT: 'hsl(var(--popover))',
-  				foreground: 'hsl(var(--popover-foreground))'
+  				DEFAULT: 'color-mix(in oklch, var(--popover) calc(<alpha-value> * 100%), transparent)',
+  				foreground: 'color-mix(in oklch, var(--popover-foreground) calc(<alpha-value> * 100%), transparent)'
   			},
   			primary: {
-  				DEFAULT: 'hsl(var(--primary))',
-  				foreground: 'hsl(var(--primary-foreground))'
+  				DEFAULT: 'color-mix(in oklch, var(--primary) calc(<alpha-value> * 100%), transparent)',
+  				foreground: 'color-mix(in oklch, var(--primary-foreground) calc(<alpha-value> * 100%), transparent)'
   			},
   			secondary: {
-  				DEFAULT: 'hsl(var(--secondary))',
-  				foreground: 'hsl(var(--secondary-foreground))'
+  				DEFAULT: 'color-mix(in oklch, var(--secondary) calc(<alpha-value> * 100%), transparent)',
+  				foreground: 'color-mix(in oklch, var(--secondary-foreground) calc(<alpha-value> * 100%), transparent)'
   			},
   			muted: {
-  				DEFAULT: 'hsl(var(--muted))',
-  				foreground: 'hsl(var(--muted-foreground))'
+  				DEFAULT: 'color-mix(in oklch, var(--muted) calc(<alpha-value> * 100%), transparent)',
+  				foreground: 'color-mix(in oklch, var(--muted-foreground) calc(<alpha-value> * 100%), transparent)'
   			},
   			accent: {
-  				DEFAULT: 'hsl(var(--accent))',
-  				foreground: 'hsl(var(--accent-foreground))'
+  				DEFAULT: 'color-mix(in oklch, var(--accent) calc(<alpha-value> * 100%), transparent)',
+  				foreground: 'color-mix(in oklch, var(--accent-foreground) calc(<alpha-value> * 100%), transparent)'
   			},
-  			destructive: 'hsl(var(--destructive))',
-  			border: 'hsl(var(--border))',
-  			input: 'hsl(var(--input))',
-  			ring: 'hsl(var(--ring))',
+  			destructive: 'color-mix(in oklch, var(--destructive) calc(<alpha-value> * 100%), transparent)',
+  			border: 'color-mix(in oklch, var(--border) calc(<alpha-value> * 100%), transparent)',
+  			input: 'color-mix(in oklch, var(--input) calc(<alpha-value> * 100%), transparent)',
+  			ring: 'color-mix(in oklch, var(--ring) calc(<alpha-value> * 100%), transparent)',
   			chart: {
-  				'1': 'hsl(var(--chart-1))',
-  				'2': 'hsl(var(--chart-2))',
-  				'3': 'hsl(var(--chart-3))',
-  				'4': 'hsl(var(--chart-4))',
-  				'5': 'hsl(var(--chart-5))'
+  				'1': 'color-mix(in oklch, var(--chart-1) calc(<alpha-value> * 100%), transparent)',
+  				'2': 'color-mix(in oklch, var(--chart-2) calc(<alpha-value> * 100%), transparent)',
+  				'3': 'color-mix(in oklch, var(--chart-3) calc(<alpha-value> * 100%), transparent)',
+  				'4': 'color-mix(in oklch, var(--chart-4) calc(<alpha-value> * 100%), transparent)',
+  				'5': 'color-mix(in oklch, var(--chart-5) calc(<alpha-value> * 100%), transparent)'
   			},
   			sidebar: {
-  				DEFAULT: 'hsl(var(--sidebar))',
-  				foreground: 'hsl(var(--sidebar-foreground))',
-  				primary: 'hsl(var(--sidebar-primary))',
-  				'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
-  				accent: 'hsl(var(--sidebar-accent))',
-  				'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
-  				border: 'hsl(var(--sidebar-border))',
-  				ring: 'hsl(var(--sidebar-ring))'
+  				DEFAULT: 'color-mix(in oklch, var(--sidebar) calc(<alpha-value> * 100%), transparent)',
+  				foreground: 'color-mix(in oklch, var(--sidebar-foreground) calc(<alpha-value> * 100%), transparent)',
+  				primary: 'color-mix(in oklch, var(--sidebar-primary) calc(<alpha-value> * 100%), transparent)',
+  				'primary-foreground': 'color-mix(in oklch, var(--sidebar-primary-foreground) calc(<alpha-value> * 100%), transparent)',
+  				accent: 'color-mix(in oklch, var(--sidebar-accent) calc(<alpha-value> * 100%), transparent)',
+  				'accent-foreground': 'color-mix(in oklch, var(--sidebar-accent-foreground) calc(<alpha-value> * 100%), transparent)',
+  				border: 'color-mix(in oklch, var(--sidebar-border) calc(<alpha-value> * 100%), transparent)',
+  				ring: 'color-mix(in oklch, var(--sidebar-ring) calc(<alpha-value> * 100%), transparent)'
   			}
   		},
   		borderRadius: {
-  			lg: 'var(--radius)',
+  			lg: 'color-mix(in oklch, var(--radius) calc(<alpha-value> * 100%), transparent)',
   			md: 'calc(var(--radius) - 2px)',
   			sm: 'calc(var(--radius) - 4px)'
   		}
