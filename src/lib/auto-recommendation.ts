@@ -13,6 +13,7 @@ import {
 } from "@/lib/recommendation-input";
 import { evaluateAutoApproval } from "@/lib/auto-approval";
 import { PermanentJobError } from "@/lib/jobs/processor";
+import { recordAuditEvent } from "@/lib/audit";
 
 const TAG = "[auto-reco]";
 
@@ -132,6 +133,19 @@ export async function runAutoRecommendation(
     return { outcome: "resumed" };
   }
   if (insertError) throw new Error(`failed to insert recommendation: ${insertError.message}`);
+
+  const pick = result.content.ranking.find((r) => r.rank === 1)?.supplier ?? null;
+  await recordAuditEvent(
+    {
+      buyerId: fullRfq.buyer_id,
+      rfqId,
+      actor: { type: "system" },
+      type: "recommendation_generated",
+      summary: `AI recommended ${pick ?? "a supplier"}`,
+      payload: { mode: "auto", model: result.model, recommended: pick, quotes: input.quotes.length },
+    },
+    supabase
+  );
 
   await deps.evaluate(supabase, fullRfq, result.content);
   return { outcome: "generated", model: result.model };

@@ -15,7 +15,7 @@ const job = (overrides: Partial<Job> = {}): Job => ({
 });
 
 function db() {
-  return createFakeSupabase({ rfqs: [{ id: "rfq-1", title: "Office chairs" }], notifications: [] });
+  return createFakeSupabase({ rfqs: [{ id: "rfq-1", title: "Office chairs" }], notifications: [], audit_events: [] });
 }
 
 describe("job hooks", () => {
@@ -32,6 +32,9 @@ describe("job hooks", () => {
         message: expect.stringMatching(/Office chairs.*quota.*retry automatically/i),
       }),
     ]);
+    expect(fake.tables.audit_events).toEqual([
+      expect.objectContaining({ event_type: "ai_quota_error", rfq_id: "rfq-1", actor_type: "system" }),
+    ]);
   });
 
   it("stays quiet on transient retries", async () => {
@@ -47,6 +50,7 @@ describe("job hooks", () => {
       type: "action_required",
       message: expect.stringMatching(/Office chairs.*generate it manually/i),
     });
+    expect(fake.tables.audit_events).toEqual([expect.objectContaining({ event_type: "job_failed", payload: expect.objectContaining({ jobType: "auto_recommendation" }) })]);
   });
 
   it("explains a failed emailed quote and asks for a resend or manual entry", async () => {

@@ -47,6 +47,7 @@ function seed(extra: Record<string, Record<string, unknown>[]> = {}) {
       rfqs: [{ id: "rfq-1", status: "sent" }],
       rfq_awards: [],
       notifications: [],
+      audit_events: [],
       ...extra,
     },
     { rfq_awards: { unique: [["rfq_id"]] } }
@@ -81,6 +82,33 @@ describe("evaluateAutoApproval", () => {
     expect(db.tables.notifications).toHaveLength(1);
   });
 
+  it("records why it auto-approved, and the PO, in the audit trail", async () => {
+    const db = seed();
+    await evaluateAutoApproval(asClient(db), rfq, content);
+    expect(db.tables.audit_events.map((e) => e.event_type)).toEqual(["auto_approval_decided", "po_sent"]);
+    expect(db.tables.audit_events[0]).toMatchObject({
+      buyer_id: "buyer-1",
+      rfq_id: "rfq-1",
+      actor_type: "system",
+      payload: expect.objectContaining({
+        decision: "auto_approved",
+        rule: "cheapest_meets_requirements",
+        supplier: "Supplier s1",
+        explanation: ["cheapest complete quote", "delivery 7 days", "12 months warranty"],
+      }),
+    });
+    expect(db.tables.audit_events[1].payload).toMatchObject({ supplier: "Supplier s1", total: 100, automatic: true });
+  });
+
+  it("records the reason when it holds an RFQ for review", async () => {
+    const db = seed();
+    const pricier: RecommendationContent = { ...content, ranking: [{ supplier: "Supplier s2", rank: 1, strengths: [], weaknesses: [] }] };
+    await evaluateAutoApproval(asClient(db), rfq, pricier);
+    expect(db.tables.audit_events).toEqual([
+      expect.objectContaining({ event_type: "auto_approval_decided", payload: expect.objectContaining({ decision: "differs_from_cheapest", rule: "recommended_differs_from_cheapest" }) }),
+    ]);
+  });
+
   it("throws (so the job retries) instead of recording a decision when the buyer profile can't be loaded", async () => {
     const db = seed({ profiles: [] });
     await expect(evaluateAutoApproval(asClient(db), rfq, content)).rejects.toThrow(/profile/);
@@ -102,6 +130,7 @@ describe("evaluateAutoApproval", () => {
     expect(email.sendAutoApprovalEmail).not.toHaveBeenCalled();
     expect(db.tables.notifications).toHaveLength(0);
     expect(db.tables.rfqs[0].status).toBe("sent");
+    expect(db.tables.audit_events).toHaveLength(0);
   });
 
   it("losing the race on the review-needed path sends no buyer email either", async () => {

@@ -24,7 +24,7 @@ function seed(rfq: Record<string, unknown> = {}, quotes: Record<string, unknown>
         email: "s@supplier.example",
         company_name: "Al Noor",
         contact_name: null,
-        rfqs: { id: "rfq-1", status: "sent", deadline: null, buyer_id: "buyer-1", is_demo: false, ...rfq },
+        rfqs: { id: "rfq-1", status: "sent", deadline: null, buyer_id: "buyer-1", is_demo: false, currency: "SAR", ...rfq },
       },
     ],
     rfq_items: [
@@ -65,6 +65,9 @@ describe("submitQuote (supplier form)", () => {
     ]);
     expect(db.tables.rfq_suppliers[0].status).toBe("submitted");
     expect(scheduleAutoRecommendation).toHaveBeenCalledWith("rfq-1", "buyer-1");
+    expect(db.tables.audit_events).toEqual([
+      expect.objectContaining({ event_type: "quote_received", actor_type: "supplier", buyer_id: "buyer-1", rfq_id: "rfq-1", payload: expect.objectContaining({ source: "form", supplier: "Al Noor", total: 125, currency: "SAR" }) }),
+    ]);
   });
 
   it("rejects an unknown token", async () => {

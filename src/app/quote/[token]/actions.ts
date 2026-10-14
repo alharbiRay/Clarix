@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { scheduleAutoRecommendation } from "@/lib/jobs/schedule";
 import { ensureSupplierProfile } from "@/lib/supplier-profile";
 import { quoteSchema, type QuoteFormValues } from "@/lib/validations/quote";
+import { recordAuditEvent } from "@/lib/audit";
 
 /**
  * Supplier submits a quote via their unique token link. No login — the token
@@ -21,7 +22,7 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
   const { data: supplier } = await supabase
     .from("rfq_suppliers")
     .select(
-      "id, rfq_id, status, email, company_name, contact_name, rfqs(id, status, deadline, buyer_id, is_demo)"
+      "id, rfq_id, status, email, company_name, contact_name, rfqs(id, status, deadline, buyer_id, is_demo, currency)"
     )
     .eq("token", token)
     .single();
@@ -34,6 +35,7 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
     deadline: string | null;
     buyer_id: string;
     is_demo?: boolean;
+    currency?: string;
   };
 
   // The demo workspace is shared and read-only — nobody gets to post quotes
@@ -131,6 +133,19 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
 
   // Recorded as a durable job and run in the background — the supplier no
   // longer waits on a Gemini call (or loses it to a timeout).
+  const total = items.reduce((sum, item) => {
+    const qty = Number(validItems.get(item.rfq_item_id)!.quantity);
+    return item.unit_price === null || item.unit_price === undefined ? sum : sum + Math.round(item.unit_price * qty * 100) / 100;
+  }, 0);
+  await recordAuditEvent({
+    buyerId: rfq.buyer_id,
+    rfqId: supplier.rfq_id,
+    actor: { type: "supplier", id: supplier.id },
+    type: "quote_received",
+    summary: `Quote received from ${supplier.company_name || supplier.email} via the supplier form`,
+    payload: { source: "form", supplier: supplier.company_name || supplier.email, quoteId: quote.id, total: Math.round(total * 100) / 100, currency: rfq.currency ?? null },
+  });
+
   await scheduleAutoRecommendation(supplier.rfq_id, rfq.buyer_id);
 
   return { success: true };

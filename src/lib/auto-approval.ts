@@ -9,6 +9,7 @@ import {
 import { formatMoney } from "@/lib/format";
 import type { RfqWithComparisonData } from "@/lib/recommendation-input";
 import type { Quote, QuoteItem, RfqSupplier } from "@/lib/types";
+import { recordAuditEvent } from "@/lib/audit";
 
 const MAX_DELIVERY_DAYS = 14;
 const TAG = "[auto-approval]";
@@ -113,6 +114,17 @@ export async function evaluateAutoApproval(
         cheapest_quote_id: null,
         reason,
       }))) return;
+      await recordAuditEvent(
+        {
+          buyerId: rfq.buyer_id,
+          rfqId: rfq.id,
+          actor: { type: "system" },
+          type: "auto_approval_decided",
+          summary: `Held for review: ${reason}`,
+          payload: { decision: "review_needed", rule: "auto_approval_disabled", reason },
+        },
+        supabase
+      );
 
       const { error: notifError } = await supabase.from("notifications").insert({
         buyer_id: rfq.buyer_id,
@@ -200,6 +212,40 @@ export async function evaluateAutoApproval(
           reason: null,
           po_sent_at: new Date().toISOString(),
         }))) return;
+        const explanation = [
+          "cheapest complete quote",
+          `delivery ${recommendedQuote.delivery_days} days`,
+          `${recommendedQuote.warranty} warranty`,
+        ];
+        await recordAuditEvent(
+          {
+            buyerId: rfq.buyer_id,
+            rfqId: rfq.id,
+            actor: { type: "system" },
+            type: "auto_approval_decided",
+            summary: `Auto-approved ${label}: ${explanation.join(", ")}`,
+            payload: {
+              decision: "auto_approved",
+              rule: "cheapest_meets_requirements",
+              supplier: label,
+              quoteId: recommendedQuote.id,
+              explanation,
+              thresholds: { maxDeliveryDays: MAX_DELIVERY_DAYS, warrantyRequired: true },
+            },
+          },
+          supabase
+        );
+        await recordAuditEvent(
+          {
+            buyerId: rfq.buyer_id,
+            rfqId: rfq.id,
+            actor: { type: "system" },
+            type: "po_sent",
+            summary: `PO sent to ${label}`,
+            payload: { supplier: label, quoteId: recommendedQuote.id, total, currency: rfq.currency, automatic: true },
+          },
+          supabase
+        );
 
         const { error: rfqUpdateError } = await supabase
           .from("rfqs")
@@ -271,6 +317,17 @@ export async function evaluateAutoApproval(
           cheapest_quote_id: cheapestQuote.id,
           reason,
         }))) return;
+        await recordAuditEvent(
+          {
+            buyerId: rfq.buyer_id,
+            rfqId: rfq.id,
+            actor: { type: "system" },
+            type: "auto_approval_decided",
+            summary: `Held for review: ${reason}`,
+            payload: { decision: "review_needed", rule: "cheapest_fails_requirements", supplier: supplierLabel(recommendedSupplier), reason },
+          },
+          supabase
+        );
 
         const { error: notifError } = await supabase.from("notifications").insert({
           buyer_id: rfq.buyer_id,
@@ -316,6 +373,23 @@ export async function evaluateAutoApproval(
         cheapest_quote_id: cheapestQuote.id,
         reason,
       }))) return;
+      await recordAuditEvent(
+        {
+          buyerId: rfq.buyer_id,
+          rfqId: rfq.id,
+          actor: { type: "system" },
+          type: "auto_approval_decided",
+          summary: `Held for review: ${reason}`,
+          payload: {
+            decision: "differs_from_cheapest",
+            rule: "recommended_differs_from_cheapest",
+            supplier: supplierLabel(recommendedSupplier),
+            cheapest: supplierLabel(cheapestSupplier),
+            reason,
+          },
+        },
+        supabase
+      );
 
       const { error: notifError } = await supabase.from("notifications").insert({
         buyer_id: rfq.buyer_id,

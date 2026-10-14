@@ -11,6 +11,7 @@ import {
 } from "@/lib/jobs/processor";
 import { supabaseJobStore } from "@/lib/jobs/supabase-store";
 import { JOB_TYPES, autoRecommendationJob, enqueueJob } from "@/lib/jobs/enqueue";
+import { recordAuditEvent } from "@/lib/audit";
 
 export { JOB_TYPES };
 
@@ -49,9 +50,31 @@ export function buildJobHooks(supabase: SupabaseClient): JobHooks {
         "ai_delayed",
         `${what} is delayed — the Gemini API quota/rate limit was hit. Clarix will retry automatically.`
       );
+      await recordAuditEvent(
+        {
+          buyerId: job.buyer_id,
+          rfqId: job.rfq_id,
+          actor: { type: "system" },
+          type: "ai_quota_error",
+          summary: `${what} hit the AI quota; retrying automatically`,
+          payload: { jobType: job.type, what: job.type === JOB_TYPES.inboundEmailQuote ? "extraction" : "recommendation" },
+        },
+        supabase
+      );
     },
-    async onGiveUp(job) {
+    async onGiveUp(job, error) {
       if (!job.buyer_id) return;
+      await recordAuditEvent(
+        {
+          buyerId: job.buyer_id,
+          rfqId: job.rfq_id,
+          actor: { type: "system" },
+          type: "job_failed",
+          summary: `Automatic ${job.type.replace(/_/g, " ")} gave up after ${job.attempts} attempts`,
+          payload: { jobType: job.type, attempts: job.attempts, error: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300) },
+        },
+        supabase
+      );
       const title = await rfqTitle(supabase, job.rfq_id);
       const message =
         job.type === JOB_TYPES.inboundEmailQuote

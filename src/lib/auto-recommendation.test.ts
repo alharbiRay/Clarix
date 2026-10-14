@@ -37,6 +37,7 @@ function setup(statuses: string[], recommendations: Record<string, unknown>[] = 
       rfq_suppliers: row.rfq_suppliers.map((s) => ({ id: s.id, rfq_id: "rfq-1", status: s.status })),
       ai_recommendations: recommendations,
       rfq_preferences: [],
+      audit_events: [],
     },
     { ai_recommendations: { unique: [["rfq_id"]], uniqueWhere: (r) => r.auto_generated === true } }
   );
@@ -70,6 +71,9 @@ describe("runAutoRecommendation", () => {
       expect.objectContaining({ rfq_id: "rfq-1", auto_generated: true, model: "gemini-test" }),
     ]);
     expect(deps.evaluate).toHaveBeenCalledWith(db, expect.objectContaining({ id: "rfq-1" }), CONTENT);
+    expect(db.tables.audit_events).toEqual([
+      expect.objectContaining({ event_type: "recommendation_generated", payload: expect.objectContaining({ mode: "auto", recommended: "Supplier s1", model: "gemini-test" }) }),
+    ]);
   });
 
   it("is idempotent: a second run reuses the stored recommendation instead of calling Gemini again", async () => {
