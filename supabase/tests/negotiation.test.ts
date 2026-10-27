@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { asUser, createTestDb, createUser, type TestDb } from "@/test/db";
 
-describe("migration 0014: rate limits and supplier language", () => {
+describe("migration 0015: rate limits and supplier language", () => {
   let db: TestDb;
   let alice: string;
   let bob: string;

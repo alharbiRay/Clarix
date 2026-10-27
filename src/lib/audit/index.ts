@@ -186,8 +186,16 @@ export function describeAuditEvent(e: { event_type: string; payload: unknown }):
         tone: "positive",
       };
     }
-    case "negotiation_sent":
-      return { title: `Negotiation message sent${supplier ? ` to ${supplier}` : ""}`, detail: null, tone: "neutral" };
+    case "negotiation_sent": {
+      const pct = typeof p.targetPercent === "number" ? p.targetPercent : null;
+      const lang = p.language === "ar" ? "Arabic" : p.language === "en" ? "English" : null;
+      const parts = [pct !== null ? `Asked for about ${pct}% off` : "Asked for their best price", lang ? `in ${lang}` : null];
+      return {
+        title: `Negotiation message sent${supplier ? ` to ${supplier}` : ""}`,
+        detail: `${parts.filter(Boolean).join(" ")}.`,
+        tone: "neutral",
+      };
+    }
     case "ai_quota_error":
       return {
         title: "AI service rate-limited",

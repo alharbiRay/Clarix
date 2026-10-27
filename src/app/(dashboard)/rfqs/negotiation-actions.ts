@@ -55,11 +55,15 @@ async function loadSnapshot(
   rfqId: string,
   buyerId: string
 ): Promise<{ snapshot: ComparisonSnapshot; buyerEmail: string | null } | { error: string }> {
-  const [{ data: rfq }, { data: profile }, { data: award }] = await Promise.all([
+  const [{ data: rfq, error: rfqError }, { data: profile }, { data: award }] = await Promise.all([
     supabase.from("rfqs").select(NEGOTIATION_RFQ_SELECT).eq("id", rfqId).eq("buyer_id", buyerId).maybeSingle(),
     supabase.from("profiles").select("email, company, full_name").eq("id", buyerId).maybeSingle(),
     supabase.from("rfq_awards").select("po_sent_at").eq("rfq_id", rfqId).maybeSingle(),
   ]);
+  if (rfqError) {
+    console.error(JSON.stringify({ event: "negotiation.load_failed", rfqId, error: rfqError.message }));
+    return { error: "Couldn't load this RFQ. Try again in a moment." };
+  }
   if (!rfq) return { error: "RFQ not found." };
   if (award?.po_sent_at) return { error: "A PO has already been sent for this RFQ." };
   return {

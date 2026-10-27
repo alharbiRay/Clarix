@@ -449,3 +449,28 @@ every failing reason is still listed.
   with every field required, so a partial payload can't reset the rest.
 - **The on/off switch saves immediately.** A failed policy load blocks the form instead of showing
   defaults that could be saved over the real rules.
+
+# Phase 8: Negotiation assistant
+
+## D-052: Competitor details never reach the model
+The model can't leak what it never sees. The context holds only the supplier's own quote and
+two coarse facts (a lower offer exists; faster delivery exists). The prompt repeats the rule
+anyway, and the output is checked.
+
+## D-053: The leak check runs on the final text, at send time
+A buyer's edit, or a model that ignores instructions, is caught before anything leaves. The check
+matches names (normalized for Arabic), emails, company domains, and exact amounts, including
+Arabic-Indic digits and thousands separators. The supplier's own figures are allowed. Quotes
+pending review are excluded: they aren't offers yet.
+
+## D-054: The target is a whole percentage the buyer chooses
+The UI suggests the gap (rounded down) to the buyer, who sees everything; only the percentage they
+enter goes into the message. No amount derived from a competitor's price is ever sent.
+
+## D-055: Rate limits live in the database
+An atomic `consume_rate_limit()` (advisory lock, sliding window) works across serverless instances.
+It fails closed, because both actions cost money.
+
+## D-056: Replies go to the buyer
+Negotiation emails set reply-to to the buyer's own address, not the inbound PDF address. A
+negotiation is a conversation, and inbound intake already refuses a second quote from the same supplier.

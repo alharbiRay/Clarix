@@ -55,6 +55,12 @@ describe("describeAuditEvent", () => {
     ).toMatchObject({ title: "Auto-approval skipped", detail: "No quote has a price for every line item yet." });
   });
 
+  it("describes a negotiation without repeating the message", () => {
+    expect(
+      describeAuditEvent({ event_type: "negotiation_sent", payload: { supplier: "Najd", targetPercent: 5, language: "ar", subject: "x" } })
+    ).toMatchObject({ title: "Negotiation message sent to Najd", detail: "Asked for about 5% off in Arabic." });
+  });
+
   it("falls back gracefully for unexpected payloads", () => {
     expect(describeAuditEvent({ event_type: "po_sent", payload: {} }).title).toBe("Purchase order sent");
     expect(describeAuditEvent({ event_type: "something_new", payload: null }).title).toBe("Something new");

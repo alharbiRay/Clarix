@@ -12,15 +12,15 @@ One branch and PR per phase, merged into `master` in order (merge commits, no sq
 | 4. Supplier scorecard | merged | `feat/phase-04-supplier-scorecard` | [#8](https://github.com/alharbiRay/Clarix/pull/8) | tsc, lint, 288 tests, build, visual check |
 | 5. Price history + alerts | merged | `feat/phase-05-price-history` | [#9](https://github.com/alharbiRay/Clarix/pull/9) | tsc, lint, tests, build, preview check with demo data |
 | 6. Decision audit log | merged (reviewed, fixes applied) | `feat/phase-06-audit-log` | [#10](https://github.com/alharbiRay/Clarix/pull/10) | tsc, lint, 400 tests, build, production deploy and demo seed checked |
-| 7. Configurable approval rules | in review | `feat/phase-07-approval-rules` | | tsc, lint, tests, build, settings form and live preview checked in the browser (demo) |
-| 8. Negotiation assistant | pending | | | |
+| 7. Configurable approval rules | merged (reviewed, fixes applied) | `feat/phase-07-approval-rules` | [#11](https://github.com/alharbiRay/Clarix/pull/11) | tsc, lint, tests, build, settings form and live preview checked in the browser (demo) |
+| 8. Negotiation assistant | in review | `feat/phase-08-negotiation` | | tsc, lint, 516 tests, build, dialog checked in the browser (English + Arabic, demo) |
 | 9. Reports | pending | | | |
 | 10. Arabic/English + RTL + VAT | pending | | | |
 | 11. Engineering hardening | pending | | | |
 | 12. Landing + pricing | pending | | | |
 
 ## Production state
-- Supabase project restored and active. Migrations 0007 to 0014 are applied, in order.
+- Supabase project restored and active. Migrations 0007 to 0015 are applied, in order.
 - The demo is seeded (25 RFQs and a full decision trail). "Explore the live demo" works on production.
 - Vercel production tracks `master`.
 

@@ -25,6 +25,9 @@ import {
 } from "@/components/generate-recommendation-button";
 import { ManualQuoteDialog } from "@/components/manual-quote-dialog";
 import { ApproveAwardButton } from "@/components/approve-award-button";
+import { NegotiateDialog } from "@/components/compare/negotiate-dialog";
+import { buildNegotiationContext, detectLanguage } from "@/lib/negotiation";
+import { snapshotFromRows } from "@/lib/negotiation/snapshot";
 import { formatDate, formatMoney } from "@/lib/format";
 import {
   DEFAULT_RECOMMENDATION_WEIGHTS,
@@ -168,7 +171,7 @@ export default async function ComparePage({
       console.error(JSON.stringify({ event: "compare.price_history_unavailable", error: String(e) }));
       return [];
     }),
-    supabase.from("profiles").select("price_alert_threshold").eq("id", rfq.buyer_id).maybeSingle(),
+    supabase.from("profiles").select("price_alert_threshold, is_demo").eq("id", rfq.buyer_id).maybeSingle(),
   ]);
   const supplierScores = scoreSuppliers(historyRfqs, scoreRefs);
 
@@ -262,6 +265,34 @@ export default async function ComparePage({
     : null;
 
   const award = awardResult.data as RfqAward | null;
+
+  // Negotiation defaults per supplier: language (saved preference, else a
+  // guess from the name) and how far above the best other offer they are.
+  const isDemo = Boolean(thresholdResult.data?.is_demo);
+  const linkedSupplierIds = rfq.rfq_suppliers.map((s) => s.supplier_id).filter((id): id is string => Boolean(id));
+  const { data: languageRows } = linkedSupplierIds.length
+    ? await supabase.from("suppliers").select("id, preferred_language").in("id", linkedSupplierIds)
+    : { data: [] as { id: string; preferred_language: string | null }[] };
+  const preferredLanguage = new Map((languageRows ?? []).map((r) => [r.id as string, r.preferred_language as string | null]));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const negotiationSnapshot = snapshotFromRows(rfq as any, null);
+  const negotiation = new Map(
+    confirmedColumns.map((c) => {
+      const ctx = buildNegotiationContext(negotiationSnapshot, c.quote.id, { language: "en", targetPercent: null });
+      const saved = c.supplier.supplier_id ? preferredLanguage.get(c.supplier.supplier_id) : null;
+      const language: "ar" | "en" =
+        saved === "ar" || saved === "en" ? saved : detectLanguage(`${c.supplier.company_name ?? ""} ${c.supplier.contact_name ?? ""}`);
+      return [
+        c.quote.id,
+        {
+          language,
+          suggestedPercent: "error" in ctx ? null : ctx.suggestedPercent,
+          lowerOfferExists: "error" in ctx ? false : ctx.lowerOfferExists,
+        },
+      ] as const;
+    })
+  );
+  const canNegotiate = !award?.po_sent_at && confirmedColumns.length > 0;
   const activeJob = jobResult.data as { status: string; attempts: number; run_after: string } | null;
   const retryAt =
     activeJob && activeJob.attempts > 0 && new Date(activeJob.run_after).getTime() > Date.now()
@@ -742,6 +773,31 @@ export default async function ComparePage({
                         ))}
                       </tr>
                     ))}
+                    {canNegotiate && (
+                      <tr>
+                        <td className="px-4 py-3 text-xs font-semibold text-slate-500">Negotiate</td>
+                        {columns.map((col) => {
+                          const n = negotiation.get(col.quote.id);
+                          return (
+                            <td key={col.quote.id} className="px-4 py-3 text-right">
+                              {n ? (
+                                <NegotiateDialog
+                                  rfqId={rfq.id}
+                                  quoteId={col.quote.id}
+                                  supplierLabel={col.label}
+                                  defaultLanguage={n.language}
+                                  suggestedPercent={n.suggestedPercent}
+                                  lowerOfferExists={n.lowerOfferExists}
+                                  isDemo={isDemo}
+                                />
+                              ) : (
+                                <span className="text-xs text-slate-300">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
