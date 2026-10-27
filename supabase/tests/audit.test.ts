@@ -79,6 +79,33 @@ describe("audit_events (migration 0011)", () => {
     expect(rows).toHaveLength(1);
   });
 
+  it("refuses TRUNCATE, even for the owner", async () => {
+    await expect(db.exec(`truncate audit_events`)).rejects.toThrow(/append-only/);
+  });
+
+  it("the demo reset clears only a demo account's trail, and only for the service role", async () => {
+    const demo = await createUser(db, "demo@clarix.example");
+    await db.query(`update profiles set is_demo = true where id = $1`, [demo]);
+    await insertAsServiceRole(demo);
+    const aliceBefore = (await db.query(`select 1 from audit_events where buyer_id = $1`, [alice])).rows.length;
+
+    // A real account can't be wiped through it.
+    await db.exec(`set role service_role`);
+    try {
+      await expect(db.query(`select reset_demo_audit_events($1)`, [alice])).rejects.toThrow(/not a demo account/);
+      const { rows } = await db.query<{ n: number }>(`select reset_demo_audit_events($1) as n`, [demo]);
+      expect(rows[0].n).toBe(1);
+    } finally {
+      await db.exec(`reset role`);
+    }
+    // Buyers (even the demo buyer) can't call it.
+    await expect(asUser(db, demo, () => db.query(`select reset_demo_audit_events($1)`, [demo]))).rejects.toThrow(/permission denied/);
+    // The bypass is scoped to the call: a later direct delete is still refused.
+    await insertAsServiceRole(demo);
+    await expect(db.query(`delete from audit_events where buyer_id = $1`, [demo])).rejects.toThrow(/append-only/);
+    expect((await db.query(`select 1 from audit_events where buyer_id = $1`, [alice])).rows.length).toBe(aliceBefore);
+  });
+
   it("rejects unknown event types", async () => {
     await expect(insertAsServiceRole(alice, "made_up")).rejects.toThrow(/check constraint|violates/);
   });

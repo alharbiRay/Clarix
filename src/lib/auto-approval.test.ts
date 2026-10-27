@@ -97,7 +97,24 @@ describe("evaluateAutoApproval", () => {
         explanation: ["cheapest complete quote", "delivery 7 days", "12 months warranty"],
       }),
     });
-    expect(db.tables.audit_events[1].payload).toMatchObject({ supplier: "Supplier s1", total: 100, automatic: true });
+    expect(db.tables.audit_events[1].payload).toMatchObject({ supplier: "Supplier s1", total: 100, automatic: true, emailDelivered: true });
+  });
+
+  it("records that the PO email failed instead of claiming it was sent", async () => {
+    vi.mocked(email.sendPoConfirmationEmail).mockRejectedValueOnce(new Error("resend down"));
+    const db = seed();
+    await evaluateAutoApproval(asClient(db), rfq, content);
+    expect(db.tables.audit_events[1]).toMatchObject({ event_type: "po_sent", payload: expect.objectContaining({ emailDelivered: false }) });
+  });
+
+  it("leaves a trace when it can't evaluate (AI pick doesn't match any quote)", async () => {
+    const db = seed();
+    const unknown: RecommendationContent = { ...content, ranking: [{ supplier: "Nobody", rank: 1, strengths: [], weaknesses: [] }] };
+    await evaluateAutoApproval(asClient(db), rfq, unknown);
+    expect(db.tables.rfq_awards).toHaveLength(0);
+    expect(db.tables.audit_events).toEqual([
+      expect.objectContaining({ event_type: "auto_approval_decided", payload: expect.objectContaining({ decision: "not_evaluated" }) }),
+    ]);
   });
 
   it("records the reason when it holds an RFQ for review", async () => {

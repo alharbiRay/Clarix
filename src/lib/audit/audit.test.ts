@@ -46,6 +46,15 @@ describe("describeAuditEvent", () => {
     ).toMatchObject({ title: "AI read Najd's PDF (medium confidence)", detail: "Check: Currency is USD.", tone: "warning" });
   });
 
+  it("flags a PO whose email failed, and explains a skipped auto-approval", () => {
+    expect(
+      describeAuditEvent({ event_type: "po_sent", payload: { supplier: "Najd", total: 10, currency: "SAR", emailDelivered: false } })
+    ).toMatchObject({ title: "Purchase order approved, but the email to Najd failed", tone: "warning" });
+    expect(
+      describeAuditEvent({ event_type: "auto_approval_decided", payload: { decision: "not_evaluated", reason: "no quote has a price for every line item yet" } })
+    ).toMatchObject({ title: "Auto-approval skipped", detail: "No quote has a price for every line item yet." });
+  });
+
   it("falls back gracefully for unexpected payloads", () => {
     expect(describeAuditEvent({ event_type: "po_sent", payload: {} }).title).toBe("Purchase order sent");
     expect(describeAuditEvent({ event_type: "something_new", payload: null }).title).toBe("Something new");

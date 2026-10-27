@@ -44,12 +44,7 @@ export function buildJobHooks(supabase: SupabaseClient): JobHooks {
         job.type === JOB_TYPES.inboundEmailQuote
           ? `Reading a supplier's emailed quote for ${title}`
           : `The AI recommendation for ${title}`;
-      await notify(
-        supabase,
-        job,
-        "ai_delayed",
-        `${what} is delayed — the Gemini API quota/rate limit was hit. Clarix will retry automatically.`
-      );
+      // Audit first: notify throws on failure, and the trail shouldn't depend on it.
       await recordAuditEvent(
         {
           buyerId: job.buyer_id,
@@ -61,8 +56,14 @@ export function buildJobHooks(supabase: SupabaseClient): JobHooks {
         },
         supabase
       );
+      await notify(
+        supabase,
+        job,
+        "ai_delayed",
+        `${what} is delayed — the Gemini API quota/rate limit was hit. Clarix will retry automatically.`
+      );
     },
-    async onGiveUp(job, error) {
+    async onGiveUp(job) {
       if (!job.buyer_id) return;
       await recordAuditEvent(
         {
@@ -71,7 +72,8 @@ export function buildJobHooks(supabase: SupabaseClient): JobHooks {
           actor: { type: "system" },
           type: "job_failed",
           summary: `Automatic ${job.type.replace(/_/g, " ")} gave up after ${job.attempts} attempts`,
-          payload: { jobType: job.type, attempts: job.attempts, error: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300) },
+          // The error itself stays in the server logs — the trail is buyer-visible.
+          payload: { jobType: job.type, attempts: job.attempts },
         },
         supabase
       );

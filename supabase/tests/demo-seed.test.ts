@@ -25,6 +25,14 @@ function pgliteSink(db: TestDb): DemoSink {
         [id, ...cols.map((c) => patch[c])]
       );
     },
+    async resetDemoAuditTrail(buyerId) {
+      await db.exec(`set role service_role`);
+      try {
+        await db.query(`select public.reset_demo_audit_events($1)`, [buyerId]);
+      } finally {
+        await db.exec(`reset role`);
+      }
+    },
   };
 }
 
@@ -66,6 +74,16 @@ describe("demo seed against real Postgres", () => {
     });
     await writeDemoDataset(pgliteSink(db), later);
     expect(await counts(db)).toEqual(before);
+  });
+
+  it("re-seeding moves the decision timeline's dates along with the RFQs", async () => {
+    const { rows } = await db.query<{ off: number }>(
+      `select count(*)::int as off from audit_events a join rfqs r on r.id = a.rfq_id
+       where a.event_type = 'rfq_created' and a.created_at <> r.created_at`
+    );
+    expect(rows[0].off).toBe(0);
+    const { rows: latest } = await db.query<{ max: string }>(`select max(created_at)::text as max from audit_events`);
+    expect(new Date(latest[0].max).getTime()).toBeGreaterThan(new Date("2026-10-14T09:00:00Z").getTime());
   });
 
   it("flags every top-level demo row", async () => {

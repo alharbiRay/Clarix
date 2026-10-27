@@ -137,7 +137,7 @@ export function describeAuditEvent(e: { event_type: string; payload: unknown }):
     case "extraction_failed":
       return {
         title: `Couldn't read ${supplier ? `${supplier}'s` : "a"} PDF automatically`,
-        detail: sentence(str(p.reason)),
+        detail: "Check the PDF, then enter the quote manually if needed.",
         tone: "negative",
       };
     case "recommendation_generated": {
@@ -150,6 +150,9 @@ export function describeAuditEvent(e: { event_type: string; payload: unknown }):
     }
     case "auto_approval_decided": {
       const explanation = Array.isArray(p.explanation) ? p.explanation.filter((x): x is string => typeof x === "string") : [];
+      if (p.decision === "not_evaluated") {
+        return { title: "Auto-approval skipped", detail: sentence(str(p.reason)), tone: "neutral" };
+      }
       if (p.decision === "auto_approved") {
         return {
           title: `Auto-approved${supplier ? `: ${supplier}` : ""}`,
@@ -170,6 +173,13 @@ export function describeAuditEvent(e: { event_type: string; payload: unknown }):
     }
     case "po_sent": {
       const total = money(p.total, p.currency);
+      if (p.emailDelivered === false) {
+        return {
+          title: `Purchase order approved, but the email to ${supplier ?? "the supplier"} failed`,
+          detail: `${total ? `${total}. ` : ""}Contact the supplier directly to confirm the order.`,
+          tone: "warning",
+        };
+      }
       return {
         title: `Purchase order sent${supplier ? ` to ${supplier}` : ""}`,
         detail: total ? `${total}${p.automatic ? ", sent automatically" : ""}.` : null,
@@ -185,7 +195,21 @@ export function describeAuditEvent(e: { event_type: string; payload: unknown }):
         tone: "warning",
       };
     case "job_failed":
-      return { title: "Automatic processing gave up", detail: sentence(str(p.error)), tone: "negative" };
+      if (p.jobType === "inbound_email_quote") {
+        return {
+          title: "Couldn't process a supplier's emailed quote automatically",
+          detail: "Ask them to resend it, or enter it manually.",
+          tone: "negative",
+        };
+      }
+      if (p.jobType === "auto_recommendation") {
+        return {
+          title: "Couldn't generate the AI recommendation automatically",
+          detail: "Generate it manually from the compare page.",
+          tone: "negative",
+        };
+      }
+      return { title: "Automatic processing gave up", detail: null, tone: "negative" };
     default:
       return { title: humanize(e.event_type), detail: null, tone: "neutral" };
   }

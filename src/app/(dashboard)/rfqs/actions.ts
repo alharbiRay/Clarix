@@ -257,14 +257,6 @@ export async function approveAward(rfqId: string, overrideQuoteId?: string, over
   const targetQuoteId = overrideQuoteId || award.recommended_quote_id;
   if (!targetQuoteId) return { error: "No supplier to approve" };
 
-  // Overriding the AI's pick is a decision worth explaining — the reason goes
-  // into the audit trail. (With auto-approval off there is no pick to override.)
-  const aiQuoteId: string | null = award.recommended_quote_id;
-  const isOverride = Boolean(aiQuoteId && overrideQuoteId && overrideQuoteId !== aiQuoteId);
-  if (isOverride && !reason) {
-    return { error: "Say why you're choosing a different supplier than the AI recommended." };
-  }
-
   const { data: rfq } = await supabase
     .from("rfqs")
     .select("id, title, currency, buyer_id, rfq_items(*)")
@@ -297,14 +289,40 @@ export async function approveAward(rfqId: string, overrideQuoteId?: string, over
   ).total;
   const label = supplier.company_name || supplier.email;
 
+  // Overriding the AI's pick is a decision worth explaining — the reason goes
+  // into the audit trail. The pick is the award's recommended quote; with
+  // auto-approval off the award has none, so fall back to the latest AI
+  // recommendation's rank-1 supplier.
+  const aiQuoteId: string | null = award.recommended_quote_id;
   let aiPickLabel: string | null = null;
-  if (isOverride && award.recommended_supplier_id) {
-    const { data: aiSupplier } = await supabase
-      .from("rfq_suppliers")
-      .select("email, company_name")
-      .eq("id", award.recommended_supplier_id)
+  let isOverride = false;
+  if (aiQuoteId) {
+    isOverride = Boolean(overrideQuoteId && overrideQuoteId !== aiQuoteId);
+    if (isOverride && award.recommended_supplier_id) {
+      const { data: aiSupplier } = await supabase
+        .from("rfq_suppliers")
+        .select("email, company_name")
+        .eq("id", award.recommended_supplier_id)
+        .maybeSingle();
+      aiPickLabel = aiSupplier ? aiSupplier.company_name || aiSupplier.email : null;
+    }
+  } else {
+    const { data: latest } = await supabase
+      .from("ai_recommendations")
+      .select("content")
+      .eq("rfq_id", rfqId)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
-    aiPickLabel = aiSupplier ? aiSupplier.company_name || aiSupplier.email : null;
+    const ranking = (latest?.content as { ranking?: { rank: number; supplier: string }[] } | null)?.ranking;
+    const pick = Array.isArray(ranking) ? ranking.find((r) => r.rank === 1)?.supplier : undefined;
+    if (pick) {
+      isOverride = pick !== label;
+      aiPickLabel = isOverride ? pick : null;
+    }
+  }
+  if (isOverride && !reason) {
+    return { error: "Say why you're choosing a different supplier than the AI recommended." };
   }
 
   const { data: updatedAward, error: awardUpdateError } = await supabase
@@ -340,6 +358,7 @@ export async function approveAward(rfqId: string, overrideQuoteId?: string, over
   });
   if (notifError) console.error(`[approveAward] rfq=${rfqId} notifications insert failed:`, notifError);
 
+  let emailDelivered = false;
   try {
     await sendPoConfirmationEmail({
       to: supplier.email,
@@ -355,6 +374,7 @@ export async function approveAward(rfqId: string, overrideQuoteId?: string, over
       deliveryDays: quote.delivery_days,
       warranty: quote.warranty,
     });
+    emailDelivered = true;
   } catch (e) {
     console.error(`[approveAward] rfq=${rfqId} PO confirmation email failed:`, e);
   }
@@ -373,8 +393,8 @@ export async function approveAward(rfqId: string, overrideQuoteId?: string, over
     rfqId,
     actor,
     type: "po_sent",
-    summary: `PO sent to ${label}`,
-    payload: { supplier: label, quoteId: quote.id, total, currency: rfq.currency, automatic: false },
+    summary: emailDelivered ? `PO sent to ${label}` : `PO approved for ${label}, but the email failed`,
+    payload: { supplier: label, quoteId: quote.id, total, currency: rfq.currency, automatic: false, emailDelivered },
   });
 
   revalidatePath(`/rfqs/${rfqId}`);

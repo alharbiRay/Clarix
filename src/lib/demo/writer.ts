@@ -5,6 +5,8 @@ import type { DemoDataset } from "@/lib/demo/dataset";
 export interface DemoSink {
   upsert(table: string, rows: Record<string, unknown>[], conflict: string[], opts?: { ignoreDuplicates?: boolean }): Promise<void>;
   updateProfile(id: string, patch: Record<string, unknown>): Promise<void>;
+  /** Clears the demo account's audit trail (reset_demo_audit_events, migration 0011). */
+  resetDemoAuditTrail(buyerId: string): Promise<void>;
 }
 
 /** Tables in foreign-key order, with the column(s) each upsert keys on. */
@@ -19,7 +21,8 @@ export const DEMO_TABLES: { table: keyof DemoDataset; conflict: string[]; ignore
   { table: "ai_recommendations", conflict: ["id"] },
   { table: "rfq_awards", conflict: ["rfq_id"] },
   { table: "notifications", conflict: ["id"] },
-  // Append-only (migration 0011): a re-seed must never update an event.
+  // Append-only (migration 0011): never updated in place. writeDemoDataset
+  // clears the demo trail first so it's rebuilt with fresh dates.
   { table: "audit_events", conflict: ["id"], ignoreDuplicates: true },
 ];
 
@@ -34,6 +37,7 @@ export async function writeDemoDataset(sink: DemoSink, data: DemoDataset) {
   const counts: Record<string, number> = {};
   for (const { table, conflict, ignoreDuplicates } of DEMO_TABLES) {
     const rows = data[table] as unknown as Record<string, unknown>[];
+    if (table === "audit_events") await sink.resetDemoAuditTrail(id);
     if (rows.length > 0) await sink.upsert(table, rows, conflict, { ignoreDuplicates });
     counts[table] = rows.length;
   }
@@ -53,6 +57,10 @@ export function supabaseSink(admin: SupabaseClient): DemoSink {
     async updateProfile(id, patch) {
       const { error } = await admin.from("profiles").update(patch).eq("id", id);
       if (error) throw new Error(`profile update failed: ${error.message}`);
+    },
+    async resetDemoAuditTrail(buyerId) {
+      const { error } = await admin.rpc("reset_demo_audit_events", { p_buyer: buyerId });
+      if (error) throw new Error(`demo audit reset failed: ${error.message}`);
     },
   };
 }

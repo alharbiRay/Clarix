@@ -86,7 +86,9 @@ export default async function RfqDetailPage({
       .from("audit_events")
       .select("id, event_type, actor_type, payload, created_at")
       .eq("rfq_id", params.id)
-      .order("created_at", { ascending: true })
+      // Newest 200 (so a long trail keeps the award), shown oldest first below.
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .limit(200),
   ]);
 
@@ -497,7 +499,7 @@ export default async function RfqDetailPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <AuditTimeline events={(auditData ?? []) as TimelineEvent[]} />
+            <AuditTimeline events={((auditData ?? []) as TimelineEvent[]).slice().reverse()} />
           </CardContent>
         </Card>
       </FadeIn>

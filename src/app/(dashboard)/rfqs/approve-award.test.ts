@@ -53,6 +53,33 @@ describe("approveAward", () => {
     });
   });
 
+  it("records a failed PO email as such", async () => {
+    vi.mocked(email.sendPoConfirmationEmail).mockRejectedValueOnce(new Error("resend down"));
+    expect(await approveAward("rfq-1")).toEqual({ success: true, rfqId: "rfq-1" });
+    expect(db.tables.audit_events[1]).toMatchObject({ event_type: "po_sent", payload: expect.objectContaining({ emailDelivered: false }) });
+  });
+
+  it("with auto-approval off, choosing someone other than the AI's latest pick still needs a reason", async () => {
+    db.tables.rfq_awards[0] = { rfq_id: "rfq-1", decision: "review_needed", recommended_quote_id: null, recommended_supplier_id: null, po_sent_at: null };
+    db.tables.ai_recommendations = [
+      { id: "rec-1", rfq_id: "rfq-1", created_at: "2026-01-02T00:00:00Z", content: { ranking: [{ supplier: "Gulf Office Supplies", rank: 1 }] } },
+    ];
+    expect(await approveAward("rfq-1", "q-cheap")).toEqual({
+      error: "Say why you're choosing a different supplier than the AI recommended.",
+    });
+    expect(await approveAward("rfq-1", "q-cheap", "Faster to site")).toEqual({ success: true, rfqId: "rfq-1" });
+    expect(db.tables.audit_events[0].payload).toMatchObject({ override: true, aiPick: "Gulf Office Supplies", reason: "Faster to site" });
+  });
+
+  it("with auto-approval off, approving the AI's own pick needs no reason", async () => {
+    db.tables.rfq_awards[0] = { rfq_id: "rfq-1", decision: "review_needed", recommended_quote_id: null, recommended_supplier_id: null, po_sent_at: null };
+    db.tables.ai_recommendations = [
+      { id: "rec-1", rfq_id: "rfq-1", created_at: "2026-01-02T00:00:00Z", content: { ranking: [{ supplier: "Gulf Office Supplies", rank: 1 }] } },
+    ];
+    expect(await approveAward("rfq-1", "q-ai")).toEqual({ success: true, rfqId: "rfq-1" });
+    expect(db.tables.audit_events[0].payload).toMatchObject({ override: false });
+  });
+
   it("an override must say why", async () => {
     expect(await approveAward("rfq-1", "q-cheap")).toEqual({
       error: "Say why you're choosing a different supplier than the AI recommended.",

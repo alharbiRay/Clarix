@@ -82,14 +82,18 @@ export async function createQuoteFromPdf(input: QuoteIntakeInput): Promise<Quote
   } catch (e) {
     const quotaExceeded = isGeminiRateLimited(e);
     // Quota problems are recorded once by the job hooks (ai_quota_error).
-    if (!quotaExceeded) {
+    // Emailed PDFs run in a retrying job: recording here would repeat the
+    // event on every attempt, so that path is recorded once, as job_failed,
+    // when the job gives up.
+    if (!quotaExceeded && source !== "email") {
       await recordAuditEvent({
         buyerId,
         rfqId,
-        actor: source === "email" ? { type: "supplier", id: supplier.id } : { type: "buyer", id: buyerId },
+        actor: { type: "buyer", id: buyerId },
         type: "extraction_failed",
         summary: `Couldn't read ${supplier.company_name || supplier.email}'s PDF`,
-        payload: { supplier: supplier.company_name || supplier.email, source, reason: e instanceof Error ? e.message.slice(0, 300) : "unknown error" },
+        // No raw error text: the trail is buyer-visible and errors carry internals.
+        payload: { supplier: supplier.company_name || supplier.email, source },
       });
     }
     return {

@@ -54,13 +54,22 @@ const ACTOR: Record<TimelineEvent["actor_type"], string> = {
   system: "Clarix",
 };
 
-const timeFormat = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  timeZone: "Asia/Riyadh",
-});
+const ZONE = "Asia/Riyadh";
+const yearOf = (d: Date) => new Intl.DateTimeFormat("en-US", { year: "numeric", timeZone: ZONE }).format(d);
+
+/** "Oct 14, 9:05 AM GMT+3" — the year only when it isn't this year. */
+function formatWhen(iso: string) {
+  const d = new Date(iso);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(yearOf(d) !== yearOf(new Date()) ? { year: "numeric" } : {}),
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: ZONE,
+    timeZoneName: "short",
+  }).format(d);
+}
 
 /** The RFQ's decision history, oldest first — the story of how it was decided. */
 export function AuditTimeline({ events }: { events: TimelineEvent[] }) {
@@ -103,7 +112,7 @@ export function AuditTimeline({ events }: { events: TimelineEvent[] }) {
                 </p>
               )}
               <p className="mt-1 text-xs text-slate-500">
-                {ACTOR[e.actor_type]} · <time dateTime={e.created_at}>{timeFormat.format(new Date(e.created_at))}</time>
+                {ACTOR[e.actor_type]} · <time dateTime={e.created_at}>{formatWhen(e.created_at)}</time>
               </p>
             </div>
           </li>
