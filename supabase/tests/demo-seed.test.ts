@@ -7,13 +7,13 @@ import { writeDemoDataset, type DemoSink } from "@/lib/demo/writer";
 function pgliteSink(db: TestDb): DemoSink {
   const value = (v: unknown) => (v !== null && typeof v === "object" ? JSON.stringify(v) : v);
   return {
-    async upsert(table, rows, conflict) {
+    async upsert(table, rows, conflict, opts) {
       for (const row of rows) {
         const cols = Object.keys(row);
         const updates = cols.filter((c) => !conflict.includes(c)).map((c) => `${c} = excluded.${c}`);
         await db.query(
           `insert into public.${table} (${cols.join(", ")}) values (${cols.map((_, i) => `$${i + 1}`).join(", ")})
-           on conflict (${conflict.join(", ")}) do ${updates.length ? `update set ${updates.join(", ")}` : "nothing"}`,
+           on conflict (${conflict.join(", ")}) do ${updates.length && !opts?.ignoreDuplicates ? `update set ${updates.join(", ")}` : "nothing"}`,
           cols.map((c) => value(row[c]))
         );
       }
@@ -34,7 +34,7 @@ async function counts(db: TestDb) {
     (select count(*)::int from rfq_suppliers) invites, (select count(*)::int from quotes) quotes,
     (select count(*)::int from quote_items) quote_items, (select count(*)::int from ai_recommendations) recs,
     (select count(*)::int from rfq_awards) awards, (select count(*)::int from notifications) notifications,
-    (select count(*)::int from suppliers) suppliers`);
+    (select count(*)::int from suppliers) suppliers, (select count(*)::int from audit_events) audit`);
   return rows[0];
 }
 

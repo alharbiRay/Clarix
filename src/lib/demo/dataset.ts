@@ -12,6 +12,7 @@
  */
 import { createRandom, stableUuid, type Random } from "@/lib/demo/random";
 import type { RecommendationContent } from "@/lib/gemini";
+import { buildDemoAuditTrail, type DemoAuditRow } from "@/lib/demo/audit-trail";
 
 export const DEMO_SEED = "clarix-demo-v1";
 export const DEMO_MODEL = "gemini-2.5-flash";
@@ -164,6 +165,8 @@ export interface DemoDataset {
   ai_recommendations: DemoRecommendationRow[];
   rfq_awards: DemoAwardRow[];
   notifications: DemoNotificationRow[];
+  /** Decision history for every demo RFQ (append-only table; seeded insert-if-absent). */
+  audit_events: DemoAuditRow[];
   meta: { stages: { rfqId: string; stage: DemoStage }[] };
 }
 
@@ -595,6 +598,7 @@ export function generateDemoDataset({ seed, now, buyerId, tokenSecret = seed }: 
     ai_recommendations: [],
     rfq_awards: [],
     notifications: [],
+    audit_events: [],
     meta: { stages: [] },
   };
 
@@ -893,5 +897,6 @@ export function generateDemoDataset({ seed, now, buyerId, tokenSecret = seed }: 
     }
   }
 
+  data.audit_events = buildDemoAuditTrail(data);
   return data;
 }
