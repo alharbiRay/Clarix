@@ -2,14 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireWritableUser } from "@/lib/auth/session";
 
 /** Toggles the buyer's auto-approval setting (src/lib/auto-approval.ts gates on this). */
 export async function updateAutoApprovalSetting(enabled: boolean) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
+  const { user } = auth;
 
   const { error } = await supabase
     .from("profiles")

@@ -161,3 +161,82 @@ Changes made, each with a test written first:
   public routes until those routes exist.
 - Noted but not changed: GitHub disables scheduled workflows in repos with no
   activity for 60 days. The daily Vercel cron remains the backstop (see PROGRESS).
+
+---
+
+# Phase 2: Demo data and demo mode
+
+## D-016: The demo is a real, shared, read-only account
+Options: (a) a shared account that is read-only at the DB, (b) a sandbox account per
+visitor, reset by a job, (c) render the demo from fixtures without auth. Chose **(a)**.
+Every page and query path stays real (the demo exercises the actual product), and
+read-only is enforced in Postgres through RESTRICTIVE policies, so it can't be bypassed by
+calling a server action or PostgREST directly. (b) would mean unbounded account
+creation, a cleanup job, and Gemini cost per visitor. (c) would mean a parallel
+rendering path that drifts from the real one.
+
+## D-017: Entering the demo uses a server-minted magic-link token, so no password exists
+The server checks that the configured `DEMO_ACCOUNT_EMAIL` belongs to a profile flagged
+`is_demo`, mints a one-time magic-link token hash with the service role (no email is
+sent), and verifies it on the visitor's cookie-bound client. A misconfiguration can't
+hand out a real buyer's session. The entry is a POST form action, so link prefetchers
+and crawlers can't open sessions.
+
+## D-018: Seed safety interlock
+The seed refuses to run without `ALLOW_SEED=true`. Local URLs are allowed. A hosted
+project additionally needs `DEMO_SEED_PROJECT_REF=<that project's ref>`, so a stray
+`.env` pointing at production is refused (verified against this repo's `.env.local`).
+The demo can live in production, because that's where visitors use it, but only as a
+deliberate act, and the script only writes rows owned by the demo account. It also
+refuses to adopt an email that belongs to a real account with RFQs.
+
+## D-019: `is_demo` sits on top-level rows only
+`profiles`, `rfqs`, and `suppliers` carry the flag. Child rows (items, invites, quotes,
+awards …) are scoped through their RFQ. Read-only enforcement keys off the *account*
+(`is_demo_account()`), not the rows, so a demo session can't write anything anywhere.
+
+## D-020: Supplier-form tokens for demo RFQs can't be derived from the public seed
+The dataset is deterministic, but each seed run mixes a random secret into the tokens.
+The supplier form and inbound email also refuse demo RFQs outright.
+
+## D-021: Profile UPDATE is column-limited
+`profiles` UPDATE is granted only on (email, full_name, company,
+auto_approval_enabled). This stops a buyer from toggling `is_demo`, and it's the
+pattern the Phase 7 `role` column relies on.
+
+## D-022: R7 fixed, and Geist actually applied
+`tailwind.config.ts` used `hsl(var(--x))` around `oklch(...)` values, so every shadcn
+token color was invalid (for example, the primary Button rendered transparent with
+black text). Colors now map to `var(--x)`. The Geist font loaded in `layout.tsx` was never
+applied either (`font-sans` wasn't mapped and `body` forced Arial); that's fixed too.
+Both were verified visually.
+
+## D-023: Code review of Phase 2, and what changed as a result
+The review returned "ready with fixes". Fixed, test-first:
+- **Demo identity hardening.** `profiles.email` is no longer user-editable (it was the
+  demo lookup key, so any user could squat it and break or hijack the demo). The
+  demo profile is found by email *and* `is_demo`, the minted token's auth user must
+  equal that profile, and the seed refuses any existing non-demo profile with the
+  demo email instead of adopting it.
+- **Sign-out is `scope: "local"`.** The default global sign-out from one demo visitor
+  revoked every visitor's refresh token. It's local for all users now: signing out
+  ends only this browser's session.
+- **Concurrent "Try the demo" clicks** retry up to three times, because GoTrue keeps
+  one magic-link token per user.
+- **Tailwind opacity modifiers** (`bg-primary/90`, `ring-ring/50`, …) emitted no CSS
+  on bare `var()` colors. Theme colors are now
+  `color-mix(in oklch, var(--x) calc(<alpha-value> * 100%), transparent)`, verified
+  by compiling a probe through the project config.
+- The supplier quote page shows a "demo RFQ" card for demo RFQs and no longer
+  writes "viewed" into shared data.
+
+Accepted for now, not fixed:
+- The demo JWT reaches the browser, so a visitor could call `auth.updateUser`
+  (password, metadata) or enroll MFA on the shared account. That's griefing, not
+  data access: RLS still blocks every table, and the next seed run refreshes the
+  data. Per-visitor ephemeral demo users would remove this but add account churn
+  and cleanup. Revisit if abused. Production should keep "Secure email change"
+  enabled in Supabase Auth (a manual check).
+- Re-seeding upserts and never deletes. If a future generator drops or re-ids rows,
+  delete the demo account's rows that are no longer in the dataset at that point.
+- Rate limiting on `startDemoSession` is handled by the Phase 11 rate-limit work.

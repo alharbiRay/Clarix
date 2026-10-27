@@ -2,10 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
-}
-
 @layer utilities {
   .text-balance {
     text-wrap: balance;
@@ -88,5 +84,15 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
+  }
+  ::selection {
+    background: rgb(124 111 224 / 0.22); /* brand violet #7C6FE0 */
+    color: inherit;
+  }
+  /* Tabular figures wherever we show money or counts side by side. */
+  table,
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 }

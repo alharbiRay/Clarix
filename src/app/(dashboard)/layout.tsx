@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppTopbar } from "@/components/app-topbar";
+import { DemoBanner } from "@/components/demo/demo-banner";
 
 export default async function DashboardLayout({
   children,
@@ -17,7 +18,7 @@ export default async function DashboardLayout({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name")
+    .select("full_name, is_demo")
     .eq("id", user.id)
     .single();
 
@@ -25,6 +26,7 @@ export default async function DashboardLayout({
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <AppSidebar email={user.email!} fullName={profile?.full_name ?? null} />
       <div className="ml-60">
+        {profile?.is_demo && <DemoBanner />}
         <AppTopbar />
         <main className="p-8">{children}</main>
       </div>

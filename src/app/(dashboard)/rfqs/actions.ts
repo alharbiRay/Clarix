@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { requireWritableUser } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rfqSchema, type RfqFormValues } from "@/lib/validations/rfq";
 import { sendPoConfirmationEmail, sendRfqInvitationEmail } from "@/lib/email";
@@ -18,10 +19,9 @@ export async function createRfq(values: RfqFormValues) {
   }
 
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
+  const { user } = auth;
 
   const { title, project, description, currency, deadline, items, suppliers } =
     parsed.data;
@@ -92,10 +92,8 @@ export async function autofillRfqFromText(text: string) {
   }
 
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
 
   try {
     const result = await extractRfqFromText(trimmed);
@@ -113,10 +111,8 @@ export async function autofillRfqFromText(text: string) {
  */
 export async function sendRfq(rfqId: string) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
 
   const now = new Date().toISOString();
 
@@ -220,10 +216,8 @@ export async function sendRfq(rfqId: string) {
  */
 export async function approveAward(rfqId: string, overrideQuoteId?: string) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
 
   const { data: award } = await supabase
     .from("rfq_awards")

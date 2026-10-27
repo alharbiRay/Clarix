@@ -21,7 +21,7 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
   const { data: supplier } = await supabase
     .from("rfq_suppliers")
     .select(
-      "id, rfq_id, status, email, company_name, contact_name, rfqs(id, status, deadline, buyer_id)"
+      "id, rfq_id, status, email, company_name, contact_name, rfqs(id, status, deadline, buyer_id, is_demo)"
     )
     .eq("token", token)
     .single();
@@ -33,7 +33,14 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
     status: string;
     deadline: string | null;
     buyer_id: string;
+    is_demo?: boolean;
   };
+
+  // The demo workspace is shared and read-only — nobody gets to post quotes
+  // into it, even with a (seed-derived) token.
+  if (rfq.is_demo) {
+    return { error: "This is a demo RFQ and doesn't accept quotes." };
+  }
 
   if (rfq.status !== "sent" && rfq.status !== "draft") {
     return { error: "This RFQ is no longer accepting quotes." };
