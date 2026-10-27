@@ -74,3 +74,90 @@ directly.
 production. No migration, seed, or ad-hoc SQL is run against it. Migrations
 are verified only in PGlite. Applying them to production is listed as a
 manual step in the final summary.
+
+---
+
+# Phase 1: Middleware and durable jobs
+
+## D-007: Middleware fails open for public routes and closed for protected ones
+On an auth timeout or error, public routes continue. Protected routes redirect to
+`/login?reason=session_unavailable&next=…` and the login page explains why.
+Requests with **no** `sb-*-auth-token` cookie skip the Supabase call entirely,
+because there is nothing to refresh. That covers most bot and crawler traffic
+and every logged-out visitor. The timeout is enforced twice: an aborting `fetch`
+releases the socket, and `Promise.race` guarantees control comes back even if a
+library ignores the signal.
+
+## D-008: The job queue lives in Postgres and runs inline through `waitUntil`, with a cron sweep as backstop
+Options considered: (a) keep awaiting inline, (b) a third-party queue (Inngest,
+QStash; ruled out because paid services aren't allowed), (c) a DB table plus a
+cron sweep only, (d) a DB table plus an inline `waitUntil` run plus a cron sweep.
+Chose **(d)**. With (c) alone, Vercel Hobby crons run at most once a day, so
+buyers could wait up to 24 hours for a recommendation. With (d), the job is
+recorded before the response is sent (durable) and starts immediately in the
+background (fast). A daily Vercel cron and a free GitHub Actions schedule (every
+15 minutes) pick up anything an instance didn't finish. `claim_jobs` uses
+`for update skip locked`, so the inline run and the sweep never collide.
+
+## D-009: Dedupe only *pending* jobs
+`jobs_pending_dedupe_key` is a partial unique index on `status = 'pending'`. If a
+second quote arrives while the first job is *running* (and has already read the
+supplier statuses), a fresh pending job must be allowed, or the "last supplier
+replied" trigger would be lost. The handler's idempotency makes the extra run
+harmless.
+
+## D-010: The auto flow still doesn't run after a manual recommendation
+The original code skipped auto-generation if *any* recommendation existed. That
+contract is preserved: a buyer who generated a recommendation by hand has taken
+the RFQ over, and auto-approval must not send a PO behind their back. Only
+`auto_generated = true` rows count toward the new uniqueness guarantee.
+
+## D-011: Buyer actions no longer wait for the recommendation
+Manual entry, PDF upload, and quote confirmation used to block (up to 60 s) on
+Gemini plus auto-approval. They now return as soon as the quote is saved. The
+compare page shows "Preparing the AI recommendation…", or "delayed, retrying at
+HH:MM" after a quota error, and the buyer gets the usual notification when it
+lands. The supplier form benefits most: suppliers no longer wait on Gemini.
+
+## D-012: Any Gemini 429 is a "quota" retry; the buyer hears about it once
+Every `RESOURCE_EXHAUSTED` is backed off at least an hour (exponential up to
+6 hours, max 5 attempts). The buyer gets one "delayed, will retry automatically"
+notification on the first quota failure, and an "act manually" notification if
+the job gives up. Transient errors retry quietly.
+
+## D-013: The shadcn token color bug (R7) is fixed in Phase 2, not here
+The live check showed the default `Button` renders with a transparent background
+(`tailwind.config.ts` wraps the `oklch(...)` variables in `hsl()`). It's a
+visible production bug, but it's unrelated to the 504 work. Phase 2 reworks the
+login page anyway, so the fix lands there, where it can be verified visually.
+
+## D-014: Migration 0007 must be applied before the Phase 1 code is deployed
+The new code calls `enqueue_job`/`claim_jobs` and writes
+`ai_recommendations.auto_generated`. If the deploy goes first, scheduling fails
+(logged, and the quote save still succeeds) and recommendations stop until the
+migration is applied. This is listed as a manual step in the PR and the final summary.
+
+## D-015: Code review of Phase 1, and what changed as a result
+An independent review (`requesting-code-review`) returned "ready with fixes".
+Changes made, each with a test written first:
+- Stale jobs past `max_attempts` now give up (the buyer is notified) instead of
+  being reclaimed forever. Gemini calls have a 45 s request timeout.
+- The sweep leases **one job at a time** within a 40 s budget, so unstarted jobs
+  aren't stranded or charged attempts they never ran.
+- Webhook: a DB error during the token lookup returns 500 so Resend retries.
+  The RFQ deadline is checked against the email's arrival time
+  (`payload.receivedAt`), not the retry time.
+- Middleware: auth-js *returns* `AuthRetryableFetchError` and 5xx responses
+  rather than throwing them. Both now count as "unavailable", so users see the
+  timeout explanation instead of a silent logout. Refreshed cookies carry over
+  onto redirects.
+- `safeNextPath` resolves against a fixed origin and rejects control
+  characters and backslashes. This closes an open redirect via `/%09/evil.com`.
+- Smaller fixes: the recommendation chain also runs on `already_processed`;
+  failure notices use a non-approvable `action_required` type; a profile load
+  failure throws instead of recording "auto-approval off"; `enqueue_job`
+  retries if its duplicate is claimed mid-call; buyers can read only the job
+  status columns; the `/demo` and `/pricing` placeholders were removed from the
+  public routes until those routes exist.
+- Noted but not changed: GitHub disables scheduled workflows in repos with no
+  activity for 60 days. The daily Vercel cron remains the backstop (see PROGRESS).

@@ -1,33 +1,45 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getResendClient } from "@/lib/resend";
-import { createQuoteFromPdf } from "@/lib/quote-intake";
-import { maybeAutoGenerateRecommendation } from "@/lib/auto-recommendation";
-import type { RfqItem } from "@/lib/types";
+import { scheduleJob } from "@/lib/jobs/schedule";
+import { JOB_TYPES } from "@/lib/jobs/enqueue";
 
-// Gemini extraction can take a few seconds — give the function room.
 export const runtime = "nodejs";
+// The extraction itself runs in the background job started below (via
+// waitUntil); this budget covers it when it runs inline on this instance.
 export const maxDuration = 60;
 
 const INBOUND_TOKEN_RE = /^quotes\+([a-f0-9]+)@/i;
 
+function receivedAt(event: unknown): string {
+  const e = event as { created_at?: unknown; data?: { created_at?: unknown } };
+  const candidate = e.data?.created_at ?? e.created_at;
+  return typeof candidate === "string" && !Number.isNaN(Date.parse(candidate))
+    ? new Date(candidate).toISOString()
+    : new Date().toISOString();
+}
+
 /**
  * Resend inbound webhook — fires when a supplier replies to their invitation
- * email with a PDF quote attached. Verifies the request, matches the unique
- * per-supplier token embedded in the recipient address, downloads any PDF
- * attachment, and runs it through the same extraction pipeline the buyer's
- * manual PDF upload uses (src/lib/quote-intake.ts).
+ * email with a PDF quote attached.
+ *
+ * Only the fast, cheap work happens in the request: verify the svix
+ * signature, match the per-supplier token in the recipient address, and
+ * record an `inbound_email_quote` job. The slow part (attachment download +
+ * Gemini extraction, src/lib/inbound-email.ts) runs as that job, with
+ * retries and quota backoff, so a Gemini outage no longer loses the quote.
+ * The job's dedupe key and the source_email_id check make webhook retries
+ * harmless. If the job can't be recorded we return 500 so Resend retries.
  */
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
 
   let event;
   try {
-    const resend = getResendClient();
     const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
     if (!webhookSecret) throw new Error("RESEND_WEBHOOK_SECRET is not set");
 
-    event = resend.webhooks.verify({
+    event = getResendClient().webhooks.verify({
       payload: rawBody,
       headers: {
         id: request.headers.get("svix-id") ?? "",
@@ -47,123 +59,42 @@ export async function POST(request: NextRequest) {
 
   const data = event.data;
   const matchedTo = data.to.find((addr) => INBOUND_TOKEN_RE.test(addr));
-  const token = matchedTo?.match(INBOUND_TOKEN_RE)?.[1];
+  const token = matchedTo?.match(INBOUND_TOKEN_RE)?.[1]?.toLowerCase();
   if (!token) {
     return NextResponse.json({ ok: true }); // not addressed to one of our tokens
   }
 
   const supabase = createAdminClient();
-
-  const { data: supplier } = await supabase
+  const { data: supplier, error: lookupError } = await supabase
     .from("rfq_suppliers")
-    .select(
-      "id, rfq_id, email, company_name, contact_name, rfqs(status, deadline, currency, title, buyer_id, rfq_items(*))"
-    )
+    .select("id, rfq_id, rfqs(buyer_id)")
     .eq("token", token)
-    .single();
+    .maybeSingle();
+  if (lookupError) {
+    // A transient DB error must not look like "unknown token" — answer 500
+    // so Resend retries the delivery instead of the quote being dropped.
+    console.error(JSON.stringify({ event: "webhook.token_lookup_failed", error: lookupError.message }));
+    return NextResponse.json({ error: "Temporary failure" }, { status: 500 });
+  }
   if (!supplier) {
     return NextResponse.json({ ok: true }); // unknown token, nothing to do
   }
+  const buyerId = (supplier.rfqs as unknown as { buyer_id: string }).buyer_id;
 
-  const rfq = supplier.rfqs as unknown as {
-    status: string;
-    deadline: string | null;
-    currency: string;
-    title: string;
-    buyer_id: string;
-    rfq_items: RfqItem[];
-  };
-
-  if (rfq.status !== "sent" && rfq.status !== "draft") {
-    return NextResponse.json({ ok: true }); // no longer accepting quotes
-  }
-  if (rfq.deadline && new Date(rfq.deadline).getTime() < Date.now()) {
-    return NextResponse.json({ ok: true }); // deadline passed
-  }
-
-  const { data: existingByEmail } = await supabase
-    .from("quotes")
-    .select("id")
-    .eq("source_email_id", data.email_id)
-    .maybeSingle();
-  if (existingByEmail) {
-    return NextResponse.json({ ok: true }); // already processed (webhook retry)
-  }
-
-  const { data: existingForSupplier } = await supabase
-    .from("quotes")
-    .select("id")
-    .eq("supplier_id", supplier.id)
-    .neq("status", "rejected")
-    .maybeSingle();
-  if (existingForSupplier) {
-    return NextResponse.json({ ok: true }); // supplier already has a quote on record
-  }
-
-  const resend = getResendClient();
-  const { data: attachmentList, error: attachmentListError } =
-    await resend.emails.receiving.attachments.list({ emailId: data.email_id });
-  if (attachmentListError) {
-    console.error("Failed to list inbound attachments:", attachmentListError);
-    return NextResponse.json({ error: attachmentListError.message }, { status: 502 });
-  }
-
-  const pdfAttachment = attachmentList?.data.find(
-    (a) => a.content_type === "application/pdf"
-  );
-  if (!pdfAttachment) {
-    return NextResponse.json({ ok: true }); // reply had no PDF — nothing to extract
-  }
-
-  const pdfResponse = await fetch(pdfAttachment.download_url);
-  if (!pdfResponse.ok) {
-    return NextResponse.json({ error: "Failed to download attachment" }, { status: 502 });
-  }
-  const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
-
-  const result = await createQuoteFromPdf({
-    supabase,
+  const jobId = await scheduleJob({
+    type: JOB_TYPES.inboundEmailQuote,
+    buyerId,
     rfqId: supplier.rfq_id,
-    buyerId: rfq.buyer_id,
-    supplier: {
-      id: supplier.id,
-      email: supplier.email,
-      company_name: supplier.company_name,
-      contact_name: supplier.contact_name,
-    },
-    currency: rfq.currency,
-    items: rfq.rfq_items,
-    pdfBuffer,
-    source: "email",
-    sourceEmailId: data.email_id,
+    // receivedAt: the RFQ deadline is judged against arrival time, not
+    // against whenever a (possibly quota-delayed) retry happens to run.
+    payload: { emailId: data.email_id, rfqSupplierId: supplier.id, receivedAt: receivedAt(event) },
+    dedupeKey: `inbound_email:${data.email_id}`,
+    maxAttempts: 3,
   });
-
-  if (result.error) {
-    console.error("Failed to create quote from inbound email:", result.error);
-    const message = result.quotaExceeded
-      ? `A supplier's emailed quote for ${rfq.title} couldn't be processed — the Gemini API quota/rate limit was hit. Ask them to resend, or enter it manually.`
-      : `A supplier's emailed quote for ${rfq.title} couldn't be processed automatically: ${result.error}`;
-    await supabase.from("notifications").insert({
-      buyer_id: rfq.buyer_id,
-      rfq_id: supplier.rfq_id,
-      type: "review_needed",
-      message,
-    });
-    return NextResponse.json({ error: result.error }, { status: 500 });
+  if (!jobId) {
+    return NextResponse.json({ error: "Could not record the quote for processing" }, { status: 500 });
   }
 
-  // Extraction is auto-confirmed (src/lib/quote-intake.ts) — no per-quote
-  // "please review" email. The buyer hears from us once, at the end, via
-  // maybeAutoGenerateRecommendation's auto-approval evaluation.
-  //
-  // Must be awaited: this route already declares maxDuration=60 to give it
-  // room, but an un-awaited call here would race the NextResponse below and
-  // could be torn down before the Gemini call and auto-approval evaluation
-  // finish.
-  console.log(`[webhook] rfq=${supplier.rfq_id} quote=${result.quoteId} confirmed from inbound email — awaiting maybeAutoGenerateRecommendation`);
-  await maybeAutoGenerateRecommendation(supplier.rfq_id).catch((e) =>
-    console.error(`[webhook] rfq=${supplier.rfq_id} auto-recommendation failed:`, e)
-  );
-
-  return NextResponse.json({ ok: true, quoteId: result.quoteId });
+  console.log(JSON.stringify({ event: "webhook.inbound_email_enqueued", rfqId: supplier.rfq_id, jobId }));
+  return NextResponse.json({ ok: true, jobId });
 }
