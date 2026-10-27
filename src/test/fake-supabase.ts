@@ -12,6 +12,8 @@ type Row = Record<string, unknown>;
 type Filter = (row: Row) => boolean;
 
 export interface FakeTableOptions {
+  /** Like PostgREST's max-rows: cap on rows returned per request. */
+  maxRows?: number;
   /** Column sets that must be unique, e.g. [["rfq_id"]]. */
   unique?: string[][];
   /** Optional partial-unique predicate: only rows matching it count toward uniqueness. */
@@ -38,6 +40,8 @@ class QueryBuilder implements PromiseLike<{ data: unknown; error: unknown }> {
   private singleMode: "single" | "maybeSingle" | null = null;
   private orderBy: { col: string; asc: boolean } | null = null;
   private limitN: number | null = null;
+  private rangeFrom: number | null = null;
+  private rangeTo: number | null = null;
   private upsertConflict: string[] | null = null;
 
   constructor(
@@ -103,6 +107,11 @@ class QueryBuilder implements PromiseLike<{ data: unknown; error: unknown }> {
     this.limitN = n;
     return this;
   }
+  range(from: number, to: number) {
+    this.rangeFrom = from;
+    this.rangeTo = to;
+    return this;
+  }
   single() {
     this.singleMode = "single";
     return this;
@@ -135,7 +144,9 @@ class QueryBuilder implements PromiseLike<{ data: unknown; error: unknown }> {
       const { col, asc } = this.orderBy;
       out = [...out].sort((a, b) => (String(a[col]) < String(b[col]) ? -1 : 1) * (asc ? 1 : -1));
     }
+    if (this.rangeFrom !== null) out = out.slice(this.rangeFrom, (this.rangeTo ?? out.length - 1) + 1);
     if (this.limitN !== null) out = out.slice(0, this.limitN);
+    if (this.options.maxRows !== undefined) out = out.slice(0, this.options.maxRows);
     if (this.singleMode) {
       if (out.length === 0) {
         return this.singleMode === "single"
