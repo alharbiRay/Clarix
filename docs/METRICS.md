@@ -107,3 +107,25 @@ half the quotes or fewer is a weakness. The trend recomputes the score from what
 the end of each of the last six months.
 
 **Last active** is the supplier's own last quote, or the last invitation if they never quoted.
+
+## Price history and alerts
+
+Price history is derived, not stored. Every comparable quote line becomes a point
+(normalized item key, unit, currency, supplier, unit price, time). The unit price is the quoted
+`unit_price`, or the line total ÷ quantity when only a total was given.
+
+**Item matching** (`src/lib/pricing/normalize.ts`) is deterministic. It normalizes case,
+whitespace, punctuation, and Arabic script (diacritics, tatweel, alef/yaa/taa-marbuta variants,
+Arabic-Indic digits). It turns sizes into tokens ("50 كجم" → `50kg`, "40×30×30" → `40x30x30`), ignores
+word order and filler words, and maps common procurement terms between Arabic and English
+through a small glossary ("حديد تسليح" ↔ "rebar"). Units are normalized too ("كيس" → bag), and prices are only
+compared within the same item, unit, and currency.
+
+| Badge | Definition |
+| --- | --- |
+| vs their last | change from this supplier's most recent earlier price for the same item, on a different RFQ |
+| vs market | change from the average of all suppliers' prices for the item over the previous 180 days, excluding this RFQ. Needs at least 2 points. |
+
+A change at or above the buyer's **price alert threshold** (Settings, default 10%) is highlighted:
+amber when the price went up, green when it went down. The compare page uses the last 365 days
+of quotes.

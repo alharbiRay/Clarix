@@ -14,10 +14,10 @@ export interface MetricsRfq {
   title: string;
   currency: string;
   created_at: string;
-  /** RFQ status and deadline — the scorecard ignores invitations still open. */
   status?: "draft" | "sent" | "closed" | "awarded";
   deadline?: string | null;
-  items: { id: string; name: string; quantity: number }[];
+  /** unit: the RFQ line's unit of measure (used by price history). */
+  items: { id: string; name: string; quantity: number; unit?: string }[];
   invites: {
     id: string;
     label: string;
@@ -33,7 +33,8 @@ export interface MetricsRfq {
     invite_id: string;
     status: QuoteStatusValue;
     submitted_at: string;
-    lines: { item_id: string; total: number | null }[];
+    /** unit: the quoted unit price, when stored (price history falls back to total ÷ quantity). */
+    lines: { item_id: string; total: number | null; unit?: number | null }[];
     /** Promised delivery (days) and warranty text — used by the supplier scorecard. */
     delivery_days?: number | null;
     warranty?: string | null;

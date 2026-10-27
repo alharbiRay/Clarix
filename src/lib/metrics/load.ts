@@ -1,15 +1,25 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AwardDecision, InviteStatus, MetricsRfq, QuoteStatusValue } from "@/lib/metrics";
 
+/**
+ * Just what price history needs (no awards, invite statuses, warranties) —
+ * the compare page loads a year of these on every view.
+ */
+export const PRICE_HISTORY_SELECT =
+  "id, title, currency, created_at, " +
+  "rfq_items(id, name, quantity, unit), " +
+  "rfq_suppliers(id, company_name, email, supplier_id), " +
+  "quotes(id, supplier_id, status, submitted_at, quote_items(rfq_item_id, unit_price, total_price))";
+
 /** Rows per request — at or below PostgREST's max-rows so paging is exact. */
 export const METRICS_PAGE_SIZE = 1000;
 
 /** Columns the metrics need — nothing more (no notes, PDFs or extraction payloads). */
 export const METRICS_SELECT =
   "id, title, currency, created_at, status, deadline, " +
-  "rfq_items(id, name, quantity), " +
+  "rfq_items(id, name, quantity, unit), " +
   "rfq_suppliers(id, company_name, email, supplier_id, status, invited_at), " +
-  "quotes(id, supplier_id, status, submitted_at, delivery_days, warranty, quote_items(rfq_item_id, total_price)), " +
+  "quotes(id, supplier_id, status, submitted_at, delivery_days, warranty, quote_items(rfq_item_id, unit_price, total_price)), " +
   "rfq_awards(decision, recommended_quote_id, po_sent_at, created_at, reason)";
 
 interface AwardRow {
@@ -27,7 +37,7 @@ export interface MetricsRow {
   created_at: string;
   status?: "draft" | "sent" | "closed" | "awarded";
   deadline?: string | null;
-  rfq_items: { id: string; name: string; quantity: number | string }[];
+  rfq_items: { id: string; name: string; quantity: number | string; unit?: string }[];
   rfq_suppliers: {
     id: string;
     company_name: string | null;
@@ -43,14 +53,14 @@ export interface MetricsRow {
     submitted_at: string;
     delivery_days?: number | null;
     warranty?: string | null;
-    quote_items: { rfq_item_id: string; total_price: number | string | null }[];
+    quote_items: { rfq_item_id: string; unit_price?: number | string | null; total_price: number | string | null }[];
   }[];
-  rfq_awards: AwardRow | AwardRow[] | null;
+  rfq_awards?: AwardRow | AwardRow[] | null;
 }
 
 export function toMetricsRfq(row: MetricsRow): MetricsRfq {
   // rfq_awards is keyed by rfq_id (1:1); PostgREST may embed it as an object or an array.
-  const award = Array.isArray(row.rfq_awards) ? (row.rfq_awards[0] ?? null) : row.rfq_awards;
+  const award = Array.isArray(row.rfq_awards) ? (row.rfq_awards[0] ?? null) : (row.rfq_awards ?? null);
   return {
     id: row.id,
     title: row.title,
@@ -58,7 +68,7 @@ export function toMetricsRfq(row: MetricsRow): MetricsRfq {
     created_at: row.created_at,
     status: row.status,
     deadline: row.deadline ?? null,
-    items: row.rfq_items.map((i) => ({ id: i.id, name: i.name, quantity: Number(i.quantity) })),
+    items: row.rfq_items.map((i) => ({ id: i.id, name: i.name, quantity: Number(i.quantity), unit: i.unit })),
     invites: row.rfq_suppliers.map((s) => ({
       id: s.id,
       label: s.company_name || s.email,
@@ -77,6 +87,7 @@ export function toMetricsRfq(row: MetricsRow): MetricsRfq {
       lines: q.quote_items.map((qi) => ({
         item_id: qi.rfq_item_id,
         total: qi.total_price === null ? null : Number(qi.total_price),
+        unit: qi.unit_price === null || qi.unit_price === undefined ? null : Number(qi.unit_price),
       })),
     })),
     award: award
@@ -98,14 +109,14 @@ export function toMetricsRfq(row: MetricsRow): MetricsRfq {
 export async function loadMetricsRfqs(
   supabase: SupabaseClient,
   buyerId: string,
-  opts: { rfqIds?: string[] } = {}
+  opts: { rfqIds?: string[]; since?: string; select?: string } = {}
 ): Promise<MetricsRfq[]> {
   if (opts.rfqIds) {
     // Targeted load (compare page, supplier detail): only the RFQs asked for.
     const rows: MetricsRow[] = [];
     for (let i = 0; i < opts.rfqIds.length; i += ID_CHUNK) {
       const ids = opts.rfqIds.slice(i, i + ID_CHUNK);
-      const { data, error } = await supabase.from("rfqs").select(METRICS_SELECT).eq("buyer_id", buyerId).in("id", ids);
+      const { data, error } = await supabase.from("rfqs").select(opts.select ?? METRICS_SELECT).eq("buyer_id", buyerId).in("id", ids);
       if (error) throw new Error(`Failed to load metrics data: ${error.message}`);
       rows.push(...((data ?? []) as unknown as MetricsRow[]));
     }
@@ -116,10 +127,9 @@ export async function loadMetricsRfqs(
   // explicitly so all-time figures never silently drop older RFQs.
   const rows: MetricsRow[] = [];
   for (let from = 0; ; from += METRICS_PAGE_SIZE) {
-    const { data, error } = await supabase
-      .from("rfqs")
-      .select(METRICS_SELECT)
-      .eq("buyer_id", buyerId)
+    let query = supabase.from("rfqs").select(opts.select ?? METRICS_SELECT).eq("buyer_id", buyerId);
+    if (opts.since) query = query.gte("created_at", opts.since);
+    const { data, error } = await query
       .order("created_at", { ascending: false })
       .order("id", { ascending: true })
       .range(from, from + METRICS_PAGE_SIZE - 1);

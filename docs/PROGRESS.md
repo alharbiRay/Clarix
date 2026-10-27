@@ -10,7 +10,7 @@ targets the previous phase's branch.
 | 2. Demo data + demo mode | done | `feat/phase-02-demo` | see PR list | tsc, lint, tests, build, visual check of /login and /demo (desktop and mobile) |
 | 3. Savings dashboard | done | `feat/phase-03-savings-dashboard` | see PR list | tsc, lint, 246 tests, build, visual check (desktop, mobile, empty) |
 | 4. Supplier scorecard | done | `feat/phase-04-supplier-scorecard` | see PR list | tsc, lint, 288 tests, build, visual check of the scorecard components |
-| 5. Price history + alerts | pending | | | |
+| 5. Price history + alerts | done | `feat/phase-05-price-history` | see PR list | tsc, lint, tests, build, preview check of the badges and popover with demo data |
 | 6. Decision audit log | pending | | | |
 | 7. Configurable approval rules | pending | | | |
 | 8. Negotiation assistant | pending | | | |
@@ -20,7 +20,7 @@ targets the previous phase's branch.
 | 12. Landing + pricing | pending | | | |
 
 ## Manual steps accumulated so far
-1. Apply migrations `0007` and `0008` to production, in order, **before** deploying the matching code.
+1. Apply migrations `0007` → `0010` to production, in order, **before** deploying the matching code.
 2. Vercel env: `CRON_SECRET`; optionally `DEMO_ACCOUNT_EMAIL`.
 3. GitHub Actions: variable `APP_URL` and secret `CRON_SECRET` (the 15-minute job sweep).
    GitHub pauses scheduled workflows after 60 days with no repo activity; the daily Vercel cron stays as the backstop.
