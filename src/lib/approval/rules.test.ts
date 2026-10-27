@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_POLICY,
+  decideApproval,
   evaluateApprovalRules,
   parsePolicy,
   type ApprovalPolicy,
   type CandidateQuote,
+  type DecisionQuote,
 } from "@/lib/approval/rules";
 
 const cheap: CandidateQuote = { quoteId: "q-cheap", supplier: "Al Rashid", total: 10_000, deliveryDays: 9, warranty: "12 months", supplierScore: 77 };
@@ -167,7 +169,7 @@ describe("parsePolicy", () => {
   });
 
   it("accepts a valid policy", () => {
-    const p = { enabled: true, maxDeliveryDays: 21, requireWarranty: false, spendLimit: 50_000, minSupplierScore: 60, requireCheapest: false };
+    const p = { enabled: true, maxDeliveryDays: 21, requireWarranty: false, spendLimit: 50_000, spendLimitCurrency: "SAR", minSupplierScore: 60, requireCheapest: false };
     expect(parsePolicy(p)).toEqual({ ok: true, policy: p });
   });
 
@@ -179,6 +181,93 @@ describe("parsePolicy", () => {
     [{ minSupplierScore: 101 }, /score/i],
   ])("rejects %j", (input, message) => {
     const r = parsePolicy(input);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(message);
+  });
+});
+
+describe("spend limit currency", () => {
+  it("a limit in another currency never auto-approves; a manager must decide", () => {
+    const r = run({ spendLimit: 1_000_000, spendLimitCurrency: "USD" });
+    expect(r).toMatchObject({ decision: "review_needed", rule: "above_spend_limit", requiresManager: true });
+    expect(r.reasons).toEqual(["the spend limit is set in USD but this RFQ is in SAR — a manager must approve"]);
+  });
+
+  it("a limit in the RFQ's currency works as before", () => {
+    expect(run({ spendLimit: 20_000, spendLimitCurrency: "SAR" }).decision).toBe("auto_approved");
+  });
+
+  it("an over-limit pricier pick names the spend limit and needs a manager", () => {
+    const r = run({ spendLimit: 11_000 }, pricey, cheap);
+    expect(r).toMatchObject({ decision: "differs_from_cheapest", rule: "above_spend_limit", requiresManager: true });
+    expect(r.reasons).toHaveLength(2);
+  });
+});
+
+describe("decideApproval", () => {
+  const q = (id: string, supplier: string, total: number | null, extra: Partial<DecisionQuote> = {}): DecisionQuote => ({
+    quoteId: id,
+    supplier,
+    total,
+    deliveryDays: 7,
+    warranty: "12 months",
+    supplierScore: null,
+    ...extra,
+  });
+  const quotes = [q("qa", "Al Rashid", 10_000), q("qb", "Gulf Office", 12_000), q("qc", "Partial Co", null)];
+  const decide = (policy: Partial<ApprovalPolicy>, pickLabel: string | null, list = quotes) =>
+    decideApproval({ policy: { ...DEFAULT_POLICY, ...policy }, pickLabel, quotes: list, currency: "SAR" });
+
+  it("approves the AI's cheapest complete pick", () => {
+    expect(decide({}, "Al Rashid")).toMatchObject({ decision: "auto_approved", recommendedQuoteId: "qa", cheapestQuoteId: "qa" });
+  });
+
+  it("never approves an incomplete pick — even when 'cheapest only' is off", () => {
+    const partial = [q("qa", "Al Rashid", 10_000), q("qc", "Partial Co", null)];
+    for (const requireCheapest of [true, false]) {
+      expect(decide({ requireCheapest }, "Partial Co", partial)).toMatchObject({
+        decision: "review_needed",
+        rule: "requirements_not_met",
+        recommendedQuoteId: "qc",
+        reason: expect.stringMatching(/hasn't priced every line/),
+      });
+    }
+  });
+
+  it("holds an unmatched pick without pretending the AI chose the cheapest", () => {
+    expect(decide({}, "Nobody")).toMatchObject({ decision: "review_needed", rule: "ai_pick_unmatched", recommendedQuoteId: null, cheapestQuoteId: "qa" });
+    expect(decide({}, null)).toMatchObject({ rule: "ai_pick_unmatched", reason: expect.stringMatching(/didn't name a top supplier/) });
+  });
+
+  it("has nothing to decide until a quote is complete", () => {
+    expect(decide({}, "Partial Co", [q("qc", "Partial Co", null)])).toMatchObject({ decision: null, reason: expect.stringMatching(/every line/) });
+  });
+
+  it("switched off, it holds everything and records no picks", () => {
+    expect(decide({ enabled: false }, "Al Rashid")).toMatchObject({ rule: "auto_approval_disabled", recommendedQuoteId: null });
+  });
+
+  it("a failed score lookup reads as such, not as 'no score yet'", () => {
+    const r = decide({ minSupplierScore: 50 }, "Al Rashid", [q("qa", "Al Rashid", 10_000, { scoreUnavailable: true })]);
+    expect(r.reasons).toEqual(["the supplier score couldn't be checked right now"]);
+  });
+});
+
+describe("parsePolicy (strict, for saving)", () => {
+  const full: ApprovalPolicy = { ...DEFAULT_POLICY, spendLimit: 50_000, spendLimitCurrency: "SAR" };
+  it("accepts a complete policy", () => {
+    expect(parsePolicy(full, { strict: true })).toEqual({ ok: true, policy: full });
+  });
+  it.each([
+    [{}, /required/i],
+    [{ ...full, spendLimit: Number.NaN }, /number/],
+    [{ ...full, spendLimit: Number.POSITIVE_INFINITY }, /too large/],
+    [{ ...full, spendLimit: "50" }, /number/],
+    [{ ...full, spendLimit: 1e12 }, /too large/],
+    [{ ...full, spendLimitCurrency: null }, /currency/],
+    [{ ...full, extra: 1 }, /unrecognized/i],
+  ])("rejects %j", (input, message) => {
+    const r = parsePolicy(input, { strict: true });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(message);
   });

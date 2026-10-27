@@ -1,17 +1,18 @@
 /**
- * "What would this policy have done?" — replays past RFQs through the same
- * rule engine auto-approval uses (rules.ts), so the settings preview can't
- * drift from real behaviour. Pure: the settings page loads the history and
- * passes the cases to the client, which re-runs previewPolicy on every edit.
+ * "What would this policy have done?" — replays past RFQs through
+ * decideApproval, the exact function auto-approval uses (D-046), so the
+ * settings preview can't drift from real behaviour. Pure: the settings page
+ * loads the history; the client re-runs previewPolicy on every edit.
  */
 import { completeTotal, type MetricsRfq } from "@/lib/metrics";
-import { evaluateApprovalRules, type ApprovalPolicy, type ApprovalRule, type CandidateQuote } from "@/lib/approval/rules";
+import { decideApproval, type ApprovalPolicy, type ApprovalRule, type DecisionQuote } from "@/lib/approval/rules";
 
 export interface PreviewCase {
   rfqId: string;
   currency: string;
-  recommended: CandidateQuote | null;
-  cheapest: CandidateQuote | null;
+  /** The AI's rank-1 supplier label from the RFQ's latest automatic recommendation. */
+  pickLabel: string | null;
+  quotes: DecisionQuote[];
 }
 
 export interface PolicyPreview {
@@ -22,39 +23,34 @@ export interface PolicyPreview {
 }
 
 /**
- * @param picks  RFQ id → the AI recommendation's rank-1 supplier label.
+ * @param picks  RFQ id → rank-1 label of its latest *automatic* recommendation
+ *               (auto-approval only ever runs after those). RFQs without one are skipped.
  * @param scores supplier profile id → current score (absent = no score yet).
  */
 export function buildPreviewCases(
   rfqs: MetricsRfq[],
-  picks: Map<string, string>,
+  picks: Map<string, string | null>,
   scores: Map<string, number>
 ): PreviewCase[] {
   const cases: PreviewCase[] = [];
   for (const rfq of rfqs) {
-    const pick = picks.get(rfq.id);
-    if (!pick) continue;
+    if (!picks.has(rfq.id)) continue;
     const invites = new Map(rfq.invites.map((i) => [i.id, i]));
-    const candidates: CandidateQuote[] = [];
+    const quotes: DecisionQuote[] = [];
     for (const q of rfq.quotes) {
       if (q.status !== "submitted" && q.status !== "confirmed") continue;
-      const total = completeTotal(rfq, q);
       const invite = invites.get(q.invite_id);
-      if (total === null || !invite) continue;
-      candidates.push({
+      if (!invite) continue;
+      quotes.push({
         quoteId: q.id,
         supplier: invite.label,
-        total,
+        total: completeTotal(rfq, q),
         deliveryDays: q.delivery_days ?? null,
         warranty: q.warranty ?? null,
         supplierScore: invite.supplier_id ? (scores.get(invite.supplier_id) ?? null) : null,
       });
     }
-    if (candidates.length === 0) continue;
-    const cheapest = candidates.reduce((a, b) => (b.total < a.total ? b : a));
-    // Same fallback as auto-approval: an unmatched pick is judged on the cheapest.
-    const recommended = candidates.find((c) => c.supplier === pick) ?? cheapest;
-    cases.push({ rfqId: rfq.id, currency: rfq.currency, recommended, cheapest });
+    cases.push({ rfqId: rfq.id, currency: rfq.currency, pickLabel: picks.get(rfq.id) ?? null, quotes });
   }
   return cases;
 }
@@ -62,7 +58,7 @@ export function buildPreviewCases(
 export function previewPolicy(policy: ApprovalPolicy, cases: PreviewCase[]): PolicyPreview {
   const out: PolicyPreview = { total: 0, autoApproved: 0, byRule: {} };
   for (const c of cases) {
-    const r = evaluateApprovalRules({ policy, recommended: c.recommended, cheapest: c.cheapest, currency: c.currency });
+    const r = decideApproval({ policy, pickLabel: c.pickLabel, quotes: c.quotes, currency: c.currency });
     if (!r.decision) continue;
     out.total += 1;
     if (r.decision === "auto_approved") out.autoApproved += 1;

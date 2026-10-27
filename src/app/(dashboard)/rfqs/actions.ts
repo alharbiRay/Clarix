@@ -12,7 +12,7 @@ import { inboundAddressForToken } from "@/lib/resend";
 import { extractRfqFromText } from "@/lib/gemini";
 import { computeQuoteTotal } from "@/lib/quote-comparison";
 import { loadApprovalPolicy } from "@/lib/approval/policy";
-import { formatMoney } from "@/lib/format";
+import { spendLimitProblem } from "@/lib/approval/rules";
 import type { Quote, QuoteItem, RfqItem, RfqSupplier } from "@/lib/types";
 
 export async function createRfq(values: RfqFormValues) {
@@ -285,24 +285,25 @@ export async function approveAward(rfqId: string, overrideQuoteId?: string, over
   if (!supplier) return { error: "Supplier not found" };
 
   const items = rfq.rfq_items as RfqItem[];
-  const total = computeQuoteTotal(
+  const { total, missingCount } = computeQuoteTotal(
     items,
     quote as Quote & { quote_items: QuoteItem[] }
-  ).total;
+  );
   const label = supplier.company_name || supplier.email;
 
   // Above the policy's spend limit only a manager may approve (enforced here,
-  // not just hidden in the UI).
+  // not just hidden in the UI). The limit applies to manual approvals too,
+  // even with auto-approval switched off. A partly priced quote, or a limit
+  // in another currency, can't be checked, so it also needs a manager.
   let aboveSpendLimit = false;
   try {
     const policy = await loadApprovalPolicy(supabase, rfq.buyer_id);
-    aboveSpendLimit = policy.spendLimit !== null && total !== null && total > policy.spendLimit;
+    const problem = spendLimitProblem(policy, missingCount === 0 ? total : null, rfq.currency);
+    aboveSpendLimit = problem !== null;
     if (aboveSpendLimit) {
       const { data: me } = await supabase.from("profiles").select("role").eq("id", auth.user.id).maybeSingle();
       if (me?.role !== "manager") {
-        return {
-          error: `This order is above the ${formatMoney(policy.spendLimit!, rfq.currency)} approval limit — a manager must approve it.`,
-        };
+        return { error: `A manager must approve this order: ${problem!.replace(/ — a manager must approve$/, "")}.` };
       }
     }
   } catch (e) {

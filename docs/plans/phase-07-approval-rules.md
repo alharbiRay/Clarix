@@ -16,3 +16,6 @@
    engine (`src/lib/approval/preview.ts`). It shows "N of M would have been approved automatically" and why the rest
    would be held. The old on/off action now updates the policy and keeps the legacy flag in step.
 6. The demo trail uses the new rule names and explanation format.
+7. Review fixes (D-051): decideApproval is shared by the live path and the preview; incomplete or unmatched picks
+   are held; migration 0014 adds the spend-limit currency and manager-only policy writes; the form is hardened
+   (an immediate kill switch, tolerant number parsing, an error state instead of defaults).

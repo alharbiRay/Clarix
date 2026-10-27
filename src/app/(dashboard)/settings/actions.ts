@@ -12,11 +12,15 @@ import { loadApprovalPolicy, policyToRow } from "@/lib/approval/policy";
  * profiles.auto_approval_enabled is kept in step for older code paths.
  */
 export async function saveApprovalPolicy(input: unknown) {
-  const parsed = parsePolicy(input);
+  // Strict: every field required, so a partial payload can't reset the rest.
+  const parsed = parsePolicy(input, { strict: true });
   if (!parsed.ok) return { error: parsed.error };
   const supabase = createClient();
   const auth = await requireWritableUser(supabase);
   if ("error" in auth) return { error: auth.error };
+  // Also enforced by RLS (migration 0014); checked here for a clear message.
+  const { data: me } = await supabase.from("profiles").select("role").eq("id", auth.user.id).maybeSingle();
+  if (me?.role !== "manager") return { error: "Only a manager can change the approval rules." };
 
   const { error } = await supabase
     .from("approval_policies")

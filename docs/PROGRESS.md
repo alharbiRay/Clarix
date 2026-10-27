@@ -20,7 +20,7 @@ One branch and PR per phase, merged into `master` in order (merge commits, no sq
 | 12. Landing + pricing | pending | | | |
 
 ## Production state
-- Supabase project restored and active. Migrations 0007 to 0013 are applied, in order.
+- Supabase project restored and active. Migrations 0007 to 0014 are applied, in order.
 - The demo is seeded (25 RFQs and a full decision trail). "Explore the live demo" works on production.
 - Vercel production tracks `master`.
 

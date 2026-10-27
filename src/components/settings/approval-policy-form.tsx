@@ -2,14 +2,13 @@
 
 import { useId, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { saveApprovalPolicy } from "@/app/(dashboard)/settings/actions";
+import { saveApprovalPolicy, updateAutoApprovalSetting } from "@/app/(dashboard)/settings/actions";
 import { Button } from "@/components/ui/button";
-import { parsePolicy, type ApprovalPolicy, type ApprovalRule } from "@/lib/approval/rules";
+import { MAX_SPEND_LIMIT, parsePolicy, type ApprovalPolicy, type ApprovalRule } from "@/lib/approval/rules";
 import { previewPolicy, type PreviewCase } from "@/lib/approval/preview";
 import { cn } from "@/lib/utils";
 
 interface Draft {
-  enabled: boolean;
   maxDeliveryDays: string;
   requireWarranty: boolean;
   requireCheapest: boolean;
@@ -18,7 +17,6 @@ interface Draft {
 }
 
 const toDraft = (p: ApprovalPolicy): Draft => ({
-  enabled: p.enabled,
   maxDeliveryDays: String(p.maxDeliveryDays),
   requireWarranty: p.requireWarranty,
   requireCheapest: p.requireCheapest,
@@ -26,23 +24,27 @@ const toDraft = (p: ApprovalPolicy): Draft => ({
   minSupplierScore: p.minSupplierScore === null ? "" : String(p.minSupplierScore),
 });
 
-const numberOrNull = (s: string) => (s.trim() === "" ? null : Number(s));
-
-function fromDraft(d: Draft) {
-  return parsePolicy({
-    enabled: d.enabled,
-    maxDeliveryDays: Number(d.maxDeliveryDays),
-    requireWarranty: d.requireWarranty,
-    requireCheapest: d.requireCheapest,
-    spendLimit: numberOrNull(d.spendLimit),
-    minSupplierScore: numberOrNull(d.minSupplierScore),
-  });
+/**
+ * Reads what people actually type: Arabic-Indic digits, thousands separators
+ * and spaces. Empty means "not set" (null); anything unreadable is NaN, so it
+ * shows an error instead of quietly becoming "no limit".
+ */
+export function parseNumberInput(raw: string): number | null {
+  const s = raw
+    .trim()
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/٫/g, ".")
+    .replace(/[,٬\s]/g, "");
+  if (s === "") return null;
+  return /^\d+(\.\d+)?$/.test(s) ? Number(s) : Number.NaN;
 }
 
 const HELD_LABEL: Record<ApprovalRule, string> = {
-  requirements_not_met: "delivery, warranty or supplier score fell short",
-  above_spend_limit: "above the spend limit (manager approval)",
+  requirements_not_met: "delivery, warranty, score or an incomplete quote fell short",
+  above_spend_limit: "needed a manager (spend limit)",
   recommended_differs_from_cheapest: "the AI picked a pricier supplier",
+  ai_pick_unmatched: "the AI's pick couldn't be matched to a quote",
   auto_approval_disabled: "auto-approval is off",
   all_rules_passed: "",
 };
@@ -105,45 +107,86 @@ export function ApprovalPolicyForm({
   previewUnavailable?: boolean;
 }) {
   const uid = useId();
+  const [enabled, setEnabled] = useState(initial.enabled);
   const [draft, setDraft] = useState<Draft>(() => toDraft(initial));
   const [saved, setSaved] = useState<Draft>(() => toDraft(initial));
-  const [isPending, startTransition] = useTransition();
+  const [isSaving, startSaving] = useTransition();
+  const [isSwitching, startSwitching] = useTransition();
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
-  const parsed = fromDraft(draft);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  // A limit set in another currency is kept as it is until changed here.
+  const limitCurrency = initial.spendLimit !== null && initial.spendLimitCurrency ? initial.spendLimitCurrency : currency;
+
+  function policyFrom(d: Draft, on: boolean) {
+    const spendLimit = parseNumberInput(d.spendLimit);
+    return parsePolicy(
+      {
+        enabled: on,
+        maxDeliveryDays: parseNumberInput(d.maxDeliveryDays),
+        requireWarranty: d.requireWarranty,
+        requireCheapest: d.requireCheapest,
+        spendLimit,
+        spendLimitCurrency: spendLimit === null ? null : limitCurrency,
+        minSupplierScore: parseNumberInput(d.minSupplierScore),
+      },
+      { strict: true }
+    );
+  }
+
+  const parsed = policyFrom(draft, enabled);
+  const savedPolicy = policyFrom(saved, enabled);
+  const dirty = !(parsed.ok && savedPolicy.ok && JSON.stringify(parsed.policy) === JSON.stringify(savedPolicy.policy));
   const preview = useMemo(() => {
-    const p = fromDraft(draft);
+    const p = policyFrom(draft, enabled);
     return p.ok ? previewPolicy(p.policy, cases) : null;
-  }, [draft, cases]);
-  const rulesOff = !draft.enabled;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, enabled, cases]);
 
   // Field-level errors, shown next to the field that caused them.
-  const days = Number(draft.maxDeliveryDays);
-  const daysError = !Number.isInteger(days) || days < 1 || days > 365 ? "Whole number of days, 1 to 365." : null;
-  const limit = numberOrNull(draft.spendLimit);
-  const limitError = limit !== null && (Number.isNaN(limit) || limit < 0) ? "Enter an amount of 0 or more, or leave it empty." : null;
-  const score = numberOrNull(draft.minSupplierScore);
+  const days = parseNumberInput(draft.maxDeliveryDays);
+  const daysError = days === null || !Number.isInteger(days) || days < 1 || days > 365 ? "Whole number of days, 1 to 365." : null;
+  const limit = parseNumberInput(draft.spendLimit);
+  const limitError =
+    limit !== null && (Number.isNaN(limit) || limit > MAX_SPEND_LIMIT) ? "Enter an amount, like 50,000, or leave it empty for no limit." : null;
+  const score = parseNumberInput(draft.minSupplierScore);
   const scoreError =
     score !== null && (!Number.isInteger(score) || score < 0 || score > 100) ? "Whole number from 0 to 100, or leave it empty." : null;
+  const anyFieldError = Boolean(daysError || limitError || scoreError);
+
+  // The switch is the kill switch: it takes effect immediately, whatever
+  // state the other fields are in.
+  function toggle() {
+    const next = !enabled;
+    setEnabled(next);
+    startSwitching(async () => {
+      const result = await updateAutoApprovalSetting(next);
+      if ("error" in result && result.error) {
+        setEnabled(!next);
+        toast.error(result.error);
+      } else {
+        toast.success(next ? "Auto-approval turned on" : "Auto-approval turned off");
+      }
+    });
+  }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!parsed.ok) return;
-    startTransition(async () => {
+    startSaving(async () => {
       const result = await saveApprovalPolicy(parsed.policy);
       if ("error" in result && result.error) {
         toast.error(result.error);
         return;
       }
       setSaved(draft);
-      toast.success(parsed.policy.enabled ? "Approval rules saved" : "Auto-approval turned off");
+      toast.success("Approval rules saved");
     });
   }
 
   const heldEntries = preview
     ? (Object.entries(preview.byRule) as [ApprovalRule, number][]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1])
     : [];
+  const rulesOff = !enabled;
 
   return (
     <form onSubmit={submit} className="space-y-6" noValidate>
@@ -154,47 +197,45 @@ export function ApprovalPolicyForm({
           </p>
           <p id={`${uid}-switch-hint`} className="text-xs text-slate-500">
             When an AI recommendation passes every rule below, Clarix approves it and sends the PO. Anything else
-            waits for you.
+            waits for you. This switch takes effect immediately.
           </p>
         </div>
         <button
           type="button"
           role="switch"
-          aria-checked={draft.enabled}
+          aria-checked={enabled}
           aria-labelledby={`${uid}-switch-label`}
           aria-describedby={`${uid}-switch-hint`}
-          onClick={() => set("enabled", !draft.enabled)}
+          disabled={isSwitching}
+          onClick={toggle}
           className={cn(
-            "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0] focus-visible:ring-offset-2",
-            draft.enabled ? "bg-[#7C6FE0]" : "bg-slate-300"
+            "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0] focus-visible:ring-offset-2 disabled:cursor-wait",
+            enabled ? "bg-[#7C6FE0]" : "bg-slate-300"
           )}
         >
           <span
             aria-hidden="true"
             className={cn(
               "inline-block h-5 w-5 rounded-full bg-white shadow-[0_1px_2px_rgba(15,23,42,0.25)] transition-transform motion-reduce:transition-none",
-              draft.enabled ? "translate-x-[22px]" : "translate-x-0.5"
+              enabled ? "translate-x-[22px]" : "translate-x-0.5"
             )}
           />
         </button>
       </div>
 
-      <fieldset disabled={rulesOff} className={cn("space-y-5 border-t border-slate-100 pt-5", rulesOff && "opacity-60")}>
-        <legend className="sr-only">Rules a recommendation must pass</legend>
-
+      <div className="space-y-5 border-t border-slate-100 pt-5">
         <div className="grid gap-5 sm:grid-cols-2">
-          <div>
+          <div className={cn(rulesOff && "opacity-60")}>
             <label htmlFor={`${uid}-days`} className="text-sm font-medium text-slate-800">
               Delivery within
             </label>
             <div className="mt-1 flex items-center gap-2">
               <input
                 id={`${uid}-days`}
-                type="number"
+                type="text"
                 inputMode="numeric"
-                min={1}
-                max={365}
-                step={1}
+                autoComplete="off"
+                disabled={rulesOff}
                 value={draft.maxDeliveryDays}
                 onChange={(e) => set("maxDeliveryDays", e.target.value)}
                 aria-invalid={Boolean(daysError)}
@@ -213,13 +254,12 @@ export function ApprovalPolicyForm({
               Spend limit <span className="font-normal text-slate-500">(optional)</span>
             </label>
             <div className="mt-1 flex items-center gap-2">
-              <span className="text-sm text-slate-600">{currency}</span>
+              <span className="text-sm text-slate-600">{limitCurrency}</span>
               <input
                 id={`${uid}-limit`}
-                type="number"
+                type="text"
                 inputMode="decimal"
-                min={0}
-                step="any"
+                autoComplete="off"
                 placeholder="No limit"
                 value={draft.spendLimit}
                 onChange={(e) => set("spendLimit", e.target.value)}
@@ -229,22 +269,22 @@ export function ApprovalPolicyForm({
               />
             </div>
             <p id={`${uid}-limit-hint`} className={cn("mt-1 text-xs", limitError ? "text-red-700" : "text-slate-500")}>
-              {limitError ?? "Orders above this need a manager's approval."}
+              {limitError ??
+                `Orders above this always need a manager, including ones approved by hand. RFQs in other currencies need a manager too.`}
             </p>
           </div>
 
-          <div>
+          <div className={cn(rulesOff && "opacity-60")}>
             <label htmlFor={`${uid}-score`} className="text-sm font-medium text-slate-800">
               Minimum supplier score <span className="font-normal text-slate-500">(optional)</span>
             </label>
             <div className="mt-1 flex items-center gap-2">
               <input
                 id={`${uid}-score`}
-                type="number"
+                type="text"
                 inputMode="numeric"
-                min={0}
-                max={100}
-                step={1}
+                autoComplete="off"
+                disabled={rulesOff}
                 placeholder="None"
                 value={draft.minSupplierScore}
                 onChange={(e) => set("minSupplierScore", e.target.value)}
@@ -260,7 +300,7 @@ export function ApprovalPolicyForm({
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className={cn("space-y-3", rulesOff && "opacity-60")}>
           <Check
             id={`${uid}-warranty`}
             checked={draft.requireWarranty}
@@ -275,10 +315,10 @@ export function ApprovalPolicyForm({
             onChange={(v) => set("requireCheapest", v)}
             disabled={rulesOff}
             label="Only when the AI picks the cheapest complete quote"
-            hint="Turn off to let the AI choose a pricier supplier when it judges them better value."
+            hint="Turn off to let the AI choose a pricier supplier when it judges them better value. Quotes with unpriced lines are never approved automatically."
           />
         </div>
-      </fieldset>
+      </div>
 
       <section aria-labelledby={`${uid}-preview`} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
         <h3 id={`${uid}-preview`} className="text-xs font-semibold text-slate-700">
@@ -291,7 +331,7 @@ export function ApprovalPolicyForm({
             <p className="text-slate-500">Fix the highlighted field to see the preview.</p>
           ) : preview.total === 0 ? (
             <p className="text-slate-500">
-              No past RFQs with an AI recommendation yet. This fills in as you compare quotes.
+              No past RFQs with an automatic AI recommendation yet. This fills in as you compare quotes.
             </p>
           ) : (
             <>
@@ -314,14 +354,14 @@ export function ApprovalPolicyForm({
       </section>
 
       <div className="flex items-center gap-3">
-        <Button type="submit" size="sm" className="h-9" disabled={!parsed.ok || !dirty || isPending}>
-          {isPending ? "Saving…" : "Save rules"}
+        <Button type="submit" size="sm" className="h-9" disabled={!parsed.ok || anyFieldError || !dirty || isSaving}>
+          {isSaving ? "Saving…" : "Save rules"}
         </Button>
-        {dirty && !isPending && (
+        {dirty && !isSaving && (
           <button
             type="button"
             onClick={() => setDraft(saved)}
-            className="text-sm text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0] rounded"
+            className="rounded text-sm text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0]"
           >
             Discard changes
           </button>
