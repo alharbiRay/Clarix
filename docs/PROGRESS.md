@@ -11,7 +11,7 @@ targets the previous phase's branch.
 | 3. Savings dashboard | done | `feat/phase-03-savings-dashboard` | see PR list | tsc, lint, 246 tests, build, visual check (desktop, mobile, empty) |
 | 4. Supplier scorecard | done | `feat/phase-04-supplier-scorecard` | see PR list | tsc, lint, 288 tests, build, visual check of the scorecard components |
 | 5. Price history + alerts | done | `feat/phase-05-price-history` | see PR list | tsc, lint, tests, build, preview check of the badges and popover with demo data |
-| 6. Decision audit log | pending | | | |
+| 6. Decision audit log | in progress (WIP pushed, no PR yet) | `feat/phase-06-audit-log` | not opened | tsc, lint, 382 tests pass on the WIP commit |
 | 7. Configurable approval rules | pending | | | |
 | 8. Negotiation assistant | pending | | | |
 | 9. Reports | pending | | | |

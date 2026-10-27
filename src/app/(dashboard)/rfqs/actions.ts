@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireWritableUser } from "@/lib/auth/session";
+import { recordAuditEvent } from "@/lib/audit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rfqSchema, type RfqFormValues } from "@/lib/validations/rfq";
 import { sendPoConfirmationEmail, sendRfqInvitationEmail } from "@/lib/email";
@@ -71,6 +72,15 @@ export async function createRfq(values: RfqFormValues) {
     await supabase.from("rfqs").delete().eq("id", rfq.id);
     return { error: suppliersError.message };
   }
+
+  await recordAuditEvent({
+    buyerId: user.id,
+    rfqId: rfq.id,
+    actor: { type: "buyer", id: user.id },
+    type: "rfq_created",
+    summary: `RFQ created: ${title}`,
+    payload: { title, items: items.length, suppliers: suppliers.length, currency },
+  });
 
   revalidatePath("/rfqs");
   revalidatePath("/dashboard");
@@ -188,6 +198,20 @@ export async function sendRfq(rfqId: string) {
     }
   }
 
+  if (suppliers.length > 0) {
+    const { data: owner } = await supabase.from("rfqs").select("buyer_id").eq("id", rfqId).maybeSingle();
+    if (owner) {
+      await recordAuditEvent({
+        buyerId: owner.buyer_id,
+        rfqId,
+        actor: { type: "buyer", id: owner.buyer_id },
+        type: "rfq_sent",
+        summary: `Sent to ${suppliers.length} supplier${suppliers.length === 1 ? "" : "s"}`,
+        payload: { invited: suppliers.length, emailFailures: emailFailures.length },
+      });
+    }
+  }
+
   return { success: true, emailFailures };
 }
 
@@ -214,10 +238,11 @@ export async function sendRfq(rfqId: string) {
  * being null so a double-click (or a stale notification clicked twice)
  * can't send two POs.
  */
-export async function approveAward(rfqId: string, overrideQuoteId?: string) {
+export async function approveAward(rfqId: string, overrideQuoteId?: string, overrideReason?: string) {
   const supabase = createClient();
   const auth = await requireWritableUser(supabase);
   if ("error" in auth) return { error: auth.error };
+  const reason = overrideReason?.trim().slice(0, 500) || null;
 
   const { data: award } = await supabase
     .from("rfq_awards")
@@ -264,6 +289,42 @@ export async function approveAward(rfqId: string, overrideQuoteId?: string) {
   ).total;
   const label = supplier.company_name || supplier.email;
 
+  // Overriding the AI's pick is a decision worth explaining — the reason goes
+  // into the audit trail. The pick is the award's recommended quote; with
+  // auto-approval off the award has none, so fall back to the latest AI
+  // recommendation's rank-1 supplier.
+  const aiQuoteId: string | null = award.recommended_quote_id;
+  let aiPickLabel: string | null = null;
+  let isOverride = false;
+  if (aiQuoteId) {
+    isOverride = Boolean(overrideQuoteId && overrideQuoteId !== aiQuoteId);
+    if (isOverride && award.recommended_supplier_id) {
+      const { data: aiSupplier } = await supabase
+        .from("rfq_suppliers")
+        .select("email, company_name")
+        .eq("id", award.recommended_supplier_id)
+        .maybeSingle();
+      aiPickLabel = aiSupplier ? aiSupplier.company_name || aiSupplier.email : null;
+    }
+  } else {
+    const { data: latest } = await supabase
+      .from("ai_recommendations")
+      .select("content")
+      .eq("rfq_id", rfqId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const ranking = (latest?.content as { ranking?: { rank: number; supplier: string }[] } | null)?.ranking;
+    const pick = Array.isArray(ranking) ? ranking.find((r) => r.rank === 1)?.supplier : undefined;
+    if (pick) {
+      isOverride = pick !== label;
+      aiPickLabel = isOverride ? pick : null;
+    }
+  }
+  if (isOverride && !reason) {
+    return { error: "Say why you're choosing a different supplier than the AI recommended." };
+  }
+
   const { data: updatedAward, error: awardUpdateError } = await supabase
     .from("rfq_awards")
     .update({
@@ -297,6 +358,7 @@ export async function approveAward(rfqId: string, overrideQuoteId?: string) {
   });
   if (notifError) console.error(`[approveAward] rfq=${rfqId} notifications insert failed:`, notifError);
 
+  let emailDelivered = false;
   try {
     await sendPoConfirmationEmail({
       to: supplier.email,
@@ -312,9 +374,28 @@ export async function approveAward(rfqId: string, overrideQuoteId?: string) {
       deliveryDays: quote.delivery_days,
       warranty: quote.warranty,
     });
+    emailDelivered = true;
   } catch (e) {
     console.error(`[approveAward] rfq=${rfqId} PO confirmation email failed:`, e);
   }
+
+  const actor = { type: "buyer" as const, id: auth.user.id };
+  await recordAuditEvent({
+    buyerId: rfq.buyer_id,
+    rfqId,
+    actor,
+    type: "award_approved",
+    summary: isOverride ? `Approved ${label} instead of ${aiPickLabel ?? "the AI's pick"}` : `Approved ${label}`,
+    payload: { supplier: label, quoteId: quote.id, override: isOverride, aiPick: aiPickLabel, reason, decision: award.decision },
+  });
+  await recordAuditEvent({
+    buyerId: rfq.buyer_id,
+    rfqId,
+    actor,
+    type: "po_sent",
+    summary: emailDelivered ? `PO sent to ${label}` : `PO approved for ${label}, but the email failed`,
+    payload: { supplier: label, quoteId: quote.id, total, currency: rfq.currency, automatic: false, emailDelivered },
+  });
 
   revalidatePath(`/rfqs/${rfqId}`);
   revalidatePath(`/rfqs/${rfqId}/compare`);

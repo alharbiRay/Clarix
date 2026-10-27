@@ -373,3 +373,36 @@ Joining prices from different suppliers with a line implies a series that doesn'
   a price scale on the dot plot, and the settings error shows only after interaction (announced politely).
 - Not changed: the market average weights every quote equally (a frequent quoter counts more).
   That's simple and explainable; revisit with per-supplier averaging if it skews real data.
+
+---
+
+# Phase 6: Decision audit log
+
+## D-040: Only server code writes the audit trail
+There's no insert policy for buyers: every event is written with the service role from server
+code, so a user can't forge history through PostgREST. Buyers read their own events through RLS.
+
+## D-041: Append-only is enforced by a trigger, not just by permissions
+UPDATE/DELETE are revoked from every API role, *and* a trigger refuses them for everyone,
+including the table owner. The single exception is a foreign-key cascade
+(`pg_trigger_depth() > 1`) when a whole account is deleted, so account deletion still works.
+
+## D-042: `rfq_id` is not a foreign key
+The trail should outlive the RFQ it describes. An FK would either block RFQ deletion or
+cascade-delete the history.
+
+## D-043: Audit writes are best-effort
+supabase-js can't wrap the business write and the audit write in one transaction. A failed
+audit write is logged loudly (`audit.write_failed`) and never breaks the flow it describes:
+losing a PO because an audit row failed would be worse than a gap in the log.
+
+## D-044: Overriding the AI's pick requires a reason
+`approveAward` refuses an override without one. The UI offers common reasons plus free text.
+With auto-approval off there's no AI pick, so no reason is needed.
+
+## D-045: Production migrations applied 2026-10-28
+At the owner's request, migrations 0007–0010 and 0012 were applied to the hosted project
+(which was also restored from a paused state), after checking its schema matched 0001–0006,
+and checking there were no policy-name collisions. 0011 goes in just before Phase 6 merges.
+The Supabase security advisor's remaining findings: `is_demo_account` being executable by
+signed-in users is intentional (RLS needs it), and leaked-password protection is the owner's Auth setting.

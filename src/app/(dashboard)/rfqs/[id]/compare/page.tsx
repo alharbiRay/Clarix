@@ -397,6 +397,7 @@ export default async function ComparePage({
             </span>
             {awardRecommended && (
               <ApproveAwardButton
+                recommendedQuoteId={award?.recommended_quote_id ?? null}
                 rfqId={params.id}
                 supplierLabel={awardRecommended.label}
                 quotes={approvableQuotes}
@@ -444,6 +445,7 @@ export default async function ComparePage({
                     · Warranty: {awardRecommended.warranty || "—"}
                   </p>
                   <ApproveAwardButton
+                recommendedQuoteId={award?.recommended_quote_id ?? null}
                     rfqId={params.id}
                     supplierLabel={awardRecommended.label}
                     quotes={approvableQuotes}

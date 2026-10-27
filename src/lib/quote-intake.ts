@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { extractQuoteFromPdf } from "@/lib/gemini";
 import { isGeminiRateLimited } from "@/lib/gemini-errors";
 import { ensureSupplierProfile } from "@/lib/supplier-profile";
+import { recordAuditEvent } from "@/lib/audit";
 import type { RfqItem } from "@/lib/types";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -79,9 +80,25 @@ export async function createQuoteFromPdf(input: QuoteIntakeInput): Promise<Quote
       })),
     });
   } catch (e) {
+    const quotaExceeded = isGeminiRateLimited(e);
+    // Quota problems are recorded once by the job hooks (ai_quota_error).
+    // Emailed PDFs run in a retrying job: recording here would repeat the
+    // event on every attempt, so that path is recorded once, as job_failed,
+    // when the job gives up.
+    if (!quotaExceeded && source !== "email") {
+      await recordAuditEvent({
+        buyerId,
+        rfqId,
+        actor: { type: "buyer", id: buyerId },
+        type: "extraction_failed",
+        summary: `Couldn't read ${supplier.company_name || supplier.email}'s PDF`,
+        // No raw error text: the trail is buyer-visible and errors carry internals.
+        payload: { supplier: supplier.company_name || supplier.email, source },
+      });
+    }
     return {
       error: `Extraction failed: ${e instanceof Error ? e.message : "unknown error"}`,
-      quotaExceeded: isGeminiRateLimited(e),
+      quotaExceeded,
       cause: e,
     };
   }
@@ -162,6 +179,28 @@ export async function createQuoteFromPdf(input: QuoteIntakeInput): Promise<Quote
     email: supplier.email,
     companyName: supplier.company_name || extraction.supplier_name,
     contactName: supplier.contact_name,
+  });
+
+  const label = supplier.company_name || extraction.supplier_name || supplier.email;
+  const actor = source === "email" ? ({ type: "supplier", id: supplier.id } as const) : ({ type: "buyer", id: buyerId } as const);
+  const total = quoteItems.every((qi) => qi.total_price !== null) && quoteItems.length === sortedItems.length
+    ? Math.round(quoteItems.reduce((s, qi) => s + (qi.total_price ?? 0), 0) * 100) / 100
+    : null;
+  await recordAuditEvent({
+    buyerId,
+    rfqId,
+    actor,
+    type: "quote_received",
+    summary: `Quote received from ${label} ${source === "email" ? "by email" : "as an uploaded PDF"}`,
+    payload: { source, supplier: label, quoteId: quote.id, total, currency },
+  });
+  await recordAuditEvent({
+    buyerId,
+    rfqId,
+    actor: { type: "system" },
+    type: "extraction_completed",
+    summary: `AI read ${label}'s PDF (${extraction.confidence} confidence)`,
+    payload: { supplier: label, quoteId: quote.id, confidence: extraction.confidence, warnings: extraction.warnings, pricedLines: quoteItems.filter((qi) => qi.total_price !== null).length, lines: sortedItems.length },
   });
 
   return { quoteId: quote.id as string };

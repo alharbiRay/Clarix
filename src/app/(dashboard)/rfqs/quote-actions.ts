@@ -18,6 +18,7 @@ import { createQuoteFromPdf } from "@/lib/quote-intake";
 import { scheduleAutoRecommendation } from "@/lib/jobs/schedule";
 import { ensureSupplierProfile } from "@/lib/supplier-profile";
 import { quoteSchema, type QuoteFormValues } from "@/lib/validations/quote";
+import { recordAuditEvent } from "@/lib/audit";
 import type { RfqItem } from "@/lib/types";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -193,6 +194,20 @@ export async function addManualQuote(
     contactName: supplier.contact_name,
   });
 
+  const total = items.reduce((sum, item) => {
+    const qty = quantities.get(item.rfq_item_id)!;
+    return item.unit_price === null || item.unit_price === undefined ? sum : sum + Math.round(item.unit_price * qty * 100) / 100;
+  }, 0);
+  const { data: rfqRow } = await supabase.from("rfqs").select("currency").eq("id", rfqId).maybeSingle();
+  await recordAuditEvent({
+    buyerId: user.id,
+    rfqId,
+    actor: { type: "buyer", id: user.id },
+    type: "quote_received",
+    summary: `Quote from ${supplier.company_name || supplier.email} entered manually`,
+    payload: { source: "manual", supplier: supplier.company_name || supplier.email, quoteId: quote.id, total: Math.round(total * 100) / 100, currency: rfqRow?.currency ?? null },
+  });
+
   revalidatePath(`/rfqs/${rfqId}`);
   revalidatePath(`/rfqs/${rfqId}/compare`);
   await scheduleAutoRecommendation(rfqId, user.id);
@@ -277,6 +292,15 @@ export async function confirmQuote(quoteId: string, values: QuoteFormValues) {
 
   revalidatePath(`/rfqs/${quote.rfq_id}`);
   revalidatePath(`/rfqs/${quote.rfq_id}/compare`);
+  const confirmedLabel = await supplierLabelFor(supabase, quote.supplier_id);
+  await recordAuditEvent({
+    buyerId: user.id,
+    rfqId: quote.rfq_id,
+    actor: { type: "buyer", id: user.id },
+    type: "quote_confirmed",
+    summary: `Confirmed ${confirmedLabel}'s extracted quote`,
+    payload: { supplier: confirmedLabel, quoteId },
+  });
   await scheduleAutoRecommendation(quote.rfq_id, user.id);
   return { success: true, rfqId: quote.rfq_id };
 }
@@ -337,6 +361,16 @@ export async function deleteQuote(quoteId: string) {
     .update({ status: supplierRow?.invited_at ? "sent" : "pending" })
     .eq("id", quote.supplier_id);
 
+  const deletedLabel = await supplierLabelFor(supabase, quote.supplier_id);
+  await recordAuditEvent({
+    buyerId: auth.user.id,
+    rfqId: quote.rfq_id,
+    actor: { type: "buyer", id: auth.user.id },
+    type: "quote_deleted",
+    summary: `Deleted ${deletedLabel}'s quote`,
+    payload: { supplier: deletedLabel, quoteId: quote.id },
+  });
+
   revalidatePath(`/rfqs/${quote.rfq_id}`);
   revalidatePath(`/rfqs/${quote.rfq_id}/compare`);
   return { success: true, rfqId: quote.rfq_id };
@@ -350,7 +384,7 @@ export async function rejectQuote(quoteId: string) {
 
   const { data: quote } = await supabase
     .from("quotes")
-    .select("id, rfq_id, status")
+    .select("id, rfq_id, status, supplier_id")
     .eq("id", quoteId)
     .single();
   if (!quote) return { error: "Quote not found" };
@@ -363,6 +397,16 @@ export async function rejectQuote(quoteId: string) {
     .update({ status: "rejected" })
     .eq("id", quoteId);
   if (error) return { error: error.message };
+
+  const rejectedLabel = await supplierLabelFor(supabase, quote.supplier_id);
+  await recordAuditEvent({
+    buyerId: auth.user.id,
+    rfqId: quote.rfq_id,
+    actor: { type: "buyer", id: auth.user.id },
+    type: "quote_rejected",
+    summary: `Rejected ${rejectedLabel}'s extracted quote`,
+    payload: { supplier: rejectedLabel, quoteId },
+  });
 
   revalidatePath(`/rfqs/${quote.rfq_id}`);
   return { success: true, rfqId: quote.rfq_id };
@@ -434,6 +478,22 @@ export async function generateRecommendation(
     .insert({ rfq_id: rfqId, content: result.content, model: result.model });
   if (insertError) return { error: insertError.message };
 
+  const pick = result.content.ranking.find((r) => r.rank === 1)?.supplier ?? null;
+  await recordAuditEvent({
+    buyerId: auth.user.id,
+    rfqId,
+    actor: { type: "buyer", id: auth.user.id },
+    type: "recommendation_generated",
+    summary: `AI recommended ${pick ?? "a supplier"} (generated manually)`,
+    payload: { mode: "manual", model: result.model, recommended: pick, weights: parsedWeights.data },
+  });
+
   revalidatePath(`/rfqs/${rfqId}/compare`);
   return { success: true };
+}
+
+/** "Company" or email for an invite — for audit summaries. */
+async function supplierLabelFor(supabase: ReturnType<typeof createClient>, rfqSupplierId: string) {
+  const { data } = await supabase.from("rfq_suppliers").select("company_name, email").eq("id", rfqSupplierId).maybeSingle();
+  return (data?.company_name as string | null) || (data?.email as string | undefined) || "a supplier";
 }

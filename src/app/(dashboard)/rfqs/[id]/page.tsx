@@ -21,6 +21,7 @@ import { QuoteUploadDialog } from "@/components/quote-upload-dialog";
 import { ManualQuoteDialog } from "@/components/manual-quote-dialog";
 import { QuoteRowActions } from "@/components/quote-row-actions";
 import { ApproveAwardButton } from "@/components/approve-award-button";
+import { AuditTimeline, type TimelineEvent } from "@/components/rfq/audit-timeline";
 import { FadeIn } from "@/components/motion";
 import { formatDate, formatMoney } from "@/lib/format";
 import type { Quote, QuoteItem, Rfq, RfqAward, RfqItem, RfqSupplier } from "@/lib/types";
@@ -73,13 +74,22 @@ export default async function RfqDetailPage({
 }) {
   const supabase = createClient();
 
-  const [{ data }, { data: awardData }] = await Promise.all([
+  const [{ data }, { data: awardData }, { data: auditData }] = await Promise.all([
     supabase
       .from("rfqs")
       .select("*, rfq_items(*), rfq_suppliers(*), quotes(*, quote_items(*))")
       .eq("id", params.id)
       .single(),
     supabase.from("rfq_awards").select("*").eq("rfq_id", params.id).maybeSingle(),
+    // Decision history (RLS: the buyer's own events only).
+    supabase
+      .from("audit_events")
+      .select("id, event_type, actor_type, payload, created_at")
+      .eq("rfq_id", params.id)
+      // Newest 200 (so a long trail keeps the award), shown oldest first below.
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(200),
   ]);
 
   if (!data) notFound();
@@ -215,6 +225,7 @@ export default async function RfqDetailPage({
             </span>
             {awardRecommendedLabel && (
               <ApproveAwardButton
+                recommendedQuoteId={award?.recommended_quote_id ?? null}
                 rfqId={rfq.id}
                 supplierLabel={awardRecommendedLabel}
                 quotes={approvableQuotes}
@@ -475,6 +486,20 @@ export default async function RfqDetailPage({
                 </Table>
               </div>
             )}
+          </CardContent>
+        </Card>
+      </FadeIn>
+
+      <FadeIn delay={0.1}>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold">Decision history</CardTitle>
+            <CardDescription className="text-xs text-slate-500">
+              Every step and why it happened — recorded automatically and never edited.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AuditTimeline events={((auditData ?? []) as TimelineEvent[]).slice().reverse()} />
           </CardContent>
         </Card>
       </FadeIn>

@@ -7,13 +7,13 @@ import { writeDemoDataset, type DemoSink } from "@/lib/demo/writer";
 function pgliteSink(db: TestDb): DemoSink {
   const value = (v: unknown) => (v !== null && typeof v === "object" ? JSON.stringify(v) : v);
   return {
-    async upsert(table, rows, conflict) {
+    async upsert(table, rows, conflict, opts) {
       for (const row of rows) {
         const cols = Object.keys(row);
         const updates = cols.filter((c) => !conflict.includes(c)).map((c) => `${c} = excluded.${c}`);
         await db.query(
           `insert into public.${table} (${cols.join(", ")}) values (${cols.map((_, i) => `$${i + 1}`).join(", ")})
-           on conflict (${conflict.join(", ")}) do ${updates.length ? `update set ${updates.join(", ")}` : "nothing"}`,
+           on conflict (${conflict.join(", ")}) do ${updates.length && !opts?.ignoreDuplicates ? `update set ${updates.join(", ")}` : "nothing"}`,
           cols.map((c) => value(row[c]))
         );
       }
@@ -25,6 +25,14 @@ function pgliteSink(db: TestDb): DemoSink {
         [id, ...cols.map((c) => patch[c])]
       );
     },
+    async resetDemoAuditTrail(buyerId) {
+      await db.exec(`set role service_role`);
+      try {
+        await db.query(`select public.reset_demo_audit_events($1)`, [buyerId]);
+      } finally {
+        await db.exec(`reset role`);
+      }
+    },
   };
 }
 
@@ -34,7 +42,7 @@ async function counts(db: TestDb) {
     (select count(*)::int from rfq_suppliers) invites, (select count(*)::int from quotes) quotes,
     (select count(*)::int from quote_items) quote_items, (select count(*)::int from ai_recommendations) recs,
     (select count(*)::int from rfq_awards) awards, (select count(*)::int from notifications) notifications,
-    (select count(*)::int from suppliers) suppliers`);
+    (select count(*)::int from suppliers) suppliers, (select count(*)::int from audit_events) audit`);
   return rows[0];
 }
 
@@ -66,6 +74,16 @@ describe("demo seed against real Postgres", () => {
     });
     await writeDemoDataset(pgliteSink(db), later);
     expect(await counts(db)).toEqual(before);
+  });
+
+  it("re-seeding moves the decision timeline's dates along with the RFQs", async () => {
+    const { rows } = await db.query<{ off: number }>(
+      `select count(*)::int as off from audit_events a join rfqs r on r.id = a.rfq_id
+       where a.event_type = 'rfq_created' and a.created_at <> r.created_at`
+    );
+    expect(rows[0].off).toBe(0);
+    const { rows: latest } = await db.query<{ max: string }>(`select max(created_at)::text as max from audit_events`);
+    expect(new Date(latest[0].max).getTime()).toBeGreaterThan(new Date("2026-10-14T09:00:00Z").getTime());
   });
 
   it("flags every top-level demo row", async () => {

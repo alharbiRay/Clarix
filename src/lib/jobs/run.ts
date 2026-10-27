@@ -11,6 +11,7 @@ import {
 } from "@/lib/jobs/processor";
 import { supabaseJobStore } from "@/lib/jobs/supabase-store";
 import { JOB_TYPES, autoRecommendationJob, enqueueJob } from "@/lib/jobs/enqueue";
+import { recordAuditEvent } from "@/lib/audit";
 
 export { JOB_TYPES };
 
@@ -43,6 +44,18 @@ export function buildJobHooks(supabase: SupabaseClient): JobHooks {
         job.type === JOB_TYPES.inboundEmailQuote
           ? `Reading a supplier's emailed quote for ${title}`
           : `The AI recommendation for ${title}`;
+      // Audit first: notify throws on failure, and the trail shouldn't depend on it.
+      await recordAuditEvent(
+        {
+          buyerId: job.buyer_id,
+          rfqId: job.rfq_id,
+          actor: { type: "system" },
+          type: "ai_quota_error",
+          summary: `${what} hit the AI quota; retrying automatically`,
+          payload: { jobType: job.type, what: job.type === JOB_TYPES.inboundEmailQuote ? "extraction" : "recommendation" },
+        },
+        supabase
+      );
       await notify(
         supabase,
         job,
@@ -52,6 +65,18 @@ export function buildJobHooks(supabase: SupabaseClient): JobHooks {
     },
     async onGiveUp(job) {
       if (!job.buyer_id) return;
+      await recordAuditEvent(
+        {
+          buyerId: job.buyer_id,
+          rfqId: job.rfq_id,
+          actor: { type: "system" },
+          type: "job_failed",
+          summary: `Automatic ${job.type.replace(/_/g, " ")} gave up after ${job.attempts} attempts`,
+          // The error itself stays in the server logs — the trail is buyer-visible.
+          payload: { jobType: job.type, attempts: job.attempts },
+        },
+        supabase
+      );
       const title = await rfqTitle(supabase, job.rfq_id);
       const message =
         job.type === JOB_TYPES.inboundEmailQuote
