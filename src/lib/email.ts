@@ -225,3 +225,43 @@ export async function sendReviewNeededEmail(input: ReviewNeededEmailInput) {
 
   throwOnError("sendReviewNeededEmail", error);
 }
+
+function escapeHtml(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+interface NegotiationEmailInput {
+  to: string;
+  /** The buyer's own address, so the supplier's answer goes straight to them. */
+  replyTo: string | null;
+  subject: string;
+  body: string;
+  language: "ar" | "en";
+}
+
+/**
+ * A buyer's negotiation message to one supplier (Phase 8). The text was
+ * checked by findPrivacyLeaks before this is called; it is sent as written,
+ * HTML-escaped, right-to-left for Arabic.
+ */
+export async function sendNegotiationEmail(input: NegotiationEmailInput) {
+  const resend = getResendClient();
+  const dir = input.language === "ar" ? "rtl" : "ltr";
+  const paragraphs = input.body
+    .trim()
+    .split(/\n{2,}/)
+    .map((p) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#0f172a;">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+  const html = wrapper(escapeHtml(input.subject), `<div dir="${dir}" style="text-align:${dir === "rtl" ? "right" : "left"};">${paragraphs}</div>`);
+
+  const { error } = await resend.emails.send({
+    from: getFromAddress(),
+    to: input.to,
+    subject: input.subject,
+    html,
+    text: input.body,
+    ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+  });
+
+  throwOnError("sendNegotiationEmail", error);
+}

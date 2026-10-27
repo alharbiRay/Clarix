@@ -459,3 +459,32 @@ Be direct and specific. Do not pad with generic procurement advice.`;
     model: MODEL,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Negotiation draft
+// ---------------------------------------------------------------------------
+
+const negotiationDraftSchema = z.object({
+  subject: z.string().min(1).max(200),
+  body: z.string().min(1).max(4000),
+});
+
+const NEGOTIATION_DRAFT_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    subject: { type: Type.STRING },
+    body: { type: Type.STRING },
+  },
+  required: ["subject", "body"],
+};
+
+/**
+ * Drafts a negotiation email from a prompt built by
+ * src/lib/negotiation (buildNegotiationPrompt), which carries the privacy
+ * rules and none of the competitors' details. The caller still runs
+ * findPrivacyLeaks on the result.
+ */
+export async function generateNegotiationDraft(prompt: string): Promise<{ subject: string; body: string }> {
+  const client = getClient();
+  return generateStructured(client, [{ text: prompt }], NEGOTIATION_DRAFT_RESPONSE_SCHEMA, negotiationDraftSchema);
+}
