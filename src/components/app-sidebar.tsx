@@ -25,7 +25,7 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/rfqs", label: "RFQs", icon: FileText },
   { href: "/suppliers", label: "Suppliers", icon: Users },
-  { href: null, label: "Reports", icon: BarChart3 },
+  { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
@@ -51,7 +51,7 @@ export function AppSidebar({
   const initial = (fullName || email)[0]?.toUpperCase() ?? "?";
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-slate-200 bg-white">
+    <aside className="fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-slate-200 bg-white print:hidden">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-6 py-5">
         <Logo className="h-8 w-8" />

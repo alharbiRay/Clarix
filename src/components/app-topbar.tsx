@@ -8,7 +8,7 @@ export function AppTopbar({ unreadCount = 0 }: { unreadCount?: number }) {
   const router = useRouter();
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white/80 px-8 py-4 backdrop-blur">
+    <header className="sticky top-0 z-30 flex print:hidden items-center justify-between border-b border-slate-200 bg-white/80 px-8 py-4 backdrop-blur">
       <form
         className="relative w-80"
         onSubmit={(e) => {
