@@ -22,7 +22,7 @@ import { generateRecommendation } from "@/app/(dashboard)/rfqs/quote-actions";
 import { updateAutoApprovalSetting } from "@/app/(dashboard)/settings/actions";
 
 function signInAs(isDemo: boolean) {
-  db = Object.assign(createFakeSupabase({ profiles: [{ id: "u1", is_demo: isDemo, auto_approval_enabled: true }], rfqs: [] }), {
+  db = Object.assign(createFakeSupabase({ profiles: [{ id: "u1", is_demo: isDemo, auto_approval_enabled: true, role: "manager" }], rfqs: [] }), {
     auth: { getUser: async () => ({ data: { user: { id: "u1" } }, error: null }) },
   });
 }

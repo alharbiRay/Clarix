@@ -92,9 +92,10 @@ describe("evaluateAutoApproval", () => {
       actor_type: "system",
       payload: expect.objectContaining({
         decision: "auto_approved",
-        rule: "cheapest_meets_requirements",
+        rule: "all_rules_passed",
         supplier: "Supplier s1",
-        explanation: ["cheapest complete quote", "delivery 7 days", "12 months warranty"],
+        explanation: ["cheapest complete quote", "delivery 7 days (limit 14)", "12 months warranty"],
+        policy: expect.objectContaining({ maxDeliveryDays: 14, requireWarranty: true }),
       }),
     });
     expect(db.tables.audit_events[1].payload).toMatchObject({ supplier: "Supplier s1", total: 100, automatic: true, emailDelivered: true });
@@ -107,14 +108,80 @@ describe("evaluateAutoApproval", () => {
     expect(db.tables.audit_events[1]).toMatchObject({ event_type: "po_sent", payload: expect.objectContaining({ emailDelivered: false }) });
   });
 
-  it("leaves a trace when it can't evaluate (AI pick doesn't match any quote)", async () => {
+  it("holds for review (instead of going silent) when the AI's pick doesn't match any quote", async () => {
     const db = seed();
     const unknown: RecommendationContent = { ...content, ranking: [{ supplier: "Nobody", rank: 1, strengths: [], weaknesses: [] }] };
     await evaluateAutoApproval(asClient(db), rfq, unknown);
+    // The AI's pick is unknown, so nothing is recorded as "recommended" (no stand-in).
+    expect(db.tables.rfq_awards).toEqual([
+      expect.objectContaining({ decision: "review_needed", recommended_quote_id: null, cheapest_quote_id: "q1" }),
+    ]);
+    expect(db.tables.audit_events[0].payload).toMatchObject({ rule: "ai_pick_unmatched" });
+    expect(email.sendPoConfirmationEmail).not.toHaveBeenCalled();
+    expect(db.tables.notifications).toEqual([expect.objectContaining({ type: "review_needed", message: expect.stringMatching(/Nobody/) })]);
+  });
+
+  it("leaves a trace when no quote is complete enough to decide on", async () => {
+    const db = seed();
+    const incomplete = { ...rfq, quotes: [quote("q1", "s1", {})] };
+    await evaluateAutoApproval(asClient(db), incomplete as RfqWithComparisonData, content);
     expect(db.tables.rfq_awards).toHaveLength(0);
     expect(db.tables.audit_events).toEqual([
       expect.objectContaining({ event_type: "auto_approval_decided", payload: expect.objectContaining({ decision: "not_evaluated" }) }),
     ]);
+  });
+
+  it("follows the account's approval policy: above the spend limit it holds for a manager", async () => {
+    const db = seed({
+      approval_policies: [{ buyer_id: "buyer-1", enabled: true, max_delivery_days: 14, require_warranty: true, spend_limit: "50", min_supplier_score: null, require_cheapest: true }],
+    });
+    await evaluateAutoApproval(asClient(db), rfq, content);
+    expect(db.tables.rfq_awards).toEqual([expect.objectContaining({ decision: "review_needed" })]);
+    expect(email.sendPoConfirmationEmail).not.toHaveBeenCalled();
+    expect(db.tables.audit_events[0].payload).toMatchObject({ rule: "above_spend_limit", requiresManager: true });
+    expect(db.tables.notifications[0].message).toMatch(/SAR 100.00 is above the auto-approval limit of SAR 50.00/);
+  });
+
+  it("policy can allow a pricier AI pick", async () => {
+    const db = seed({
+      approval_policies: [{ buyer_id: "buyer-1", enabled: true, max_delivery_days: 14, require_warranty: true, spend_limit: null, min_supplier_score: null, require_cheapest: false }],
+    });
+    const pricier: RecommendationContent = { ...content, ranking: [{ supplier: "Supplier s2", rank: 1, strengths: [], weaknesses: [] }] };
+    await evaluateAutoApproval(asClient(db), rfq, pricier);
+    expect(db.tables.rfq_awards).toEqual([expect.objectContaining({ decision: "auto_approved", recommended_quote_id: "q2" })]);
+    expect(email.sendPoConfirmationEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("never auto-approves an incomplete quote, even with 'cheapest only' off (no PO on a partial total)", async () => {
+    const db = seed({
+      approval_policies: [{ buyer_id: "buyer-1", enabled: true, max_delivery_days: 14, require_warranty: true, spend_limit: null, min_supplier_score: null, require_cheapest: false }],
+    });
+    const twoItems = {
+      ...rfq,
+      rfq_items: [rfqItem("a"), rfqItem("b")],
+      quotes: [quote("q1", "s1", { a: 100, b: 100 }), quote("q2", "s2", { a: 50 })],
+    } as RfqWithComparisonData;
+    const pickPartial: RecommendationContent = { ...content, ranking: [{ supplier: "Supplier s2", rank: 1, strengths: [], weaknesses: [] }] };
+    await evaluateAutoApproval(asClient(db), twoItems, pickPartial);
+    expect(email.sendPoConfirmationEmail).not.toHaveBeenCalled();
+    expect(db.tables.rfq_awards).toEqual([expect.objectContaining({ decision: "review_needed", recommended_quote_id: "q2" })]);
+    expect(db.tables.notifications[0].message).toMatch(/hasn't priced every line/);
+  });
+
+  it("a minimum supplier score fails safe: no score yet means review", async () => {
+    const db = seed({
+      approval_policies: [{ buyer_id: "buyer-1", enabled: true, max_delivery_days: 14, require_warranty: true, spend_limit: null, min_supplier_score: 60, require_cheapest: true }],
+    });
+    await evaluateAutoApproval(asClient(db), rfq, content);
+    expect(db.tables.rfq_awards).toEqual([expect.objectContaining({ decision: "review_needed" })]);
+    expect(email.sendPoConfirmationEmail).not.toHaveBeenCalled();
+  });
+
+  it("an account without a policy row keeps honouring the old on/off toggle", async () => {
+    const db = seed({ profiles: [{ id: "buyer-1", email: "buyer@test.sa", auto_approval_enabled: false }] });
+    await evaluateAutoApproval(asClient(db), rfq, content);
+    expect(db.tables.rfq_awards).toEqual([expect.objectContaining({ decision: "review_needed" })]);
+    expect(db.tables.audit_events[0].payload).toMatchObject({ rule: "auto_approval_disabled" });
   });
 
   it("records the reason when it holds an RFQ for review", async () => {

@@ -406,3 +406,46 @@ At the owner's request, migrations 0007–0010 and 0012 were applied to the host
 and checking there were no policy-name collisions. 0011 goes in just before Phase 6 merges.
 The Supabase security advisor's remaining findings: `is_demo_account` being executable by
 signed-in users is intentional (RLS needs it), and leaked-password protection is the owner's Auth setting.
+
+# Phase 7: Configurable approval rules
+
+## D-046: One pure engine for live decisions and the preview
+`evaluateApprovalRules` has no I/O. Auto-approval and the settings preview both call it, so
+"what would this policy do?" can't drift from what it actually does.
+
+## D-047: The policy is per account, backfilled, and the old flag stays
+Each account (the tenant, D-002) gets one `approval_policies` row, backfilled from
+`profiles.auto_approval_enabled`, so nothing changes on deploy. That column is kept and mirrored
+on save for backward compatibility; the policy row is the source of truth. An account with no row
+gets the defaults (the old hard-coded rules) and its legacy on/off value.
+
+## D-048: Roles are minimal: `manager` by default
+Every account is its own organization today, so existing users are managers and nothing they can
+do changes. The column sits outside the profile UPDATE grant, so nobody can promote themselves.
+The spend-limit rule is enforced in `approveAward`, not just in the UI, ready for buyer seats.
+
+## D-049: Unknowns fail safe into review
+A missing delivery time, a missing supplier score (when a minimum is set), or an AI pick that can't
+be matched to a quote all hold the RFQ for a person instead of approving it. The unmatched pick
+used to be skipped silently.
+
+## D-050: When several rules fail, the spend limit names the rule
+The rule name decides who must act. A manager-only hold is the stricter outcome, so it wins, and
+every failing reason is still listed.
+
+## D-051: Phase 7 review fixes
+- **Incomplete quotes are never approved.** `decideApproval` gives a quote a total only when every
+  line is priced. Before this, with "cheapest only" off, an AI pick priced on 3 of 5 lines could be
+  approved and sent a PO on the partial total.
+- **One mapping from quotes to a decision.** `decideApproval` chooses the pick and the cheapest
+  quote for both auto-approval and the settings preview, so the preview can't over-count.
+- **No stand-in recommendation.** If the AI's pick can't be matched to a quote, it's held for review
+  as `ai_pick_unmatched` and no quote is recorded as "recommended". Approving later then compares
+  against the real AI pick.
+- **The spend limit carries its currency** (migration 0014). When the currency differs from the
+  RFQ's, or the total is incomplete, the order needs a manager. The limit also applies to manual
+  approvals while auto-approval is off.
+- **Only managers write the policy**, in the database (0014) and in the action. The save is strict,
+  with every field required, so a partial payload can't reset the rest.
+- **The on/off switch saves immediately.** A failed policy load blocks the form instead of showing
+  defaults that could be saved over the real rules.

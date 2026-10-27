@@ -80,6 +80,34 @@ describe("approveAward", () => {
     expect(db.tables.audit_events[0].payload).toMatchObject({ override: false });
   });
 
+  it("above the spend limit, only a manager can approve", async () => {
+    db.tables.approval_policies = [
+      { buyer_id: "buyer-1", enabled: true, max_delivery_days: 14, require_warranty: true, spend_limit: 100, min_supplier_score: null, require_cheapest: true },
+    ];
+    db.tables.profiles[0].role = "buyer";
+    expect(await approveAward("rfq-1")).toEqual({
+      error: expect.stringMatching(/A manager must approve this order: SAR 130\.00 is above the auto-approval limit of SAR 100\.00/),
+    });
+    expect(email.sendPoConfirmationEmail).not.toHaveBeenCalled();
+    expect(db.tables.rfq_awards[0].po_sent_at).toBeNull();
+
+    db.tables.profiles[0].role = "manager";
+    expect(await approveAward("rfq-1")).toEqual({ success: true, rfqId: "rfq-1" });
+    expect(db.tables.audit_events[0].payload).toMatchObject({ aboveSpendLimit: true });
+  });
+
+  it("a partly priced quote or a limit in another currency also needs a manager", async () => {
+    db.tables.profiles[0].role = "buyer";
+    db.tables.approval_policies = [
+      { buyer_id: "buyer-1", enabled: false, max_delivery_days: 14, require_warranty: true, spend_limit: 1_000_000, spend_limit_currency: "USD", min_supplier_score: null, require_cheapest: true },
+    ];
+    expect((await approveAward("rfq-1")).error).toMatch(/set in USD but this RFQ is in SAR/);
+    db.tables.approval_policies[0].spend_limit_currency = "SAR";
+    db.tables.quotes[0].quote_items = [];
+    expect((await approveAward("rfq-1")).error).toMatch(/total isn't complete/);
+    expect(email.sendPoConfirmationEmail).not.toHaveBeenCalled();
+  });
+
   it("an override must say why", async () => {
     expect(await approveAward("rfq-1", "q-cheap")).toEqual({
       error: "Say why you're choosing a different supplier than the AI recommended.",

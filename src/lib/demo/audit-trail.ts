@@ -1,5 +1,6 @@
 import { stableUuid } from "@/lib/demo/random";
 import type { DemoDataset } from "@/lib/demo/dataset";
+import { DEFAULT_POLICY } from "@/lib/approval/rules";
 
 export interface DemoAuditRow {
   id: string;
@@ -106,16 +107,22 @@ export function buildDemoAuditTrail(d: Omit<DemoDataset, "audit_events">): DemoA
         payload: auto
           ? {
               decision: "auto_approved",
-              rule: "cheapest_meets_requirements",
+              rule: "all_rules_passed",
               supplier: invite.company_name,
               quoteId: quote.id,
-              explanation: ["cheapest complete quote", `delivery ${quote.delivery_days} days`, `${quote.warranty} warranty`],
+              explanation: [
+                "cheapest complete quote",
+                `delivery ${quote.delivery_days} days (limit ${DEFAULT_POLICY.maxDeliveryDays})`,
+                `${quote.warranty} warranty`,
+              ],
+              policy: DEFAULT_POLICY,
             }
           : {
               decision: award.decision,
-              rule: award.decision === "review_needed" ? "cheapest_fails_requirements" : "recommended_differs_from_cheapest",
+              rule: award.decision === "review_needed" ? "requirements_not_met" : "recommended_differs_from_cheapest",
               supplier: invite.company_name,
               reason: award.reason,
+              policy: DEFAULT_POLICY,
             },
         created_at: award.created_at,
       });
@@ -135,7 +142,7 @@ export function buildDemoAuditTrail(d: Omit<DemoDataset, "audit_events">): DemoA
           actor_id: auto ? null : buyer,
           event_type: "po_sent",
           summary: `PO sent to ${invite.company_name}`,
-          payload: { supplier: invite.company_name, quoteId: quote.id, total, currency: rfq.currency, automatic: auto },
+          payload: { supplier: invite.company_name, quoteId: quote.id, total, currency: rfq.currency, automatic: auto, emailDelivered: true },
           created_at: award.po_sent_at,
         });
       }
