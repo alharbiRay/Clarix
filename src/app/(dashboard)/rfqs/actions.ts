@@ -11,6 +11,8 @@ import { sendPoConfirmationEmail, sendRfqInvitationEmail } from "@/lib/email";
 import { inboundAddressForToken } from "@/lib/resend";
 import { extractRfqFromText } from "@/lib/gemini";
 import { computeQuoteTotal } from "@/lib/quote-comparison";
+import { loadApprovalPolicy } from "@/lib/approval/policy";
+import { formatMoney } from "@/lib/format";
 import type { Quote, QuoteItem, RfqItem, RfqSupplier } from "@/lib/types";
 
 export async function createRfq(values: RfqFormValues) {
@@ -289,6 +291,25 @@ export async function approveAward(rfqId: string, overrideQuoteId?: string, over
   ).total;
   const label = supplier.company_name || supplier.email;
 
+  // Above the policy's spend limit only a manager may approve (enforced here,
+  // not just hidden in the UI).
+  let aboveSpendLimit = false;
+  try {
+    const policy = await loadApprovalPolicy(supabase, rfq.buyer_id);
+    aboveSpendLimit = policy.spendLimit !== null && total !== null && total > policy.spendLimit;
+    if (aboveSpendLimit) {
+      const { data: me } = await supabase.from("profiles").select("role").eq("id", auth.user.id).maybeSingle();
+      if (me?.role !== "manager") {
+        return {
+          error: `This order is above the ${formatMoney(policy.spendLimit!, rfq.currency)} approval limit — a manager must approve it.`,
+        };
+      }
+    }
+  } catch (e) {
+    console.error(`[approveAward] rfq=${rfqId} approval policy check failed:`, e);
+    return { error: "Couldn't check the approval policy. Try again." };
+  }
+
   // Overriding the AI's pick is a decision worth explaining — the reason goes
   // into the audit trail. The pick is the award's recommended quote; with
   // auto-approval off the award has none, so fall back to the latest AI
@@ -386,7 +407,7 @@ export async function approveAward(rfqId: string, overrideQuoteId?: string, over
     actor,
     type: "award_approved",
     summary: isOverride ? `Approved ${label} instead of ${aiPickLabel ?? "the AI's pick"}` : `Approved ${label}`,
-    payload: { supplier: label, quoteId: quote.id, override: isOverride, aiPick: aiPickLabel, reason, decision: award.decision },
+    payload: { supplier: label, quoteId: quote.id, override: isOverride, aiPick: aiPickLabel, reason, decision: award.decision, aboveSpendLimit },
   });
   await recordAuditEvent({
     buyerId: rfq.buyer_id,

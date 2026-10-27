@@ -32,7 +32,7 @@ describe("demo audit trail", () => {
 
   it("explains auto-approvals in plain language", () => {
     const auto = data.audit_events.find((e) => e.event_type === "auto_approval_decided" && e.payload.decision === "auto_approved")!;
-    expect(describeAuditEvent(auto).detail).toMatch(/^Cheapest complete quote, delivery \d+ days, .+ warranty\.$/);
+    expect(describeAuditEvent(auto).detail).toMatch(/^Cheapest complete quote, delivery \d+ days \(limit 14\), .+ warranty\.$/);
   });
 
   it("is deterministic", () => {

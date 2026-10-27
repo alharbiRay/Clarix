@@ -80,6 +80,20 @@ describe("approveAward", () => {
     expect(db.tables.audit_events[0].payload).toMatchObject({ override: false });
   });
 
+  it("above the spend limit, only a manager can approve", async () => {
+    db.tables.approval_policies = [
+      { buyer_id: "buyer-1", enabled: true, max_delivery_days: 14, require_warranty: true, spend_limit: 100, min_supplier_score: null, require_cheapest: true },
+    ];
+    db.tables.profiles[0].role = "buyer";
+    expect(await approveAward("rfq-1")).toEqual({ error: expect.stringMatching(/above the SAR\s100\.00 approval limit — a manager must approve it/) });
+    expect(email.sendPoConfirmationEmail).not.toHaveBeenCalled();
+    expect(db.tables.rfq_awards[0].po_sent_at).toBeNull();
+
+    db.tables.profiles[0].role = "manager";
+    expect(await approveAward("rfq-1")).toEqual({ success: true, rfqId: "rfq-1" });
+    expect(db.tables.audit_events[0].payload).toMatchObject({ aboveSpendLimit: true });
+  });
+
   it("an override must say why", async () => {
     expect(await approveAward("rfq-1", "q-cheap")).toEqual({
       error: "Say why you're choosing a different supplier than the AI recommended.",

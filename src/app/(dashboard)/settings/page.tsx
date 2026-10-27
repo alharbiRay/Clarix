@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { FadeIn } from "@/components/motion";
-import { AutoApprovalToggle } from "@/components/settings/auto-approval-toggle";
+import { ApprovalPolicyForm } from "@/components/settings/approval-policy-form";
+import { loadApprovalPolicy } from "@/lib/approval/policy";
+import { loadPreviewCases } from "@/lib/approval/preview-data";
+import { DEFAULT_POLICY } from "@/lib/approval/rules";
+import type { PreviewCase } from "@/lib/approval/preview";
 import { PriceAlertForm } from "@/components/settings/price-alert-form";
 import {
   Card,
@@ -22,6 +26,21 @@ export default async function SettingsPage() {
     .eq("id", user!.id)
     .single();
 
+  const policy = await loadApprovalPolicy(supabase, user!.id, profile?.auto_approval_enabled).catch(() => ({
+    ...DEFAULT_POLICY,
+    enabled: profile?.auto_approval_enabled !== false,
+  }));
+  // The preview is a convenience: if it can't load, the form still works.
+  let cases: PreviewCase[] = [];
+  let currency = "SAR";
+  let previewUnavailable = false;
+  try {
+    ({ cases, currency } = await loadPreviewCases(supabase, user!.id));
+  } catch (e) {
+    console.error("[settings] approval preview failed:", e);
+    previewUnavailable = true;
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <FadeIn>
@@ -34,18 +53,19 @@ export default async function SettingsPage() {
       <FadeIn delay={0.03}>
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-semibold">Auto-approval</CardTitle>
-            <CardDescription className="text-xs text-slate-400">
-              When an AI recommendation is ready, automatically approve and
-              send a PO to the winning supplier if they&apos;re the cheapest
-              complete quote, deliver within 14 days, and offer a warranty.
-              Anything else is flagged for your review instead — nothing is
-              ever auto-sent without meeting all three conditions.
+            <CardTitle className="text-sm font-semibold">Approval rules</CardTitle>
+            <CardDescription className="text-xs text-slate-500">
+              Decide which recommendations Clarix may approve on its own. Every
+              automatic decision is recorded with the rule that allowed it in
+              the RFQ&apos;s decision history.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <AutoApprovalToggle
-              initialEnabled={profile?.auto_approval_enabled ?? true}
+            <ApprovalPolicyForm
+              initial={policy}
+              cases={cases}
+              currency={currency}
+              previewUnavailable={previewUnavailable}
             />
           </CardContent>
         </Card>

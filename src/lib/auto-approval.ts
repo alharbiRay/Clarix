@@ -6,13 +6,17 @@ import {
   sendPoConfirmationEmail,
   sendReviewNeededEmail,
 } from "@/lib/email";
-import { formatMoney } from "@/lib/format";
 import type { RfqWithComparisonData } from "@/lib/recommendation-input";
 import type { Quote, QuoteItem, RfqSupplier } from "@/lib/types";
 import { recordAuditEvent } from "@/lib/audit";
+import { evaluateApprovalRules, type ApprovalPolicy, type CandidateQuote } from "@/lib/approval/rules";
+import { loadApprovalPolicy } from "@/lib/approval/policy";
+import { loadMetricsRfqs, rfqIdsForSuppliers } from "@/lib/metrics/load";
+import { scoreSupplier, supplierMetrics } from "@/lib/scorecard";
 
-const MAX_DELIVERY_DAYS = 14;
 const TAG = "[auto-approval]";
+
+type QuoteWithItems = Quote & { quote_items: QuoteItem[] };
 
 function supplierLabel(s: Pick<RfqSupplier, "company_name" | "email">) {
   return s.company_name || s.email || "Unknown supplier";
@@ -41,24 +45,52 @@ async function claimAward(
 }
 
 /**
- * Runs the auto-approval rules engine right after a recommendation is
+ * Supplier score for the min-score rule. Only computed when the policy asks
+ * for it (it loads the supplier's history). Any failure yields null, which
+ * the rule treats as "no score yet" — so it fails safe into review.
+ */
+async function scoreFor(supabase: SupabaseClient, buyerId: string, invite: RfqSupplier): Promise<number | null> {
+  if (!invite.supplier_id) return null;
+  try {
+    const ref = { id: invite.supplier_id, email: invite.email };
+    const ids = await rfqIdsForSuppliers(supabase, [ref]);
+    const history = await loadMetricsRfqs(supabase, buyerId, { rfqIds: ids });
+    return scoreSupplier(supplierMetrics(history, ref))?.score ?? null;
+  } catch (e) {
+    console.error(`${TAG} supplier score unavailable:`, e);
+    return null;
+  }
+}
+
+function candidate(
+  rfq: RfqWithComparisonData,
+  quote: QuoteWithItems,
+  invite: RfqSupplier,
+  supplierScore: number | null
+): CandidateQuote | null {
+  const total = computeQuoteTotal(rfq.rfq_items, quote).total;
+  if (total === null) return null;
+  return {
+    quoteId: quote.id,
+    supplier: supplierLabel(invite),
+    total,
+    deliveryDays: quote.delivery_days,
+    warranty: quote.warranty,
+    supplierScore,
+  };
+}
+
+/**
+ * Runs the auto-approval rules right after a recommendation is
  * auto-generated (src/lib/auto-recommendation.ts). Never called from the
  * buyer's manual "Get/Regenerate recommendation" button — that's explicit
  * experimentation and shouldn't risk sending a PO or repeat notifications.
  *
- * This is the buyer's ONE notification for the RFQ — nothing else in the
- * auto-generate pipeline notifies them. Exactly one of two messages lands:
- *   "Auto-approved: [supplier] — PO sent"
- *   "Review needed: [reason]"
- *
- * Rule 1: recommended === cheapest, delivery <=14 days, has a warranty
- *   → auto-award, email the supplier a PO confirmation, notify the buyer.
- * Rule 2: recommended === cheapest but fails delivery/warranty
- *   → "Review needed", no PO sent.
- * Rule 3: recommended !== cheapest
- *   → "Review needed" with the price difference, no PO sent.
- * Disabled: profiles.auto_approval_enabled is off
- *   → "Review needed" — comparison is ready, but nothing is auto-sent.
+ * The rules themselves are the account's approval policy (migration 0013),
+ * applied by the pure engine in src/lib/approval/rules.ts — this function
+ * only gathers the facts, records the decision, and performs the side
+ * effects. Exactly one buyer notification per RFQ:
+ *   "Auto-approved: [supplier] — PO sent"   or   "Review needed: [reason]"
  *
  * Idempotent via the rfq_awards row (one per RFQ): see claimAward. Email
  * failures are logged and swallowed; database failures throw so the
@@ -69,7 +101,6 @@ export async function evaluateAutoApproval(
   rfq: RfqWithComparisonData,
   content: RecommendationContent
 ) {
-  console.log(`${TAG} called for rfq=${rfq.id}`);
   try {
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
@@ -81,78 +112,38 @@ export async function evaluateAutoApproval(
       // is turned off" decision. Throw so the job retries.
       throw new Error(`failed to load buyer profile for rfq ${rfq.id}: ${profileError?.message ?? "not found"}`);
     }
-    console.log(
-      `${TAG} rfq=${rfq.id} auto_approval_enabled=${profile?.auto_approval_enabled} buyerEmail=${profile?.email ?? "(none)"}`
-    );
 
-    const { data: existingAward, error: existingAwardError } = await supabase
-      .from("rfq_awards")
-      .select("rfq_id")
-      .eq("rfq_id", rfq.id)
-      .maybeSingle();
-    if (existingAwardError) {
-      console.error(`${TAG} rfq=${rfq.id} failed to check existing award:`, existingAwardError);
-    }
+    const { data: existingAward } = await supabase.from("rfq_awards").select("rfq_id").eq("rfq_id", rfq.id).maybeSingle();
     if (existingAward) {
       console.log(`${TAG} rfq=${rfq.id} bail: rfq_awards row already exists — idempotency guard`);
       return;
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-    const compareUrl = `${appUrl}/rfqs/${rfq.id}/compare`;
-    const buyerEmail = profile?.email as string | undefined;
+    const policy: ApprovalPolicy = await loadApprovalPolicy(supabase, rfq.buyer_id, profile.auto_approval_enabled);
+    const items = rfq.rfq_items;
+    const suppliersById = new Map(rfq.rfq_suppliers.map((s) => [s.id, s]));
+    const cheapestQuote = findCheapestQuote(items, rfq.quotes) as QuoteWithItems | null;
 
-    if (!profile?.auto_approval_enabled) {
-      console.log(`${TAG} rfq=${rfq.id} auto-approval disabled for this buyer — sending fallback review-needed notification`);
-      const reason = "auto-approval is turned off — review and approve manually";
-      if (!(await claimAward(supabase, rfq.id, {
-        rfq_id: rfq.id,
-        decision: "review_needed",
-        recommended_supplier_id: null,
-        recommended_quote_id: null,
-        cheapest_supplier_id: null,
-        cheapest_quote_id: null,
-        reason,
-      }))) return;
-      await recordAuditEvent(
-        {
-          buyerId: rfq.buyer_id,
-          rfqId: rfq.id,
-          actor: { type: "system" },
-          type: "auto_approval_decided",
-          summary: `Held for review: ${reason}`,
-          payload: { decision: "review_needed", rule: "auto_approval_disabled", reason },
-        },
-        supabase
-      );
-
-      const { error: notifError } = await supabase.from("notifications").insert({
-        buyer_id: rfq.buyer_id,
-        rfq_id: rfq.id,
-        type: "review_needed",
-        message: `Review needed: ${reason}`,
-      });
-      if (notifError) console.error(`${TAG} rfq=${rfq.id} notifications insert failed:`, notifError);
-
-      if (buyerEmail) {
-        try {
-          await sendReviewNeededEmail({
-            to: buyerEmail,
-            rfqTitle: rfq.title,
-            reason,
-            compareUrl,
-          });
-        } catch (e) {
-          console.error("Failed to send review-needed buyer email:", e);
-        }
-      }
-      return;
+    // Map the AI's rank-1 label back to a quote.
+    const topRank = content.ranking.find((r) => r.rank === 1);
+    const labelToQuote = new Map<string, QuoteWithItems>();
+    for (const q of rfq.quotes) {
+      if (q.status !== "submitted" && q.status !== "confirmed") continue;
+      const s = suppliersById.get(q.supplier_id);
+      if (s) labelToQuote.set(supplierLabel(s), q);
     }
-
-    // No decision possible: leave a trace so the timeline doesn't show a
-    // recommendation followed by silence.
-    const skip = (reason: string) =>
-      recordAuditEvent(
+    let recommendedQuote = topRank ? (labelToQuote.get(topRank.supplier) ?? null) : null;
+    let unmatchedPick: string | null = null;
+    if (policy.enabled && !recommendedQuote && cheapestQuote) {
+      // Previously this bailed silently and the buyer never heard about the RFQ.
+      unmatchedPick = topRank?.supplier ?? "(none)";
+      recommendedQuote = cheapestQuote;
+    }
+    if (policy.enabled && (!cheapestQuote || !recommendedQuote)) {
+      console.log(`${TAG} rfq=${rfq.id} bail: no complete comparable quote to decide on`);
+      // Leave a trace so the timeline doesn't show a recommendation followed by silence.
+      const reason = "no quote has a price for every line item yet";
+      await recordAuditEvent(
         {
           buyerId: rfq.buyer_id,
           rfqId: rfq.id,
@@ -163,277 +154,145 @@ export async function evaluateAutoApproval(
         },
         supabase
       );
-
-    const items = rfq.rfq_items;
-    const cheapestQuote = findCheapestQuote(items, rfq.quotes);
-    if (!cheapestQuote) {
-      console.log(
-        `${TAG} rfq=${rfq.id} bail: no cheapest quote found (no submitted/confirmed quote is priced on every line item)`
-      );
-      await skip("no quote has a price for every line item yet");
       return;
     }
 
-    const topRank = content.ranking.find((r) => r.rank === 1);
-    if (!topRank) {
-      console.log(`${TAG} rfq=${rfq.id} bail: recommendation content has no rank-1 entry`);
-      await skip("the AI recommendation didn't rank a top supplier");
+    const recommendedInvite = recommendedQuote ? suppliersById.get(recommendedQuote.supplier_id)! : null;
+    const cheapestInvite = cheapestQuote ? suppliersById.get(cheapestQuote.supplier_id)! : null;
+    const score =
+      policy.enabled && policy.minSupplierScore !== null && recommendedInvite
+        ? await scoreFor(supabase, rfq.buyer_id, recommendedInvite)
+        : null;
+
+    const result = unmatchedPick
+      ? {
+          decision: "review_needed" as const,
+          rule: "requirements_not_met" as const,
+          reasons: [`the AI's pick (${unmatchedPick}) couldn't be matched to a quote — check the comparison`],
+          explanation: [],
+          reason: `the AI's pick (${unmatchedPick}) couldn't be matched to a quote — check the comparison`,
+          requiresManager: false,
+        }
+      : evaluateApprovalRules({
+          policy,
+          recommended: recommendedQuote && recommendedInvite ? candidate(rfq, recommendedQuote, recommendedInvite, score) : null,
+          cheapest: cheapestQuote && cheapestInvite ? candidate(rfq, cheapestQuote, cheapestInvite, null) : null,
+          currency: rfq.currency,
+        });
+    if (!result.decision) {
+      console.log(`${TAG} rfq=${rfq.id} bail: rules engine could not decide`);
       return;
     }
-    console.log(
-      `${TAG} rfq=${rfq.id} cheapestQuote=${cheapestQuote.id} recommendedSupplierLabel="${topRank.supplier}"`
+
+    const auto = result.decision === "auto_approved";
+    const label = recommendedInvite ? supplierLabel(recommendedInvite) : null;
+    const total = recommendedQuote ? computeQuoteTotal(items, recommendedQuote).total : null;
+
+    const claimed = await claimAward(supabase, rfq.id, {
+      rfq_id: rfq.id,
+      decision: result.decision,
+      recommended_supplier_id: policy.enabled ? (recommendedInvite?.id ?? null) : null,
+      recommended_quote_id: policy.enabled ? (recommendedQuote?.id ?? null) : null,
+      cheapest_supplier_id: policy.enabled ? (cheapestInvite?.id ?? null) : null,
+      cheapest_quote_id: policy.enabled ? (cheapestQuote?.id ?? null) : null,
+      reason: result.reason,
+      ...(auto ? { po_sent_at: new Date().toISOString() } : {}),
+    });
+    if (!claimed) return;
+
+    await recordAuditEvent(
+      {
+        buyerId: rfq.buyer_id,
+        rfqId: rfq.id,
+        actor: { type: "system" },
+        type: "auto_approval_decided",
+        summary: auto ? `Auto-approved ${label}: ${result.explanation.join(", ")}` : `Held for review: ${result.reason}`,
+        payload: {
+          decision: result.decision,
+          rule: result.rule,
+          supplier: label,
+          quoteId: recommendedQuote?.id ?? null,
+          explanation: result.explanation,
+          reasons: result.reasons,
+          reason: result.reason,
+          requiresManager: result.requiresManager,
+          policy,
+        },
+      },
+      supabase
     );
 
-    const suppliersById = new Map(rfq.rfq_suppliers.map((s) => [s.id, s]));
-    const labelToQuote = new Map<string, Quote & { quote_items: QuoteItem[] }>();
-    for (const q of rfq.quotes) {
-      if (q.status !== "submitted" && q.status !== "confirmed") continue;
-      const supplier = suppliersById.get(q.supplier_id);
-      if (!supplier) continue;
-      labelToQuote.set(supplierLabel(supplier), q);
-    }
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const compareUrl = `${appUrl}/rfqs/${rfq.id}/compare`;
+    const buyerEmail = profile.email as string | undefined;
 
-    const recommendedQuote = labelToQuote.get(topRank.supplier);
-    if (!recommendedQuote) {
-      console.error(
-        `${TAG} rfq=${rfq.id} bail: could not match recommended supplier "${topRank.supplier}" to a quote. Known labels: ${Array.from(labelToQuote.keys()).join(", ")}`
-      );
-      await skip(`the AI's pick (${topRank.supplier}) couldn't be matched to a quote`);
-      return;
-    }
+    if (auto && recommendedQuote && recommendedInvite && label) {
+      const { error: rfqUpdateError } = await supabase.from("rfqs").update({ status: "awarded" }).eq("id", rfq.id);
+      if (rfqUpdateError) console.error(`${TAG} rfq=${rfq.id} rfqs status update failed:`, rfqUpdateError);
 
-    const cheapestSupplier = suppliersById.get(cheapestQuote.supplier_id)!;
-    const recommendedSupplier = suppliersById.get(recommendedQuote.supplier_id)!;
-
-    if (recommendedQuote.id === cheapestQuote.id) {
-      const deliveryOk =
-        recommendedQuote.delivery_days !== null &&
-        recommendedQuote.delivery_days <= MAX_DELIVERY_DAYS;
-      const warrantyOk = Boolean(recommendedQuote.warranty && recommendedQuote.warranty.trim());
-      console.log(
-        `${TAG} rfq=${rfq.id} recommended === cheapest. deliveryOk=${deliveryOk} (days=${recommendedQuote.delivery_days}) warrantyOk=${warrantyOk} (warranty="${recommendedQuote.warranty}")`
-      );
-
-      if (deliveryOk && warrantyOk) {
-        // Rule 1: auto-approve
-        console.log(`${TAG} rfq=${rfq.id} RULE 1: auto-approving`);
-        const label = supplierLabel(recommendedSupplier);
-        const total = computeQuoteTotal(items, recommendedQuote).total;
-
-        if (!(await claimAward(supabase, rfq.id, {
-          rfq_id: rfq.id,
-          decision: "auto_approved",
-          recommended_supplier_id: recommendedSupplier.id,
-          recommended_quote_id: recommendedQuote.id,
-          cheapest_supplier_id: cheapestSupplier.id,
-          cheapest_quote_id: cheapestQuote.id,
-          reason: null,
-          po_sent_at: new Date().toISOString(),
-        }))) return;
-        const explanation = [
-          "cheapest complete quote",
-          `delivery ${recommendedQuote.delivery_days} days`,
-          `${recommendedQuote.warranty} warranty`,
-        ];
-        await recordAuditEvent(
-          {
-            buyerId: rfq.buyer_id,
-            rfqId: rfq.id,
-            actor: { type: "system" },
-            type: "auto_approval_decided",
-            summary: `Auto-approved ${label}: ${explanation.join(", ")}`,
-            payload: {
-              decision: "auto_approved",
-              rule: "cheapest_meets_requirements",
-              supplier: label,
-              quoteId: recommendedQuote.id,
-              explanation,
-              thresholds: { maxDeliveryDays: MAX_DELIVERY_DAYS, warrantyRequired: true },
-            },
-          },
-          supabase
-        );
-
-        const { error: rfqUpdateError } = await supabase
-          .from("rfqs")
-          .update({ status: "awarded" })
-          .eq("id", rfq.id);
-        if (rfqUpdateError) console.error(`${TAG} rfq=${rfq.id} rfqs status update failed:`, rfqUpdateError);
-
-        const { error: notifError } = await supabase.from("notifications").insert({
-          buyer_id: rfq.buyer_id,
-          rfq_id: rfq.id,
-          type: "auto_approved",
-          message: `Auto-approved: ${label} — PO sent`,
-        });
-        if (notifError) console.error(`${TAG} rfq=${rfq.id} notifications insert failed:`, notifError);
-
-        let emailDelivered = false;
-        try {
-          await sendPoConfirmationEmail({
-            to: recommendedSupplier.email,
-            supplierLabel: label,
-            rfqTitle: rfq.title,
-            currency: rfq.currency,
-            items: items.map((i) => ({
-              name: i.name,
-              quantity: Number(i.quantity),
-              unit: i.unit,
-            })),
-            total,
-            deliveryDays: recommendedQuote.delivery_days,
-            warranty: recommendedQuote.warranty,
-          });
-          emailDelivered = true;
-          console.log(`${TAG} rfq=${rfq.id} PO confirmation email sent to supplier ${recommendedSupplier.email}`);
-        } catch (e) {
-          console.error("Failed to send PO confirmation email:", e);
-        }
-        // Recorded after the send so the trail never claims a PO email that failed.
-        await recordAuditEvent(
-          {
-            buyerId: rfq.buyer_id,
-            rfqId: rfq.id,
-            actor: { type: "system" },
-            type: "po_sent",
-            summary: emailDelivered ? `PO sent to ${label}` : `PO approved for ${label}, but the email failed`,
-            payload: { supplier: label, quoteId: recommendedQuote.id, total, currency: rfq.currency, automatic: true, emailDelivered },
-          },
-          supabase
-        );
-
-        if (buyerEmail) {
-          try {
-            await sendAutoApprovalEmail({
-              to: buyerEmail,
-              rfqTitle: rfq.title,
-              supplierLabel: label,
-              compareUrl,
-            });
-            console.log(`${TAG} rfq=${rfq.id} auto-approval buyer email sent to ${buyerEmail}`);
-          } catch (e) {
-            console.error("Failed to send auto-approval buyer email:", e);
-          }
-        }
-      } else {
-        // Rule 2: cheapest === recommended, but fails delivery/warranty
-        console.log(`${TAG} rfq=${rfq.id} RULE 2: review needed (cheapest fails delivery/warranty)`);
-        const reasons: string[] = [];
-        if (!deliveryOk) {
-          reasons.push(
-            recommendedQuote.delivery_days === null
-              ? "delivery time not confirmed"
-              : `delivery is ${recommendedQuote.delivery_days} days (must be ${MAX_DELIVERY_DAYS} or less)`
-          );
-        }
-        if (!warrantyOk) reasons.push("no warranty provided");
-        const reason = `cheapest option has issues — ${reasons.join("; ")}`;
-
-        if (!(await claimAward(supabase, rfq.id, {
-          rfq_id: rfq.id,
-          decision: "review_needed",
-          recommended_supplier_id: recommendedSupplier.id,
-          recommended_quote_id: recommendedQuote.id,
-          cheapest_supplier_id: cheapestSupplier.id,
-          cheapest_quote_id: cheapestQuote.id,
-          reason,
-        }))) return;
-        await recordAuditEvent(
-          {
-            buyerId: rfq.buyer_id,
-            rfqId: rfq.id,
-            actor: { type: "system" },
-            type: "auto_approval_decided",
-            summary: `Held for review: ${reason}`,
-            payload: { decision: "review_needed", rule: "cheapest_fails_requirements", supplier: supplierLabel(recommendedSupplier), reason },
-          },
-          supabase
-        );
-
-        const { error: notifError } = await supabase.from("notifications").insert({
-          buyer_id: rfq.buyer_id,
-          rfq_id: rfq.id,
-          type: "review_needed",
-          message: `Review needed: ${reason}`,
-        });
-        if (notifError) console.error(`${TAG} rfq=${rfq.id} notifications insert failed:`, notifError);
-
-        if (buyerEmail) {
-          try {
-            await sendReviewNeededEmail({
-              to: buyerEmail,
-              rfqTitle: rfq.title,
-              reason,
-              compareUrl,
-            });
-          } catch (e) {
-            console.error("Failed to send review-needed buyer email:", e);
-          }
-        }
-      }
-    } else {
-      // Rule 3: recommended supplier differs from the cheapest — always manual
-      console.log(`${TAG} rfq=${rfq.id} RULE 3: review needed (recommended differs from cheapest)`);
-      const cheapestTotal = computeQuoteTotal(items, cheapestQuote).total;
-      const recommendedTotal = computeQuoteTotal(items, recommendedQuote).total;
-      const diff =
-        cheapestTotal !== null && recommendedTotal !== null
-          ? recommendedTotal - cheapestTotal
-          : null;
-      const reason =
-        diff !== null
-          ? `recommended supplier is ${formatMoney(diff, rfq.currency)} more than the cheapest quote`
-          : "recommended supplier differs from the cheapest and needs approval";
-
-      if (!(await claimAward(supabase, rfq.id, {
+      const { error: notifError } = await supabase.from("notifications").insert({
+        buyer_id: rfq.buyer_id,
         rfq_id: rfq.id,
-        decision: "differs_from_cheapest",
-        recommended_supplier_id: recommendedSupplier.id,
-        recommended_quote_id: recommendedQuote.id,
-        cheapest_supplier_id: cheapestSupplier.id,
-        cheapest_quote_id: cheapestQuote.id,
-        reason,
-      }))) return;
+        type: "auto_approved",
+        message: `Auto-approved: ${label} — PO sent`,
+      });
+      if (notifError) console.error(`${TAG} rfq=${rfq.id} notifications insert failed:`, notifError);
+
+      let emailDelivered = false;
+      try {
+        await sendPoConfirmationEmail({
+          to: recommendedInvite.email,
+          supplierLabel: label,
+          rfqTitle: rfq.title,
+          currency: rfq.currency,
+          items: items.map((i) => ({ name: i.name, quantity: Number(i.quantity), unit: i.unit })),
+          total,
+          deliveryDays: recommendedQuote.delivery_days,
+          warranty: recommendedQuote.warranty,
+        });
+        emailDelivered = true;
+      } catch (e) {
+        console.error("Failed to send PO confirmation email:", e);
+      }
+
+      // Recorded after the send so the trail never claims a PO email that failed.
       await recordAuditEvent(
         {
           buyerId: rfq.buyer_id,
           rfqId: rfq.id,
           actor: { type: "system" },
-          type: "auto_approval_decided",
-          summary: `Held for review: ${reason}`,
-          payload: {
-            decision: "differs_from_cheapest",
-            rule: "recommended_differs_from_cheapest",
-            supplier: supplierLabel(recommendedSupplier),
-            cheapest: supplierLabel(cheapestSupplier),
-            reason,
-          },
+          type: "po_sent",
+          summary: emailDelivered ? `PO sent to ${label}` : `PO approved for ${label}, but the email failed`,
+          payload: { supplier: label, quoteId: recommendedQuote.id, total, currency: rfq.currency, automatic: true, emailDelivered },
         },
         supabase
       );
 
-      const { error: notifError } = await supabase.from("notifications").insert({
-        buyer_id: rfq.buyer_id,
-        rfq_id: rfq.id,
-        type: "differs_from_cheapest",
-        message: `Review needed: ${reason}`,
-      });
-      if (notifError) console.error(`${TAG} rfq=${rfq.id} notifications insert failed:`, notifError);
-
       if (buyerEmail) {
         try {
-          await sendReviewNeededEmail({
-            to: buyerEmail,
-            rfqTitle: rfq.title,
-            reason,
-            compareUrl,
-          });
+          await sendAutoApprovalEmail({ to: buyerEmail, rfqTitle: rfq.title, supplierLabel: label, compareUrl });
         } catch (e) {
-          console.error("Failed to send differs-from-cheapest buyer email:", e);
+          console.error("Failed to send auto-approval buyer email:", e);
         }
       }
+      return;
     }
-    console.log(`${TAG} rfq=${rfq.id} finished`);
+
+    const { error: notifError } = await supabase.from("notifications").insert({
+      buyer_id: rfq.buyer_id,
+      rfq_id: rfq.id,
+      type: result.decision === "differs_from_cheapest" ? "differs_from_cheapest" : "review_needed",
+      message: `Review needed: ${result.reason}`,
+    });
+    if (notifError) console.error(`${TAG} rfq=${rfq.id} notifications insert failed:`, notifError);
+
+    if (buyerEmail) {
+      try {
+        await sendReviewNeededEmail({ to: buyerEmail, rfqTitle: rfq.title, reason: result.reason ?? "approval required", compareUrl });
+      } catch (e) {
+        console.error("Failed to send review-needed buyer email:", e);
+      }
+    }
   } catch (e) {
     console.error(`${TAG} rfq=${rfq.id} evaluation threw:`, e);
     throw e;
