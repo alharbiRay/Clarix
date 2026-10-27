@@ -2,11 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Mail, Phone } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { computeSupplierStats } from "@/lib/supplier-stats";
+import { loadMetricsRfqs, rfqIdsForSuppliers } from "@/lib/metrics/load";
+import { describeSupplier, scoreSupplier, scoreTrend, supplierMetrics } from "@/lib/scorecard";
+import { formatHours, formatPct } from "@/lib/metrics/format";
+import { ScoreRing } from "@/components/suppliers/score-ring";
+import { ScoreBreakdown, ScoreTrend, StrengthsWeaknesses } from "@/components/suppliers/scorecard-panels";
 import { computeQuoteTotal } from "@/lib/quote-comparison";
 import { formatDate, formatMoney } from "@/lib/format";
 import { FadeIn } from "@/components/motion";
-import { StarRating } from "@/components/suppliers/star-rating";
 import {
   SupplierPerformanceChart,
   type SupplierMonthPoint,
@@ -36,26 +39,26 @@ interface RfqSupplierRow {
   quotes: (Quote & { quote_items: QuoteItem[] })[];
 }
 
-function formatPct(v: number | null) {
-  if (v === null) return "—";
-  const sign = v > 0 ? "+" : "";
-  return `${sign}${v.toFixed(1)}%`;
-}
-
 export default async function SupplierDetailPage({
   params,
 }: {
   params: { id: string };
 }) {
   const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) notFound();
 
-  const { data } = await supabase.from("suppliers").select("*").eq("id", params.id).single();
+  const { data } = await supabase.from("suppliers").select("*").eq("id", params.id).eq("buyer_id", user.id).maybeSingle();
   if (!data) notFound();
   const supplier = data as Supplier;
 
   // Both only depend on supplier.id, not on each other — fetch concurrently.
-  const [stats, { data: rfqSuppliersData }] = await Promise.all([
-    computeSupplierStats(supabase, supplier.id),
+  const [rfqs, { data: rfqSuppliersData }] = await Promise.all([
+    rfqIdsForSuppliers(supabase, [{ id: supplier.id, email: supplier.email }]).then((ids) =>
+      loadMetricsRfqs(supabase, user.id, { rfqIds: ids })
+    ),
     supabase
       .from("rfq_suppliers")
       .select("id, rfq_id, rfqs(id, title, currency, rfq_items(*)), quotes(*, quote_items(*))")
@@ -96,6 +99,11 @@ export default async function SupplierDetailPage({
   }
 
   const label = supplier.company_name || supplier.email;
+  const ref = { id: supplier.id, email: supplier.email };
+  const metrics = supplierMetrics(rfqs, ref);
+  const card = scoreSupplier(metrics);
+  const trend = scoreTrend(rfqs, ref, new Date(), 6);
+  const { strengths, weaknesses } = describeSupplier(metrics, card);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -122,33 +130,60 @@ export default async function SupplierDetailPage({
               {supplier.contact_name && <span>Contact: {supplier.contact_name}</span>}
             </div>
           </div>
-          <StarRating rating={stats.rating} />
         </div>
       </FadeIn>
 
       <FadeIn delay={0.03}>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { label: "RFQs participated", value: String(stats.rfqsParticipated) },
-            {
-              label: "Win rate",
-              value:
-                stats.winRate === null ? "—" : `${Math.round(stats.winRate * 100)}%`,
-            },
-            {
-              label: "Avg response",
-              value: stats.avgResponseDays === null ? "—" : `${stats.avgResponseDays.toFixed(1)}d`,
-            },
-            { label: "Price vs. peers", value: formatPct(stats.priceCompetitivenessPct) },
-          ].map((s) => (
-            <Card key={s.label}>
-              <CardContent className="pt-6">
-                <p className="text-xs font-medium text-slate-400">{s.label}</p>
-                <p className="mt-1 text-xl font-bold tracking-tight">{s.value}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <section
+          aria-labelledby="scorecard-heading"
+          className="grid gap-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] lg:p-8"
+        >
+          <div className="flex flex-row items-center gap-5 lg:flex-col lg:items-start">
+            <h2 id="scorecard-heading" className="sr-only">Supplier scorecard</h2>
+            <ScoreRing score={card?.score ?? null} />
+            <div>
+              <p className="text-xs font-medium text-slate-500">Last six months</p>
+              <div className="mt-1">
+                <ScoreTrend points={trend} />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">How the score is built</h3>
+            <div className="mt-4">
+              <ScoreBreakdown card={card} />
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+              {[
+                { label: "Quoted", value: `${metrics.quoted} of ${metrics.invited}` },
+                { label: "Win rate", value: formatPct(metrics.winRate) },
+                { label: "Median reply", value: formatHours(metrics.medianResponseHours) },
+                {
+                  label: "Price vs lowest",
+                  value: metrics.avgPriceVsLowest === null ? "—" : `+${formatPct(metrics.avgPriceVsLowest)}`,
+                },
+                { label: "Warranty offered", value: formatPct(metrics.warrantyRate) },
+                {
+                  label: "Delivery vs typical",
+                  value:
+                    metrics.deliveryVsTypicalDays === null
+                      ? "—"
+                      : `${metrics.deliveryVsTypicalDays > 0 ? "+" : metrics.deliveryVsTypicalDays < 0 ? "−" : ""}${Math.abs(Math.round(metrics.deliveryVsTypicalDays * 10) / 10)} days`,
+                },
+              ].map((s) => (
+                <div key={s.label}>
+                  <dt className="text-xs text-slate-500">{s.label}</dt>
+                  <dd className="mt-0.5 font-semibold tabular text-slate-900">{s.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <StrengthsWeaknesses strengths={strengths} weaknesses={weaknesses} />
+          </div>
+        </section>
       </FadeIn>
 
       <FadeIn delay={0.05}>
