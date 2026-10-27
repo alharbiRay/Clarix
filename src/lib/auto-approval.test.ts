@@ -112,7 +112,11 @@ describe("evaluateAutoApproval", () => {
     const db = seed();
     const unknown: RecommendationContent = { ...content, ranking: [{ supplier: "Nobody", rank: 1, strengths: [], weaknesses: [] }] };
     await evaluateAutoApproval(asClient(db), rfq, unknown);
-    expect(db.tables.rfq_awards).toEqual([expect.objectContaining({ decision: "review_needed", recommended_quote_id: "q1" })]);
+    // The AI's pick is unknown, so nothing is recorded as "recommended" (no stand-in).
+    expect(db.tables.rfq_awards).toEqual([
+      expect.objectContaining({ decision: "review_needed", recommended_quote_id: null, cheapest_quote_id: "q1" }),
+    ]);
+    expect(db.tables.audit_events[0].payload).toMatchObject({ rule: "ai_pick_unmatched" });
     expect(email.sendPoConfirmationEmail).not.toHaveBeenCalled();
     expect(db.tables.notifications).toEqual([expect.objectContaining({ type: "review_needed", message: expect.stringMatching(/Nobody/) })]);
   });
@@ -146,6 +150,22 @@ describe("evaluateAutoApproval", () => {
     await evaluateAutoApproval(asClient(db), rfq, pricier);
     expect(db.tables.rfq_awards).toEqual([expect.objectContaining({ decision: "auto_approved", recommended_quote_id: "q2" })]);
     expect(email.sendPoConfirmationEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("never auto-approves an incomplete quote, even with 'cheapest only' off (no PO on a partial total)", async () => {
+    const db = seed({
+      approval_policies: [{ buyer_id: "buyer-1", enabled: true, max_delivery_days: 14, require_warranty: true, spend_limit: null, min_supplier_score: null, require_cheapest: false }],
+    });
+    const twoItems = {
+      ...rfq,
+      rfq_items: [rfqItem("a"), rfqItem("b")],
+      quotes: [quote("q1", "s1", { a: 100, b: 100 }), quote("q2", "s2", { a: 50 })],
+    } as RfqWithComparisonData;
+    const pickPartial: RecommendationContent = { ...content, ranking: [{ supplier: "Supplier s2", rank: 1, strengths: [], weaknesses: [] }] };
+    await evaluateAutoApproval(asClient(db), twoItems, pickPartial);
+    expect(email.sendPoConfirmationEmail).not.toHaveBeenCalled();
+    expect(db.tables.rfq_awards).toEqual([expect.objectContaining({ decision: "review_needed", recommended_quote_id: "q2" })]);
+    expect(db.tables.notifications[0].message).toMatch(/hasn't priced every line/);
   });
 
   it("a minimum supplier score fails safe: no score yet means review", async () => {

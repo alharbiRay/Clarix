@@ -6,6 +6,7 @@ interface PolicyRow {
   max_delivery_days: number;
   require_warranty: boolean;
   spend_limit: number | string | null;
+  spend_limit_currency?: string | null;
   min_supplier_score: number | null;
   require_cheapest: boolean;
 }
@@ -16,6 +17,7 @@ export function policyFromRow(row: PolicyRow): ApprovalPolicy {
     maxDeliveryDays: row.max_delivery_days,
     requireWarranty: row.require_warranty,
     spendLimit: row.spend_limit === null ? null : Number(row.spend_limit),
+    spendLimitCurrency: row.spend_limit_currency ?? null,
     minSupplierScore: row.min_supplier_score,
     requireCheapest: row.require_cheapest,
   };
@@ -28,6 +30,7 @@ export function policyToRow(buyerId: string, p: ApprovalPolicy) {
     max_delivery_days: p.maxDeliveryDays,
     require_warranty: p.requireWarranty,
     spend_limit: p.spendLimit,
+    spend_limit_currency: p.spendLimit === null ? null : p.spendLimitCurrency,
     min_supplier_score: p.minSupplierScore,
     require_cheapest: p.requireCheapest,
   };
@@ -45,7 +48,7 @@ export async function loadApprovalPolicy(
 ): Promise<ApprovalPolicy> {
   const { data, error } = await supabase
     .from("approval_policies")
-    .select("enabled, max_delivery_days, require_warranty, spend_limit, min_supplier_score, require_cheapest")
+    .select("enabled, max_delivery_days, require_warranty, spend_limit, spend_limit_currency, min_supplier_score, require_cheapest")
     .eq("buyer_id", buyerId)
     .maybeSingle();
   if (error) throw new Error(`failed to load approval policy: ${error.message}`);

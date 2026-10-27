@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RecommendationContent } from "@/lib/gemini";
-import { computeQuoteTotal, findCheapestQuote } from "@/lib/quote-comparison";
+import { computeQuoteTotal } from "@/lib/quote-comparison";
 import {
   sendAutoApprovalEmail,
   sendPoConfirmationEmail,
@@ -9,7 +9,7 @@ import {
 import type { RfqWithComparisonData } from "@/lib/recommendation-input";
 import type { Quote, QuoteItem, RfqSupplier } from "@/lib/types";
 import { recordAuditEvent } from "@/lib/audit";
-import { evaluateApprovalRules, type ApprovalPolicy, type CandidateQuote } from "@/lib/approval/rules";
+import { decideApproval, type ApprovalPolicy, type DecisionQuote } from "@/lib/approval/rules";
 import { loadApprovalPolicy } from "@/lib/approval/policy";
 import { loadMetricsRfqs, rfqIdsForSuppliers } from "@/lib/metrics/load";
 import { scoreSupplier, supplierMetrics } from "@/lib/scorecard";
@@ -49,35 +49,21 @@ async function claimAward(
  * for it (it loads the supplier's history). Any failure yields null, which
  * the rule treats as "no score yet" — so it fails safe into review.
  */
-async function scoreFor(supabase: SupabaseClient, buyerId: string, invite: RfqSupplier): Promise<number | null> {
-  if (!invite.supplier_id) return null;
+async function scoreFor(
+  supabase: SupabaseClient,
+  buyerId: string,
+  invite: RfqSupplier
+): Promise<{ score: number | null; failed: boolean }> {
+  if (!invite.supplier_id) return { score: null, failed: false };
   try {
     const ref = { id: invite.supplier_id, email: invite.email };
     const ids = await rfqIdsForSuppliers(supabase, [ref]);
     const history = await loadMetricsRfqs(supabase, buyerId, { rfqIds: ids });
-    return scoreSupplier(supplierMetrics(history, ref))?.score ?? null;
+    return { score: scoreSupplier(supplierMetrics(history, ref))?.score ?? null, failed: false };
   } catch (e) {
     console.error(`${TAG} supplier score unavailable:`, e);
-    return null;
+    return { score: null, failed: true };
   }
-}
-
-function candidate(
-  rfq: RfqWithComparisonData,
-  quote: QuoteWithItems,
-  invite: RfqSupplier,
-  supplierScore: number | null
-): CandidateQuote | null {
-  const total = computeQuoteTotal(rfq.rfq_items, quote).total;
-  if (total === null) return null;
-  return {
-    quoteId: quote.id,
-    supplier: supplierLabel(invite),
-    total,
-    deliveryDays: quote.delivery_days,
-    warranty: quote.warranty,
-    supplierScore,
-  };
 }
 
 /**
@@ -113,7 +99,12 @@ export async function evaluateAutoApproval(
       throw new Error(`failed to load buyer profile for rfq ${rfq.id}: ${profileError?.message ?? "not found"}`);
     }
 
-    const { data: existingAward } = await supabase.from("rfq_awards").select("rfq_id").eq("rfq_id", rfq.id).maybeSingle();
+    const { data: existingAward, error: existingError } = await supabase
+      .from("rfq_awards")
+      .select("rfq_id")
+      .eq("rfq_id", rfq.id)
+      .maybeSingle();
+    if (existingError) console.error(`${TAG} rfq=${rfq.id} existing-award check failed (the insert gate still protects):`, existingError);
     if (existingAward) {
       console.log(`${TAG} rfq=${rfq.id} bail: rfq_awards row already exists — idempotency guard`);
       return;
@@ -122,79 +113,69 @@ export async function evaluateAutoApproval(
     const policy: ApprovalPolicy = await loadApprovalPolicy(supabase, rfq.buyer_id, profile.auto_approval_enabled);
     const items = rfq.rfq_items;
     const suppliersById = new Map(rfq.rfq_suppliers.map((s) => [s.id, s]));
-    const cheapestQuote = findCheapestQuote(items, rfq.quotes) as QuoteWithItems | null;
+    const quotesById = new Map(rfq.quotes.map((q) => [q.id, q as QuoteWithItems]));
+    const comparable = rfq.quotes.filter(
+      (q) => (q.status === "submitted" || q.status === "confirmed") && suppliersById.has(q.supplier_id)
+    ) as QuoteWithItems[];
+    const pickLabel = content.ranking.find((r) => r.rank === 1)?.supplier ?? null;
 
-    // Map the AI's rank-1 label back to a quote.
-    const topRank = content.ranking.find((r) => r.rank === 1);
-    const labelToQuote = new Map<string, QuoteWithItems>();
-    for (const q of rfq.quotes) {
-      if (q.status !== "submitted" && q.status !== "confirmed") continue;
-      const s = suppliersById.get(q.supplier_id);
-      if (s) labelToQuote.set(supplierLabel(s), q);
+    // The facts the rules need. A quote that leaves any line unpriced has no
+    // total here, so it can never be approved on a partial amount.
+    const decisionQuotes: DecisionQuote[] = comparable.map((q) => {
+      const t = computeQuoteTotal(items, q);
+      return {
+        quoteId: q.id,
+        supplier: supplierLabel(suppliersById.get(q.supplier_id)!),
+        total: t.missingCount === 0 ? t.total : null,
+        deliveryDays: q.delivery_days,
+        warranty: q.warranty,
+        supplierScore: null,
+      };
+    });
+    if (policy.enabled && policy.minSupplierScore !== null && pickLabel) {
+      const pick = decisionQuotes.find((d) => d.supplier === pickLabel);
+      const invite = pick ? suppliersById.get(quotesById.get(pick.quoteId)!.supplier_id) : undefined;
+      if (pick && invite) {
+        const s = await scoreFor(supabase, rfq.buyer_id, invite);
+        pick.supplierScore = s.score;
+        pick.scoreUnavailable = s.failed;
+      }
     }
-    let recommendedQuote = topRank ? (labelToQuote.get(topRank.supplier) ?? null) : null;
-    let unmatchedPick: string | null = null;
-    if (policy.enabled && !recommendedQuote && cheapestQuote) {
-      // Previously this bailed silently and the buyer never heard about the RFQ.
-      unmatchedPick = topRank?.supplier ?? "(none)";
-      recommendedQuote = cheapestQuote;
-    }
-    if (policy.enabled && (!cheapestQuote || !recommendedQuote)) {
-      console.log(`${TAG} rfq=${rfq.id} bail: no complete comparable quote to decide on`);
+
+    const result = decideApproval({ policy, pickLabel, quotes: decisionQuotes, currency: rfq.currency });
+    if (!result.decision) {
+      console.log(`${TAG} rfq=${rfq.id} bail: ${result.reason}`);
       // Leave a trace so the timeline doesn't show a recommendation followed by silence.
-      const reason = "no quote has a price for every line item yet";
       await recordAuditEvent(
         {
           buyerId: rfq.buyer_id,
           rfqId: rfq.id,
           actor: { type: "system" },
           type: "auto_approval_decided",
-          summary: `Auto-approval skipped: ${reason}`,
-          payload: { decision: "not_evaluated", rule: null, reason },
+          summary: `Auto-approval skipped: ${result.reason}`,
+          payload: { decision: "not_evaluated", rule: null, reason: result.reason },
         },
         supabase
       );
       return;
     }
 
-    const recommendedInvite = recommendedQuote ? suppliersById.get(recommendedQuote.supplier_id)! : null;
-    const cheapestInvite = cheapestQuote ? suppliersById.get(cheapestQuote.supplier_id)! : null;
-    const score =
-      policy.enabled && policy.minSupplierScore !== null && recommendedInvite
-        ? await scoreFor(supabase, rfq.buyer_id, recommendedInvite)
-        : null;
-
-    const result = unmatchedPick
-      ? {
-          decision: "review_needed" as const,
-          rule: "requirements_not_met" as const,
-          reasons: [`the AI's pick (${unmatchedPick}) couldn't be matched to a quote — check the comparison`],
-          explanation: [],
-          reason: `the AI's pick (${unmatchedPick}) couldn't be matched to a quote — check the comparison`,
-          requiresManager: false,
-        }
-      : evaluateApprovalRules({
-          policy,
-          recommended: recommendedQuote && recommendedInvite ? candidate(rfq, recommendedQuote, recommendedInvite, score) : null,
-          cheapest: cheapestQuote && cheapestInvite ? candidate(rfq, cheapestQuote, cheapestInvite, null) : null,
-          currency: rfq.currency,
-        });
-    if (!result.decision) {
-      console.log(`${TAG} rfq=${rfq.id} bail: rules engine could not decide`);
-      return;
-    }
-
+    const recommendedQuote = result.recommendedQuoteId ? (quotesById.get(result.recommendedQuoteId) ?? null) : null;
+    const cheapestQuote = result.cheapestQuoteId ? (quotesById.get(result.cheapestQuoteId) ?? null) : null;
+    const recommendedInvite = recommendedQuote ? (suppliersById.get(recommendedQuote.supplier_id) ?? null) : null;
+    const cheapestInvite = cheapestQuote ? (suppliersById.get(cheapestQuote.supplier_id) ?? null) : null;
     const auto = result.decision === "auto_approved";
-    const label = recommendedInvite ? supplierLabel(recommendedInvite) : null;
+    const label = recommendedInvite ? supplierLabel(recommendedInvite) : pickLabel;
     const total = recommendedQuote ? computeQuoteTotal(items, recommendedQuote).total : null;
 
     const claimed = await claimAward(supabase, rfq.id, {
       rfq_id: rfq.id,
       decision: result.decision,
-      recommended_supplier_id: policy.enabled ? (recommendedInvite?.id ?? null) : null,
-      recommended_quote_id: policy.enabled ? (recommendedQuote?.id ?? null) : null,
-      cheapest_supplier_id: policy.enabled ? (cheapestInvite?.id ?? null) : null,
-      cheapest_quote_id: policy.enabled ? (cheapestQuote?.id ?? null) : null,
+      // Only the AI's real pick is recorded as "recommended" (never a stand-in).
+      recommended_supplier_id: recommendedInvite?.id ?? null,
+      recommended_quote_id: recommendedQuote?.id ?? null,
+      cheapest_supplier_id: cheapestInvite?.id ?? null,
+      cheapest_quote_id: cheapestQuote?.id ?? null,
       reason: result.reason,
       ...(auto ? { po_sent_at: new Date().toISOString() } : {}),
     });

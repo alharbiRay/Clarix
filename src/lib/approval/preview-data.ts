@@ -20,20 +20,22 @@ export async function loadPreviewCases(
   const all = await loadMetricsRfqs(supabase, buyerId);
   const recent = all.slice(0, PREVIEW_RFQ_LIMIT);
 
-  const picks = new Map<string, string>();
+  const picks = new Map<string, string | null>();
   const ids = recent.map((r) => r.id);
   for (let i = 0; i < ids.length; i += ID_CHUNK) {
     const { data, error } = await supabase
       .from("ai_recommendations")
       .select("rfq_id, content, created_at")
       .in("rfq_id", ids.slice(i, i + ID_CHUNK))
+      // Auto-approval only runs after automatic recommendations.
+      .eq("auto_generated", true)
       .order("created_at", { ascending: false });
     if (error) throw new Error(`Failed to load recommendations: ${error.message}`);
     for (const row of (data ?? []) as { rfq_id: string; content: unknown }[]) {
       if (picks.has(row.rfq_id)) continue; // newest first: keep the latest
       const ranking = (row.content as { ranking?: { rank: number; supplier: string }[] } | null)?.ranking;
       const top = Array.isArray(ranking) ? ranking.find((r) => r.rank === 1)?.supplier : undefined;
-      if (top) picks.set(row.rfq_id, top);
+      picks.set(row.rfq_id, top ?? null);
     }
   }
 

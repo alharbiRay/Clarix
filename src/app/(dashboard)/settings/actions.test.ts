@@ -9,7 +9,7 @@ import { saveApprovalPolicy, updateAutoApprovalSetting, updatePriceAlertThreshol
 import { DEFAULT_POLICY } from "@/lib/approval/rules";
 
 function signIn(isDemo = false) {
-  db = Object.assign(createFakeSupabase({ profiles: [{ id: "u1", is_demo: isDemo, price_alert_threshold: 0.1 }] }), {
+  db = Object.assign(createFakeSupabase({ profiles: [{ id: "u1", is_demo: isDemo, price_alert_threshold: 0.1, role: "manager" }] }), {
     auth: { getUser: async () => ({ data: { user: { id: "u1" } }, error: null }) },
   });
 }
@@ -18,10 +18,10 @@ describe("saveApprovalPolicy", () => {
   beforeEach(() => signIn());
 
   it("stores a validated policy for the signed-in account", async () => {
-    const policy = { ...DEFAULT_POLICY, maxDeliveryDays: 21, spendLimit: 50_000, minSupplierScore: 60 };
+    const policy = { ...DEFAULT_POLICY, maxDeliveryDays: 21, spendLimit: 50_000, spendLimitCurrency: "SAR", minSupplierScore: 60 };
     expect(await saveApprovalPolicy(policy)).toEqual({ success: true, policy });
     expect(db.tables.approval_policies).toEqual([
-      expect.objectContaining({ buyer_id: "u1", max_delivery_days: 21, spend_limit: 50_000, min_supplier_score: 60, require_cheapest: true }),
+      expect.objectContaining({ buyer_id: "u1", max_delivery_days: 21, spend_limit: 50_000, spend_limit_currency: "SAR", min_supplier_score: 60, require_cheapest: true }),
     ]);
   });
 
@@ -38,7 +38,7 @@ describe("saveApprovalPolicy", () => {
   });
 
   it("the on/off switch keeps the rest of the policy and mirrors the old profile flag", async () => {
-    await saveApprovalPolicy({ ...DEFAULT_POLICY, spendLimit: 1_000 });
+    await saveApprovalPolicy({ ...DEFAULT_POLICY, spendLimit: 1_000, spendLimitCurrency: "SAR" });
     expect(await updateAutoApprovalSetting(false)).toEqual({ success: true });
     expect(db.tables.approval_policies[0]).toMatchObject({ enabled: false, spend_limit: 1_000 });
     expect(db.tables.profiles[0].auto_approval_enabled).toBe(false);
@@ -47,6 +47,19 @@ describe("saveApprovalPolicy", () => {
   it("is refused in the demo workspace", async () => {
     signIn(true);
     expect((await saveApprovalPolicy(DEFAULT_POLICY)).error).toMatch(/read-only demo/);
+  });
+
+  it("a partial payload is rejected instead of resetting the other fields", async () => {
+    await saveApprovalPolicy({ ...DEFAULT_POLICY, spendLimit: 1_000, spendLimitCurrency: "SAR" });
+    expect((await saveApprovalPolicy({})).error).toBeTruthy();
+    expect((await saveApprovalPolicy({ enabled: false })).error).toBeTruthy();
+    expect(db.tables.approval_policies[0]).toMatchObject({ spend_limit: 1_000, enabled: true });
+  });
+
+  it("only a manager can change the rules", async () => {
+    db.tables.profiles[0].role = "buyer";
+    expect(await saveApprovalPolicy(DEFAULT_POLICY)).toEqual({ error: "Only a manager can change the approval rules." });
+    expect(db.tables.approval_policies ?? []).toHaveLength(0);
   });
 });
 

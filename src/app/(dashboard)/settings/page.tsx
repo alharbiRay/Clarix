@@ -3,7 +3,6 @@ import { FadeIn } from "@/components/motion";
 import { ApprovalPolicyForm } from "@/components/settings/approval-policy-form";
 import { loadApprovalPolicy } from "@/lib/approval/policy";
 import { loadPreviewCases } from "@/lib/approval/preview-data";
-import { DEFAULT_POLICY } from "@/lib/approval/rules";
 import type { PreviewCase } from "@/lib/approval/preview";
 import { PriceAlertForm } from "@/components/settings/price-alert-form";
 import {
@@ -26,10 +25,12 @@ export default async function SettingsPage() {
     .eq("id", user!.id)
     .single();
 
-  const policy = await loadApprovalPolicy(supabase, user!.id, profile?.auto_approval_enabled).catch(() => ({
-    ...DEFAULT_POLICY,
-    enabled: profile?.auto_approval_enabled !== false,
-  }));
+  // On a load error, show it rather than defaults: saving defaults over the
+  // real policy would quietly drop the buyer's limits.
+  const policy = await loadApprovalPolicy(supabase, user!.id, profile?.auto_approval_enabled).catch((e) => {
+    console.error("[settings] approval policy failed to load:", e);
+    return null;
+  });
   // The preview is a convenience: if it can't load, the form still works.
   let cases: PreviewCase[] = [];
   let currency = "SAR";
@@ -61,12 +62,18 @@ export default async function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ApprovalPolicyForm
-              initial={policy}
-              cases={cases}
-              currency={currency}
-              previewUnavailable={previewUnavailable}
-            />
+            {policy ? (
+              <ApprovalPolicyForm
+                initial={policy}
+                cases={cases}
+                currency={currency}
+                previewUnavailable={previewUnavailable}
+              />
+            ) : (
+              <p role="alert" className="text-sm text-red-700">
+                Your approval rules couldn&apos;t be loaded. Refresh the page to try again. Nothing has changed.
+              </p>
+            )}
           </CardContent>
         </Card>
       </FadeIn>

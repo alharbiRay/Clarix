@@ -43,6 +43,37 @@ describe("approval policies and roles (migration 0013)", () => {
     ).rejects.toThrow(/row-level security|duplicate/);
   });
 
+  it("another account's policy can't be created or changed (0 rows touched)", async () => {
+    const carol = await createUser(db, "carol@example.com");
+    await db.query(`delete from approval_policies where buyer_id = $1`, [carol]);
+    await expect(
+      asUser(db, alice, () => db.query(`insert into approval_policies (buyer_id) values ($1)`, [carol]))
+    ).rejects.toThrow(/row-level security/);
+    await db.query(`insert into approval_policies (buyer_id, spend_limit) values ($1, 1000)`, [carol]);
+    const res = await asUser(db, alice, () => db.query(`update approval_policies set spend_limit = null where buyer_id = $1`, [carol]));
+    expect(res.affectedRows ?? 0).toBe(0);
+    const { rows } = await db.query<{ spend_limit: string }>(`select spend_limit from approval_policies where buyer_id = $1`, [carol]);
+    expect(Number(rows[0].spend_limit)).toBe(1000);
+  });
+
+  it("only managers can write a policy (0014)", async () => {
+    const dana = await createUser(db, "dana@example.com");
+    await db.query(`update profiles set role = 'buyer' where id = $1`, [dana]);
+    const res = await asUser(db, dana, () => db.query(`update approval_policies set spend_limit = null where buyer_id = $1`, [dana]));
+    expect(res.affectedRows ?? 0).toBe(0);
+    await db.query(`delete from approval_policies where buyer_id = $1`, [dana]);
+    await expect(
+      asUser(db, dana, () => db.query(`insert into approval_policies (buyer_id) values ($1)`, [dana]))
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it("the spend limit's currency must be an ISO code", async () => {
+    await expect(
+      asUser(db, alice, () => db.query(`update approval_policies set spend_limit_currency = 'riyal' where buyer_id = $1`, [alice]))
+    ).rejects.toThrow(/check constraint|violates/);
+    await asUser(db, alice, () => db.query(`update approval_policies set spend_limit_currency = 'SAR' where buyer_id = $1`, [alice]));
+  });
+
   it("the demo account can't change its policy", async () => {
     const demo = await createUser(db, "demo@clarix.example");
     await db.query(`update profiles set is_demo = true where id = $1`, [demo]);
