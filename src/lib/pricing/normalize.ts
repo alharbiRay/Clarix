@@ -55,6 +55,11 @@ export function normalizeUnit(unit: string): string {
   return UNIT_LOOKUP.get(c) ?? c;
 }
 
+/** Whether a word is a unit of measure we know ("bags", "pcs", "كيس", "طن"). */
+export function isKnownUnit(word: string): boolean {
+  return UNIT_LOOKUP.has(clean(word).replace(/[.,;:!?)]+$/, ""));
+}
+
 /**
  * Bilingual glossary over whole words: normalized phrase (article already
  * stripped) → canonical English words. Longest phrases win.
