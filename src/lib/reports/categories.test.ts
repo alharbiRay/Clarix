@@ -26,6 +26,30 @@ describe("categorizeItem", () => {
     ["كابل كهرباء 4 مم", "electrical"],
     ["Boundary wall works", "services"],
     ["تنظيف الموقع", "services"],
+    // Review regressions: rule order, unit words, services vs goods, Arabic parity.
+    ["Gypsum panel 12mm", "construction"],
+    ["Sandwich panel", "construction"],
+    ["Acoustic ceiling panel", "construction"],
+    ["Binding wire", "construction"],
+    ["Tie wire for rebar", "construction"],
+    ["Light duty pallet", "packaging"],
+    ["Terminal block 4mm", "electrical"],
+    ["Electrical tape", "electrical"],
+    ["لوحة كهربائية", "electrical"],
+    ["طقم مفكات 6 قطع", "maintenance"],
+    ["ورق تصوير A4 كرتون", "office"],
+    ["Work gloves", "safety"],
+    ["Safety work boots", "safety"],
+    ["Cleaning detergent", "office"],
+    ["Printer maintenance service", "services"],
+    ["Pump repair", "services"],
+    ["AC maintenance contract", "services"],
+    ["صيانة مضخات", "services"],
+    ["Water filter", "maintenance"],
+    ["فلتر مياه", "maintenance"],
+    ["Split unit air conditioner 2 ton", "hvac"],
+    ["مكيف سبليت", "hvac"],
+    ["Generator preventive maintenance kit", "maintenance"],
     ["Something unusual", "other"],
     ["", "other"],
   ])("%s → %s", (name, category) => {
@@ -33,7 +57,7 @@ describe("categorizeItem", () => {
   });
 
   it("has a label for every category", () => {
-    for (const c of ["construction", "packaging", "office", "it", "maintenance", "electrical", "services", "other"] as const) {
+    for (const c of ["construction", "packaging", "office", "it", "maintenance", "electrical", "hvac", "safety", "services", "other"] as const) {
       expect(CATEGORY_LABELS[c]).toBeTruthy();
     }
   });

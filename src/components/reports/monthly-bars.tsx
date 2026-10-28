@@ -41,11 +41,13 @@ function ChartTooltip({ active, payload, currency, label }: { active?: boolean; 
 export function MonthlyBars({ title, data, currency }: { title: string; data: Point[]; currency: string }) {
   const many = data.length > 12;
   return (
-    <figure className="break-inside-avoid">
-      <figcaption className="text-xs font-semibold text-slate-600">{title}</figcaption>
-      <div className="mt-2 h-44" aria-hidden="true">
+    <div className="break-inside-avoid">
+      <p className="text-xs font-semibold text-slate-600" aria-hidden="true">
+        {title}
+      </p>
+      <div className="report-chart mt-2 h-44" aria-hidden="true">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap={many ? "18%" : "28%"}>
+          <BarChart accessibilityLayer={false} data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap={many ? "18%" : "28%"}>
             <CartesianGrid vertical={false} stroke={GRID} />
             <XAxis
               dataKey="month"
@@ -62,6 +64,6 @@ export function MonthlyBars({ title, data, currency }: { title: string; data: Po
           </BarChart>
         </ResponsiveContainer>
       </div>
-    </figure>
+    </div>
   );
 }
