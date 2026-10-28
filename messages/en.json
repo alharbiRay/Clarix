@@ -418,5 +418,64 @@
     },
     "empty": "No history recorded yet. Every step — invitations, quotes, AI decisions, approvals — will appear here as this RFQ moves along.",
     "sentenceEnd": "."
+  },
+  "approve": {
+    "approveSend": "Approve & Send PO",
+    "approveSendTo": "Approve & Send PO to {supplier}",
+    "approved": "Approved — PO sent to {supplier}.",
+    "chooseDifferent": "Choose different supplier",
+    "awardDifferent": "Award this RFQ to a different supplier",
+    "chooseSupplier": "Choose a supplier",
+    "deliveryUnknown": "delivery unknown",
+    "deliveryDays": "{days}d delivery",
+    "why": "Why this supplier instead of the AI's pick?",
+    "chooseReason": "Choose a reason…",
+    "other": "Other…",
+    "reasonLabel": "Reason",
+    "reasonPlaceholder": "e.g. Needs to match the existing fleet",
+    "savedToHistory": "Saved to this RFQ's decision history.",
+    "reasons": {
+      "warranty": "Better warranty",
+      "delivery": "Faster delivery",
+      "preferred": "Preferred or contracted supplier",
+      "quality": "Quality concerns with the recommended supplier",
+      "payment": "Better payment terms"
+    }
+  },
+  "recommend": {
+    "get": "Get AI recommendation",
+    "regenerate": "Regenerate recommendation",
+    "ready": "Recommendation ready.",
+    "title": "What matters most to you?",
+    "description": "Rank your priorities, top = most important — drag, or use the arrows. The AI will lean toward suppliers that score well on what you rank highest.",
+    "priorities": "Priorities, most important first",
+    "priority": {
+      "price": {
+        "label": "Price",
+        "hint": "Lowest total cost"
+      },
+      "delivery": {
+        "label": "Delivery speed",
+        "hint": "Shortest lead time"
+      },
+      "warranty": {
+        "label": "Warranty",
+        "hint": "Longest / best coverage"
+      },
+      "paymentTerms": {
+        "label": "Payment terms",
+        "hint": "Most favorable terms"
+      }
+    },
+    "moveUp": "Move {item} up",
+    "moveDown": "Move {item} down",
+    "deadlineQ": "Do you have a delivery deadline?",
+    "yes": "Yes",
+    "no": "No",
+    "pickDeadline": "Pick a deadline",
+    "maxBudget": "Maximum budget, excl. VAT (optional)",
+    "noLimit": "No limit",
+    "analyzing": "Analyzing quotes…",
+    "generate": "Generate recommendation"
   }
 }

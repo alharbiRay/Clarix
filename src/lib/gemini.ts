@@ -384,6 +384,8 @@ export interface RecommendationInput {
   };
   weights: RecommendationWeights;
   preferences?: RecommendationPreferences;
+  /** The buyer's language for the written parts (supplier names stay exact). */
+  language?: "ar" | "en";
   items: { name: string; quantity: number; unit: string }[];
   quotes: {
     supplier: string;
@@ -445,7 +447,11 @@ Produce:
 - "ranking": every supplier, best first (rank 1 = best) according to the weighted priorities, each with specific strengths and weaknesses (e.g. "cheapest total at X", "missing a price for item Y", "longest warranty").
 - "risks": things the buyer should verify before awarding — missing prices, currency mismatches, unusually low prices, vague terms, quotes still pending review, and any violation of the hard constraints above. Empty array only if there are genuinely none.
 
-Be direct and specific. Do not pad with generic procurement advice.`;
+Be direct and specific. Do not pad with generic procurement advice.${
+    input.language === "ar"
+      ? "\n\nWrite \"recommendation\", \"reasoning\", every \"strengths\"/\"weaknesses\" entry and \"risks\" in Modern Standard Arabic. Keep each ranking \"supplier\" exactly as written in the quotes (it is matched by the system), and keep numbers and currency codes in Latin digits."
+      : ""
+  }`;
 
   const content = await generateStructured(
     client,

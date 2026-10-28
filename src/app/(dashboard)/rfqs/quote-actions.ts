@@ -421,7 +421,8 @@ export async function rejectQuote(quoteId: string) {
 export async function generateRecommendation(
   rfqId: string,
   weights: RecommendationWeights,
-  preferences: RecommendationPreferences
+  preferences: RecommendationPreferences,
+  language?: string
 ) {
   const parsedWeights = recommendationWeightsSchema.safeParse(weights);
   if (!parsedWeights.success) {
@@ -466,7 +467,7 @@ export async function generateRecommendation(
 
   let result;
   try {
-    result = await generateQuoteRecommendation(input);
+    result = await generateQuoteRecommendation({ ...input, language: language === "ar" ? "ar" : "en" });
   } catch (e) {
     return {
       error: `Recommendation failed: ${e instanceof Error ? e.message : "unknown error"}`,

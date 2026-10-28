@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { GripVertical, Loader2, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { useLocale, useTranslations } from "next-intl";
 import { generateRecommendation } from "@/app/(dashboard)/rfqs/quote-actions";
 import type { RecommendationPreferences, RecommendationWeights } from "@/lib/gemini";
 import { Button } from "@/components/ui/button";
@@ -18,15 +19,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
+import { isLocale } from "@/i18n/config";
 
 type PriorityKey = keyof RecommendationWeights;
-
-const PRIORITY_LABELS: Record<PriorityKey, { label: string; hint: string }> = {
-  price: { label: "Price", hint: "Lowest total cost" },
-  delivery: { label: "Delivery speed", hint: "Shortest lead time" },
-  warranty: { label: "Warranty", hint: "Longest / best coverage" },
-  paymentTerms: { label: "Payment terms", hint: "Most favorable terms" },
-};
 
 const DEFAULT_ORDER: PriorityKey[] = ["price", "delivery", "warranty", "paymentTerms"];
 
@@ -60,6 +55,9 @@ export function GenerateRecommendationButton({
   hasExisting: boolean;
   initialPreferences?: InitialPreferences | null;
 }) {
+  const t = useTranslations("recommend");
+  const rawLocale = useLocale();
+  const locale = isLocale(rawLocale) ? rawLocale : "en";
   const [open, setOpen] = useState(false);
   const [order, setOrder] = useState<PriorityKey[]>(
     initialPreferences ? weightsToOrder(initialPreferences.weights) : DEFAULT_ORDER
@@ -82,6 +80,18 @@ export function GenerateRecommendationButton({
     });
   }
 
+  /** Keyboard-friendly alternative to dragging. */
+  function move(key: PriorityKey, by: -1 | 1) {
+    setOrder((current) => {
+      const i = current.indexOf(key);
+      const j = i + by;
+      if (j < 0 || j >= current.length) return current;
+      const next = [...current];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
+
   function handleGenerate() {
     const preferences: RecommendationPreferences = {
       hasDeadline,
@@ -90,11 +100,11 @@ export function GenerateRecommendationButton({
     };
 
     startTransition(async () => {
-      const result = await generateRecommendation(rfqId, orderToWeights(order), preferences);
+      const result = await generateRecommendation(rfqId, orderToWeights(order), preferences, locale);
       if (result?.error) {
         toast.error(result.error);
       } else {
-        toast.success("Recommendation ready.");
+        toast.success(t("ready"));
         setOpen(false);
       }
     });
@@ -103,27 +113,20 @@ export function GenerateRecommendationButton({
   return (
     <Dialog open={open} onOpenChange={(v) => !isPending && setOpen(v)}>
       <DialogTrigger asChild>
-        <Button
-          variant={hasExisting ? "outline" : "default"}
-          size="sm"
-          className="gap-2"
-        >
-          <Sparkles className="h-4 w-4" />
-          {hasExisting ? "Regenerate recommendation" : "Get AI recommendation"}
+        <Button variant={hasExisting ? "outline" : "default"} size="sm" className="gap-2">
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
+          {hasExisting ? t("regenerate") : t("get")}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>What matters most to you?</DialogTitle>
-          <DialogDescription>
-            Drag to rank your priorities, top = most important. The AI will
-            lean toward suppliers that score well on what you rank highest.
-          </DialogDescription>
+          <DialogTitle>{t("title")}</DialogTitle>
+          <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-1.5 py-1">
+        <ol className="space-y-1.5 py-1" aria-label={t("priorities")}>
           {order.map((key, i) => (
-            <div
+            <li
               key={key}
               draggable
               onDragStart={() => setDraggedKey(key)}
@@ -134,61 +137,77 @@ export function GenerateRecommendationButton({
                 draggedKey === key ? "opacity-40" : ""
               }`}
             >
-              <GripVertical className="h-4 w-4 shrink-0 text-slate-300" />
+              <GripVertical className="h-4 w-4 shrink-0 text-slate-300" aria-hidden="true" />
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">
                 {i + 1}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-slate-900">
-                  {PRIORITY_LABELS[key].label}
-                </p>
-                <p className="text-xs text-slate-400">{PRIORITY_LABELS[key].hint}</p>
+                <p className="text-sm font-medium text-slate-900">{t(`priority.${key}.label`)}</p>
+                <p className="text-xs text-slate-500">{t(`priority.${key}.hint`)}</p>
               </div>
-            </div>
+              <div className="flex shrink-0 flex-col">
+                <button
+                  type="button"
+                  onClick={() => move(key, -1)}
+                  disabled={i === 0}
+                  aria-label={t("moveUp", { item: t(`priority.${key}.label`) })}
+                  className="rounded p-0.5 text-slate-400 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0] disabled:opacity-30"
+                >
+                  <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => move(key, 1)}
+                  disabled={i === order.length - 1}
+                  aria-label={t("moveDown", { item: t(`priority.${key}.label`) })}
+                  className="rounded p-0.5 text-slate-400 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0] disabled:opacity-30"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            </li>
           ))}
-        </div>
+        </ol>
 
         <div className="space-y-3 border-t border-slate-100 pt-4">
           <div className="flex items-center justify-between">
-            <Label className="text-sm">Do you have a delivery deadline?</Label>
-            <div className="flex gap-1.5">
+            <p id="deadline-q" className="text-sm font-medium">
+              {t("deadlineQ")}
+            </p>
+            <div className="flex gap-1.5" role="group" aria-labelledby="deadline-q">
               <Button
                 type="button"
                 size="sm"
                 variant={hasDeadline ? "default" : "outline"}
+                aria-pressed={hasDeadline}
                 className="h-7 px-3 text-xs"
                 onClick={() => setHasDeadline(true)}
               >
-                Yes
+                {t("yes")}
               </Button>
               <Button
                 type="button"
                 size="sm"
                 variant={!hasDeadline ? "default" : "outline"}
+                aria-pressed={!hasDeadline}
                 className="h-7 px-3 text-xs"
                 onClick={() => setHasDeadline(false)}
               >
-                No
+                {t("no")}
               </Button>
             </div>
           </div>
-          {hasDeadline && (
-            <DatePicker
-              value={deadlineDate}
-              onChange={setDeadlineDate}
-              placeholder="Pick a deadline"
-            />
-          )}
+          {hasDeadline && <DatePicker value={deadlineDate} onChange={setDeadlineDate} placeholder={t("pickDeadline")} />}
 
           <div className="space-y-1.5">
             <Label htmlFor="max-budget" className="text-sm">
-              Maximum budget (optional)
+              {t("maxBudget")}
             </Label>
             <Input
               id="max-budget"
               type="number"
               min="0"
-              placeholder="No limit"
+              placeholder={t("noLimit")}
               value={maxBudget}
               onChange={(e) => setMaxBudget(e.target.value)}
             />
@@ -199,13 +218,13 @@ export function GenerateRecommendationButton({
           <Button onClick={handleGenerate} disabled={isPending} className="gap-2">
             {isPending ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Analyzing quotes…
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                {t("analyzing")}
               </>
             ) : (
               <>
-                <Sparkles className="h-4 w-4" />
-                Generate recommendation
+                <Sparkles className="h-4 w-4" aria-hidden="true" />
+                {t("generate")}
               </>
             )}
           </Button>

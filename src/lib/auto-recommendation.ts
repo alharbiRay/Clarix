@@ -113,8 +113,11 @@ export async function runAutoRecommendation(
       }
     : { hasDeadline: false, deadlineDate: null, maxBudget: null };
 
-  const input = buildRecommendationInput(fullRfq, weights, preferences);
-  if (!input) return { outcome: "no_comparable_quotes" };
+  const built = buildRecommendationInput(fullRfq, weights, preferences);
+  if (!built) return { outcome: "no_comparable_quotes" };
+  // Written in the buyer's language (supplier names stay exact for matching).
+  const { data: buyer } = await supabase.from("profiles").select("locale").eq("id", fullRfq.buyer_id).maybeSingle();
+  const input = { ...built, language: buyer?.locale === "ar" ? ("ar" as const) : ("en" as const) };
 
   console.log(`${TAG} rfq=${rfqId} calling Gemini with ${input.quotes.length} comparable quote(s)`);
   const result = await deps.generate(input);
