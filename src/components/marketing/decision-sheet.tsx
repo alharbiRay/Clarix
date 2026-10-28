@@ -126,8 +126,11 @@ export function DecisionSheet() {
   const outcomeKey = `${decision.status}-${decision.quote.id}-${decision.status === "held" ? decision.reason : ""}`;
   const today = formatDate(new Date().toISOString(), locale);
 
+  // The wrapper carries spacing and ground: a <legend> sits on its fieldset's
+  // top edge and ignores the fieldset's own padding.
   const priorityControl = (name: string, className?: string) => (
-    <fieldset className={className}>
+    <div className={className}>
+      <fieldset>
       <legend className="text-[0.8rem] font-medium text-slate-600">{t("priority")}</legend>
       <div className="mt-1.5 grid grid-cols-3 rounded-md border border-slate-300 bg-white p-0.5">
         {PRIORITIES.map((p) => (
@@ -143,7 +146,8 @@ export function DecisionSheet() {
           </label>
         ))}
       </div>
-    </fieldset>
+      </fieldset>
+    </div>
   );
 
   return (
@@ -217,7 +221,7 @@ export function DecisionSheet() {
         {/* The ranked quotes */}
         <div className="order-1 min-w-0 lg:order-none">
           {/* Phones: the control that re-ranks sits right above the rows it moves. */}
-          {priorityControl("priority-phone", "border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:px-7 lg:hidden")}
+          {priorityControl("priority-phone", "border-b border-slate-200 bg-slate-50 px-5 pb-4 pt-5 sm:px-7 lg:hidden")}
           <div
             aria-hidden
             className="hidden grid-cols-[3rem_minmax(0,1fr)_8.5rem_6rem_6.5rem_4rem] gap-3 border-b border-slate-200 px-7 py-2.5 text-[0.7rem] font-medium text-slate-500 md:grid"
