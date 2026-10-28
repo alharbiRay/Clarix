@@ -623,5 +623,26 @@
     "add": "Add",
     "removeSupplier": "Remove {email}",
     "create": "Create RFQ"
+  },
+  "review": {
+    "title": "Review extracted quote",
+    "subtitle": "PDF quote from {supplier} · extracted by Gemini — confirm to include it in the comparison.",
+    "confirmed": "Quote confirmed — it now appears in the comparison.",
+    "rejected": "Quote rejected.",
+    "confidence": "Extraction confidence: {level}",
+    "level": {
+      "high": "high",
+      "medium": "medium",
+      "low": "low"
+    },
+    "openPdf": "Open original PDF",
+    "checkFirst": "Check these before confirming",
+    "prices": "Extracted prices ({currency}, excl. VAT)",
+    "pricesHint": "Values extracted from {supplier}'s PDF. Correct anything that doesn't match the document.",
+    "noPrice": "No price found in the PDF",
+    "unitPrice": "Unit price",
+    "itemNote": "Item note (alternatives, brand quoted, lead time)",
+    "reject": "Reject quote",
+    "confirm": "Confirm quote"
   }
 }

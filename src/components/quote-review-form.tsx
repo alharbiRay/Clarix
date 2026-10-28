@@ -10,6 +10,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useLocale, useTranslations } from "next-intl";
+import { isLocale } from "@/i18n/config";
 import { confirmQuote, rejectQuote } from "@/app/(dashboard)/rfqs/quote-actions";
 import { formatMoney } from "@/lib/format";
 import { sanitizeDecimalInput, sanitizeIntegerInput } from "@/lib/utils";
@@ -70,6 +72,11 @@ export function QuoteReviewForm({
   pdfUrl: string | null;
 }) {
   const router = useRouter();
+  const t = useTranslations("review");
+  const tf = useTranslations("supplierForm");
+  const tv = useTranslations("vat");
+  const rawLocale = useLocale();
+  const locale = isLocale(rawLocale) ? rawLocale : "en";
   // Separate transitions per button so only the one actually clicked shows
   // its own spinner — both still disable together to prevent a double submit.
   const [isConfirming, startConfirmTransition] = useTransition();
@@ -119,7 +126,7 @@ export function QuoteReviewForm({
       if (result?.error) {
         toast.error(result.error);
       } else {
-        toast.success("Quote confirmed — it now appears in the comparison.");
+        toast.success(t("confirmed"));
         router.push(`/rfqs/${rfqId}`);
       }
     });
@@ -131,7 +138,7 @@ export function QuoteReviewForm({
       if (result?.error) {
         toast.error(result.error);
       } else {
-        toast.success("Quote rejected.");
+        toast.success(t("rejected"));
         router.push(`/rfqs/${rfqId}`);
       }
     });
@@ -146,14 +153,14 @@ export function QuoteReviewForm({
               CONFIDENCE_STYLES[confidence] ?? "bg-slate-100 text-slate-600"
             }`}
           >
-            Extraction confidence: {confidence}
+            {t("confidence", { level: ["high", "medium", "low"].includes(confidence) ? t(`level.${confidence}`) : confidence })}
           </span>
         )}
         {pdfUrl && (
           <Button asChild variant="outline" size="sm" className="gap-1.5">
             <a href={pdfUrl} target="_blank" rel="noopener noreferrer">
-              <ExternalLink size={13} />
-              Open original PDF
+              <ExternalLink size={13} aria-hidden="true" />
+              {t("openPdf")}
             </a>
           </Button>
         )}
@@ -162,11 +169,11 @@ export function QuoteReviewForm({
       {warnings.length > 0 && (
         <Alert className="border-amber-200 bg-amber-50 text-amber-800">
           <AlertTriangle className="h-4 w-4 !text-amber-600" />
-          <AlertTitle>Check these before confirming</AlertTitle>
+          <AlertTitle>{t("checkFirst")}</AlertTitle>
           <AlertDescription>
             <ul className="mt-1 list-disc space-y-1 ps-4 text-sm">
               {warnings.map((w, i) => (
-                <li key={i}>{w}</li>
+                <li key={i} dir="auto">{w}</li>
               ))}
             </ul>
           </AlertDescription>
@@ -176,11 +183,10 @@ export function QuoteReviewForm({
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold">
-            Extracted prices ({currency})
+            {t("prices", { currency })}
           </CardTitle>
           <CardDescription className="text-xs text-slate-400">
-            Values extracted from {supplierLabel}&apos;s PDF. Correct anything
-            that doesn&apos;t match the document.
+            {t("pricesHint", { supplier: supplierLabel })}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -199,7 +205,7 @@ export function QuoteReviewForm({
                   <div className="min-w-0">
                     <p className="font-medium">
                       <span className="me-2 text-xs text-slate-400">{i + 1}.</span>
-                      {item.name}
+                      <bdi>{item.name}</bdi>
                     </p>
                     {item.description && (
                       <p className="mt-0.5 text-xs text-slate-400">
@@ -207,11 +213,11 @@ export function QuoteReviewForm({
                       </p>
                     )}
                     <p className="mt-1 text-xs text-slate-500">
-                      Quantity: {item.quantity} {item.unit}
+                      {tf("quantity", { quantity: item.quantity, unit: item.unit })}
                     </p>
                     {missing && (
                       <p className="mt-1 text-xs font-medium text-amber-600">
-                        No price found in the PDF
+                        {t("noPrice")}
                       </p>
                     )}
                   </div>
@@ -221,7 +227,7 @@ export function QuoteReviewForm({
                         htmlFor={`price-${item.rfq_item_id}`}
                         className="text-xs text-slate-500"
                       >
-                        Unit price
+                        {t("unitPrice")}
                       </Label>
                       <Input
                         id={`price-${item.rfq_item_id}`}
@@ -238,15 +244,16 @@ export function QuoteReviewForm({
                       />
                     </div>
                     <div className="pb-2 text-end">
-                      <p className="text-xs text-slate-400">Line total</p>
+                      <p className="text-xs text-slate-500">{tf("lineTotal")}</p>
                       <p className="w-24 text-sm font-semibold">
-                        {lineTotal === null ? "—" : formatMoney(lineTotal, currency)}
+                        {lineTotal === null ? "—" : formatMoney(lineTotal, currency, locale)}
                       </p>
                     </div>
                   </div>
                 </div>
                 <Input
-                  placeholder="Item note (alternatives, brand quoted, lead time)"
+                  placeholder={t("itemNote")}
+                  aria-label={t("itemNote")}
                   className="mt-3"
                   value={itemNotes[item.rfq_item_id] ?? ""}
                   onChange={(e) =>
@@ -261,21 +268,19 @@ export function QuoteReviewForm({
           })}
 
           <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-            <span className="text-sm font-medium text-slate-600">Quote total</span>
-            <span className="text-lg font-bold tracking-tight">
-              {formatMoney(total, currency)}
-            </span>
+            <span className="text-sm font-medium text-slate-600">{tv("subtotal")}</span>
+            <span className="text-lg font-bold tracking-tight">{formatMoney(total, currency, locale)}</span>
           </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold">Terms</CardTitle>
+          <CardTitle className="text-sm font-semibold">{tf("termsTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="delivery">Delivery time (days)</Label>
+            <Label htmlFor="delivery">{tf("delivery")}</Label>
             <Input
               id="delivery"
               type="text"
@@ -285,7 +290,7 @@ export function QuoteReviewForm({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="payment">Payment terms</Label>
+            <Label htmlFor="payment">{tf("payment")}</Label>
             <Input
               id="payment"
               value={paymentTerms}
@@ -293,7 +298,7 @@ export function QuoteReviewForm({
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="warranty">Warranty</Label>
+            <Label htmlFor="warranty">{tf("warranty")}</Label>
             <Input
               id="warranty"
               value={warranty}
@@ -301,7 +306,7 @@ export function QuoteReviewForm({
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="notes">Notes</Label>
+            <Label htmlFor="notes">{tf("notes")}</Label>
             <Textarea
               id="notes"
               rows={3}
@@ -321,19 +326,19 @@ export function QuoteReviewForm({
           className="gap-2 text-red-600 hover:bg-red-50 hover:text-red-700"
         >
           {isRejecting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           ) : (
-            <XCircle className="h-4 w-4" />
+            <XCircle className="h-4 w-4" aria-hidden="true" />
           )}
-          Reject quote
+          {t("reject")}
         </Button>
         <Button type="submit" disabled={isPending} className="gap-2">
           {isConfirming ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           ) : (
-            <CheckCircle2 className="h-4 w-4" />
+            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
           )}
-          Confirm quote
+          {t("confirm")}
         </Button>
       </div>
     </form>
