@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createFakeSupabase } from "@/test/fake-supabase";
 import { buildJobHooks } from "@/lib/jobs/run";
-import type { Job } from "@/lib/jobs/processor";
+import { PermanentJobError, type Job } from "@/lib/jobs/processor";
 
 const job = (overrides: Partial<Job> = {}): Job => ({
   id: "job-1",
@@ -66,5 +66,16 @@ describe("job hooks", () => {
     const fake = db();
     await buildJobHooks(fake as never).onGiveUp!(job({ buyer_id: null }), new Error("x"));
     expect(fake.tables.notifications).toHaveLength(0);
+  });
+
+  it("says an emailed quote needs manual entry when the AI couldn't read it", async () => {
+    const fake = db();
+    await buildJobHooks(fake as never).onGiveUp!(
+      job({ type: "inbound_email_quote" }),
+      new PermanentJobError("The AI couldn't read this PDF reliably. Enter the quote manually.", { reason: "needs_manual_entry" })
+    );
+    expect(fake.tables.notifications).toEqual([
+      expect.objectContaining({ type: "action_required", message: expect.stringContaining("needs manual entry") }),
+    ]);
   });
 });

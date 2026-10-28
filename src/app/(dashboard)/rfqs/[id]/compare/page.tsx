@@ -324,7 +324,7 @@ export default async function ComparePage({
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <FadeIn className="flex items-start justify-between gap-4">
+      <FadeIn className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1.5">
           <Link
             href={`/rfqs/${params.id}`}
@@ -338,7 +338,7 @@ export default async function ComparePage({
             {t("meta", { count: columns.length, currency: rfq.currency, date: formatDate(rfq.deadline, locale) })}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ManualQuoteDialog
             rfqId={params.id}
             currency={rfq.currency}
@@ -534,7 +534,7 @@ export default async function ComparePage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto rounded-xl border border-slate-100">
+              <div className="relative overflow-x-auto rounded-xl border border-slate-100">
                 <table className="w-full min-w-[640px] text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50 text-start">

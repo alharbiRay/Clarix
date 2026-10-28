@@ -9,6 +9,7 @@ import {
   type RfqAutofillResult,
 } from "@/lib/validations/rfq";
 import {
+  GeminiOutputError,
   MAX_IN_REQUEST_RETRY_DELAY_MS,
   isGeminiQuotaError,
   isRetryableGeminiError,
@@ -17,7 +18,14 @@ import {
 
 export { isGeminiQuotaError } from "@/lib/gemini-errors";
 
-const MODEL = "gemini-2.5-flash";
+/**
+ * The Gemini model for every call. gemini-2.5-flash stopped accepting new
+ * API keys (404 "no longer available to new users"), so the default is the
+ * stable Flash that answered reliably in testing (3.7/3.8 were overloaded on
+ * 2026-10-28); GEMINI_MODEL switches models without a code change.
+ */
+export const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
+const MODEL = GEMINI_MODEL;
 
 function getClient() {
   if (!process.env.GEMINI_API_KEY) {
@@ -74,43 +82,104 @@ async function generateContentWithRetry(
   throw lastError;
 }
 
-/** Runs a Gemini structured-output call and validates the result against a zod schema. */
-async function generateStructured<T>(
-  client: GoogleGenAI,
-  parts: { text?: string; inlineData?: { mimeType: string; data: string } }[],
-  responseSchema: Schema,
-  zodSchema: z.ZodType<T>
-): Promise<T> {
-  const response = await generateContentWithRetry(client, parts, responseSchema);
+export type GeminiPart = { text?: string; inlineData?: { mimeType: string; data: string } };
 
-  const text = response.text;
-  if (!text) {
-    const blockReason = response.promptFeedback?.blockReason;
-    throw new Error(
-      blockReason
-        ? `The model declined to process this request (${blockReason}).`
-        : "The model returned no output."
-    );
-  }
+/**
+ * One raw structured-output call: returns the model's text (or null with a
+ * block reason). Injectable so tests and the extraction evals can run
+ * without the network.
+ */
+export type RawGenerate = (parts: GeminiPart[], responseSchema: Schema) => Promise<{ text: string | null; blockReason?: string }>;
 
+function liveGenerate(): RawGenerate {
+  const client = getClient();
+  return async (parts, responseSchema) => {
+    const response = await generateContentWithRetry(client, parts, responseSchema);
+    return { text: response.text ?? null, blockReason: response.promptFeedback?.blockReason ?? undefined };
+  };
+}
+
+type Checked<T> = { ok: true; data: T } | { ok: false; problem: string };
+
+export function checkStructuredOutput<T>(text: string, zodSchema: z.ZodType<T>): Checked<T> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new Error("Model returned invalid JSON.");
+    return { ok: false, problem: "The response was not valid JSON." };
   }
-
   const result = zodSchema.safeParse(parsed);
   if (!result.success) {
-    throw new Error(
-      `Model output did not match the expected schema: ${result.error.message}`
-    );
+    const issues = result.error.issues
+      .slice(0, 8)
+      .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+      .join("; ");
+    return { ok: false, problem: `The response did not match the required schema: ${issues}` };
   }
-  return result.data;
+  return { ok: true, data: result.data };
+}
+
+const MAX_ECHOED_OUTPUT = 8_000;
+/**
+ * Callers run under a 60s function limit and one request can take 45s, so
+ * a repair only starts while there's time for it. Past this, the failure is
+ * left retryable (a plain Error) rather than declared permanent.
+ */
+const REPAIR_BUDGET_MS = 25_000;
+
+/**
+ * Runs a structured-output call and validates it with zod. Invalid output
+ * gets exactly one repair attempt (the original input, the bad output and
+ * what was wrong with it); if that fails too, GeminiOutputError — callers
+ * fall back to manual entry rather than retrying the same input.
+ */
+export async function generateStructured<T>(
+  parts: GeminiPart[],
+  responseSchema: Schema,
+  zodSchema: z.ZodType<T>,
+  generate: RawGenerate = liveGenerate(),
+  now: () => number = Date.now
+): Promise<T> {
+  const started = now();
+  const first = await generate(parts, responseSchema);
+  // A refusal reads the same every time; an empty answer without one is
+  // usually a glitch (overload, cut-off) and gets the repair attempt.
+  if (!first.text && first.blockReason) {
+    throw new GeminiOutputError(`The model declined to process this request (${first.blockReason}).`);
+  }
+  const checked: Checked<T> = first.text
+    ? checkStructuredOutput(first.text, zodSchema)
+    : { ok: false, problem: "The response was empty." };
+  if (checked.ok) return checked.data;
+
+  if (now() - started > REPAIR_BUDGET_MS) {
+    throw new Error(`Gemini output was unusable and there's no time left to repair it: ${checked.problem}`);
+  }
+  console.warn(`[gemini] invalid structured output, attempting one repair: ${checked.problem}`);
+  const repairPrompt = first.text
+    ? `Your previous response could not be used. ${checked.problem}
+
+Previous response:
+${first.text.slice(0, MAX_ECHOED_OUTPUT)}
+
+Answer the original request again, returning ONLY JSON that matches the required schema exactly. Do not invent values: use null where the source has no value.`
+    : `Your previous response was empty. Answer the original request, returning ONLY JSON that matches the required schema exactly. Do not invent values: use null where the source has no value.`;
+  const second = await generate([...parts, { text: repairPrompt }], responseSchema);
+  if (!second.text && second.blockReason) {
+    throw new GeminiOutputError(`The model declined to process this request (${second.blockReason}).`);
+  }
+  const repaired = second.text ? checkStructuredOutput(second.text, zodSchema) : null;
+  if (repaired?.ok) return repaired.data;
+
+  const problem = repaired ? repaired.problem : "The model returned no output, twice.";
+  console.error(`[gemini] structured output still invalid after repair: ${problem}`);
+  throw new GeminiOutputError(problem);
 }
 
 export interface ExtractionInput {
   pdfBase64: string;
+  /** Plain-text quotes (the extraction evals); the PDF is used otherwise. */
+  document?: { kind: "text"; text: string };
   currency: string;
   supplier: { email: string; company_name: string | null };
   items: {
@@ -166,9 +235,9 @@ const EXTRACTION_RESPONSE_SCHEMA: Schema = {
  * constrains the shape; zod re-validates before it's trusted).
  */
 export async function extractQuoteFromPdf(
-  input: ExtractionInput
+  input: ExtractionInput,
+  generate?: RawGenerate
 ): Promise<ExtractionResult> {
-  const client = getClient();
 
   const itemsForPrompt = input.items.map((i) => ({
     rfq_item_id: i.id,
@@ -178,7 +247,7 @@ export async function extractQuoteFromPdf(
     unit: i.unit,
   }));
 
-  const prompt = `You are extracting a supplier quotation from the attached PDF for a procurement (RFQ) comparison tool.
+  const prompt = `You are extracting a supplier quotation from the attached document for a procurement (RFQ) comparison tool.
 
 The buyer requested quotes for these line items (RFQ currency: ${input.currency}):
 
@@ -201,13 +270,15 @@ Extract the quote into the structured format:
 Do not invent prices. If a value is not in the document, use null and add a warning.`;
 
   return generateStructured(
-    client,
     [
-      { inlineData: { mimeType: "application/pdf", data: input.pdfBase64 } },
+      input.document?.kind === "text"
+        ? { text: `Quotation document (plain text):\n"""\n${input.document.text}\n"""` }
+        : { inlineData: { mimeType: "application/pdf", data: input.pdfBase64 } },
       { text: prompt },
     ],
     EXTRACTION_RESPONSE_SCHEMA,
-    extractionSchema
+    extractionSchema,
+    generate
   );
 }
 
@@ -256,7 +327,6 @@ const RFQ_AUTOFILL_RESPONSE_SCHEMA: Schema = {
  * input untouched).
  */
 export async function extractRfqFromText(text: string): Promise<RfqAutofillResult> {
-  const client = getClient();
   const today = new Date().toISOString().slice(0, 10);
 
   const prompt = `You are helping a buyer fill out an RFQ (request for quote) form from text they pasted — this could be an email, meeting notes, a message from a colleague, or a spec sheet excerpt. Today's date is ${today}.
@@ -277,12 +347,7 @@ Extract the following, using null (or an empty array) for anything not present o
 
 Be conservative — only extract what's actually supported by the text.`;
 
-  return generateStructured(
-    client,
-    [{ text: prompt }],
-    RFQ_AUTOFILL_RESPONSE_SCHEMA,
-    rfqAutofillSchema
-  );
+  return generateStructured([{ text: prompt }], RFQ_AUTOFILL_RESPONSE_SCHEMA, rfqAutofillSchema);
 }
 
 // ---------------------------------------------------------------------------
@@ -425,7 +490,6 @@ function describeConstraints(preferences: RecommendationPreferences | undefined)
 export async function generateQuoteRecommendation(
   input: RecommendationInput
 ): Promise<{ content: RecommendationContent; model: string }> {
-  const client = getClient();
 
   const prompt = `You are a procurement analyst. A buyer collected supplier quotes for the RFQ below and needs a purchase recommendation.
 
@@ -454,7 +518,6 @@ Be direct and specific. Do not pad with generic procurement advice.${
   }`;
 
   const content = await generateStructured(
-    client,
     [{ text: prompt }],
     RECOMMENDATION_RESPONSE_SCHEMA,
     recommendationContentSchema
@@ -491,6 +554,5 @@ const NEGOTIATION_DRAFT_RESPONSE_SCHEMA: Schema = {
  * findPrivacyLeaks on the result.
  */
 export async function generateNegotiationDraft(prompt: string): Promise<{ subject: string; body: string }> {
-  const client = getClient();
-  return generateStructured(client, [{ text: prompt }], NEGOTIATION_DRAFT_RESPONSE_SCHEMA, negotiationDraftSchema);
+  return generateStructured([{ text: prompt }], NEGOTIATION_DRAFT_RESPONSE_SCHEMA, negotiationDraftSchema);
 }

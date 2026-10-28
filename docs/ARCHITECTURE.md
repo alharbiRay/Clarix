@@ -13,7 +13,7 @@ email) or flags the RFQ for the buyer's review.
 | Framework | Next.js 14 App Router, React 18, TypeScript (strict) |
 | UI | Tailwind CSS 3, shadcn/ui (Radix), lucide-react, Framer Motion, Recharts |
 | Data and auth | Supabase (Postgres + RLS, Auth, Storage bucket `quote-pdfs`) |
-| AI | Google Gemini 2.5 Flash through `@google/genai`, structured JSON output validated by Zod |
+| AI | Google Gemini Flash (`gemini-3.5-flash` by default, `GEMINI_MODEL` to override) through `@google/genai`; structured JSON output validated by Zod, with one repair attempt |
 | Email | Resend: outbound invitations and POs, inbound replies via a signed webhook |
 | Hosting | Vercel (serverless functions, middleware on the edge runtime) |
 | Tests | Vitest, Testing Library, PGlite (in-process Postgres for migration and RLS tests) |

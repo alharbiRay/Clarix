@@ -146,7 +146,7 @@ export default async function RfqDetailPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <FadeIn className="flex items-start justify-between gap-4">
+      <FadeIn className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1.5">
           <Link
             href="/rfqs"

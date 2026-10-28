@@ -1,4 +1,4 @@
-import { isGeminiRateLimited } from "@/lib/gemini-errors";
+import { isGeminiRateLimited, isGeminiOutputError } from "@/lib/gemini-errors";
 
 /**
  * Durable background job processor. Storage-agnostic: the Supabase-backed
@@ -38,9 +38,12 @@ export interface JobHooks {
 
 /** Thrown by a handler when retrying cannot help (bad input, deleted RFQ). */
 export class PermanentJobError extends Error {
-  constructor(message: string) {
+  /** Why, when the buyer's notice should say something specific. */
+  readonly reason?: "needs_manual_entry";
+  constructor(message: string, options: { reason?: "needs_manual_entry" } = {}) {
     super(message);
     this.name = "PermanentJobError";
+    this.reason = options.reason;
   }
 }
 
@@ -131,7 +134,7 @@ export async function processJobs({
     } catch (e) {
       const message = errorMessage(e);
       const exhausted = job.attempts >= job.max_attempts;
-      if (e instanceof PermanentJobError || exhausted) {
+      if (e instanceof PermanentJobError || isGeminiOutputError(e) || exhausted) {
         await store.fail(job.id, message);
         summary.failed++;
         console.error(JSON.stringify({ event: "jobs.failed", jobId: job.id, type: job.type, attempts: job.attempts, error: message }));

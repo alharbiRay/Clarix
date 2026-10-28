@@ -21,7 +21,8 @@ import { quoteSchema, type QuoteFormValues } from "@/lib/validations/quote";
 import { recordAuditEvent } from "@/lib/audit";
 import type { RfqItem } from "@/lib/types";
 
-const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10 MB
+/** Uploads post through a server action: Vercel's ~4.5 MB request cap applies (next.config.mjs). */
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // 4 MB
 
 /**
  * Buyer uploads a supplier's PDF quote. The PDF is stored in the private
@@ -43,8 +44,8 @@ export async function uploadQuotePdf(formData: FormData) {
   if (file.type !== "application/pdf") {
     return { error: "Only PDF files are supported" };
   }
-  if (file.size > MAX_PDF_BYTES) {
-    return { error: "PDF is too large (max 10 MB)" };
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return { error: "PDF is too large to upload (max 4 MB). Ask the supplier to email it instead." };
   }
 
   const supabase = createClient();
@@ -80,7 +81,7 @@ export async function uploadQuotePdf(formData: FormData) {
     pdfBuffer: buffer,
     source: "pdf",
   });
-  if (result.error !== undefined) return { error: result.error };
+  if (result.error !== undefined) return { error: result.error, needsManualEntry: result.needsManualEntry ?? false };
 
   revalidatePath(`/rfqs/${rfqId}`);
   revalidatePath(`/rfqs/${rfqId}/compare`);

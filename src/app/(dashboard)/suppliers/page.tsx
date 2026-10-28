@@ -115,7 +115,7 @@ export default async function SuppliersPage({
       </FadeIn>
 
       <FadeIn delay={0.05} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[880px] text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-start text-xs text-slate-500">

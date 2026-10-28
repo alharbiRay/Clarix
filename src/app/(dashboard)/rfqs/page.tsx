@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus, SearchX } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { ilikeAnyFilter } from "@/lib/postgrest";
 import {
   Table,
   TableBody,
@@ -19,13 +20,13 @@ import { isLocale } from "@/i18n/config";
 export default async function RfqsPage({
   searchParams,
 }: {
-  searchParams: { q?: string };
+  searchParams: { q?: string | string[] };
 }) {
   const supabase = createClient();
   const t = await getTranslations("rfqs");
   const rawLocale = await getLocale();
   const locale = isLocale(rawLocale) ? rawLocale : "en";
-  const q = searchParams.q?.trim();
+  const q = typeof searchParams.q === "string" ? searchParams.q.trim() : undefined;
 
   let query = supabase
     .from("rfqs")
@@ -33,7 +34,7 @@ export default async function RfqsPage({
     .order("created_at", { ascending: false });
 
   if (q) {
-    query = query.or(`title.ilike.%${q}%,project.ilike.%${q}%`);
+    query = query.or(ilikeAnyFilter(["title", "project"], q));
   }
 
   const { data } = await query;

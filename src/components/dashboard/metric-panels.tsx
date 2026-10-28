@@ -199,7 +199,7 @@ export async function TopSavingsTable({ rows }: { rows: RfqSavings[] }) {
           {t("empty")}
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
               <tr className="text-start text-xs text-slate-500">

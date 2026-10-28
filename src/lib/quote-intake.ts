@@ -1,11 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { extractQuoteFromPdf } from "@/lib/gemini";
-import { isGeminiRateLimited } from "@/lib/gemini-errors";
+import { isGeminiOutputError, isGeminiRateLimited } from "@/lib/gemini-errors";
 import { ensureSupplierProfile } from "@/lib/supplier-profile";
 import { recordAuditEvent } from "@/lib/audit";
 import type { RfqItem } from "@/lib/types";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10 MB
+
+/** Magic bytes, not the uploader-controlled content type, decide whether this is a PDF. */
+export function looksLikePdf(buf: Buffer) {
+  return buf.subarray(0, 5).toString("latin1") === "%PDF-";
+}
 
 export interface QuoteIntakeInput {
   supabase: SupabaseClient;
@@ -38,6 +43,8 @@ export type QuoteIntakeResult =
       error: string;
       /** Gemini rejected the call with a 429 (quota or rate limit) — retrying later can succeed. */
       quotaExceeded?: boolean;
+      /** The AI couldn't produce a usable reading, even after a repair attempt: enter the quote by hand. */
+      needsManualEntry?: boolean;
       /** The original error, so the job runner can classify it. */
       cause?: unknown;
     };
@@ -51,6 +58,9 @@ export async function createQuoteFromPdf(input: QuoteIntakeInput): Promise<Quote
   }
   if (pdfBuffer.length > MAX_PDF_BYTES) {
     return { error: "PDF is too large (max 10 MB)" };
+  }
+  if (!looksLikePdf(pdfBuffer)) {
+    return { error: "This file isn't a valid PDF" };
   }
 
   const { data: existing } = await supabase
@@ -81,6 +91,7 @@ export async function createQuoteFromPdf(input: QuoteIntakeInput): Promise<Quote
     });
   } catch (e) {
     const quotaExceeded = isGeminiRateLimited(e);
+    const needsManualEntry = isGeminiOutputError(e);
     // Quota problems are recorded once by the job hooks (ai_quota_error).
     // Emailed PDFs run in a retrying job: recording here would repeat the
     // event on every attempt, so that path is recorded once, as job_failed,
@@ -97,8 +108,11 @@ export async function createQuoteFromPdf(input: QuoteIntakeInput): Promise<Quote
       });
     }
     return {
-      error: `Extraction failed: ${e instanceof Error ? e.message : "unknown error"}`,
+      error: needsManualEntry
+        ? "The AI couldn't read this PDF reliably. Enter the quote manually."
+        : `Extraction failed: ${e instanceof Error ? e.message : "unknown error"}`,
       quotaExceeded,
+      needsManualEntry,
       cause: e,
     };
   }

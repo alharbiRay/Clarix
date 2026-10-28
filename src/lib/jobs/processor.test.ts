@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { GeminiOutputError } from "@/lib/gemini-errors";
 import { PermanentJobError, backoffDelayMs, processJobs, type Job, type JobStore } from "@/lib/jobs/processor";
 
 const NOW = new Date("2026-03-01T10:00:00Z");
@@ -32,6 +33,20 @@ const quotaError = new Error(
 );
 
 describe("processJobs", () => {
+  it("gives up at once on output the AI couldn't produce, instead of retrying the same input", async () => {
+    const store = memoryStore([job({ attempts: 1 })]);
+    const onGiveUp = vi.fn();
+    const summary = await processJobs({
+      store,
+      handlers: { auto_recommendation: async () => { throw new GeminiOutputError("still invalid"); } },
+      hooks: { onGiveUp },
+      now: () => NOW,
+    });
+    expect(store.log).toEqual(["fail:job-1"]);
+    expect(summary.failed).toBe(1);
+    expect(onGiveUp).toHaveBeenCalledTimes(1);
+  });
+
   it("runs the handler for each claimed job and records the result", async () => {
     const store = memoryStore([job({ id: "a" }), job({ id: "b" })]);
     const handler = vi.fn(async () => ({ outcome: "generated" }));
