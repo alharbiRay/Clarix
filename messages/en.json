@@ -987,5 +987,228 @@
   },
   "common": {
     "close": "Close"
+  },
+  "site": {
+    "skip": "Skip to content",
+    "nav": "Site",
+    "howItWorks": "How it works",
+    "pricing": "Pricing",
+    "faq": "Questions",
+    "signIn": "Sign in",
+    "tryDemo": "Try the demo",
+    "home": "Clarix home",
+    "footerLine": "RFQs, supplier quotes and purchase orders for Saudi businesses, in Arabic and English.",
+    "product": "Product",
+    "company": "Account",
+    "createAccount": "Create an account",
+    "rights": "© {year} Clarix.",
+    "demoShort": "Demo"
+  },
+  "landing": {
+    "metaTitle": "Clarix — every purchase at the best price, approved by your rules",
+    "metaDescription": "Send RFQs, collect supplier quotes by form or PDF, compare them excluding VAT and auto-approve the best one within your rules. Arabic and English.",
+    "title": "Every purchase at the best price. Approved by your rules.",
+    "lede": "Clarix compares every quote and approves the best one inside your limits.",
+    "createAccount": "Create an account",
+    "demoNote": "No sign-up. A sample workspace, read-only.",
+    "sheet": {
+      "label": "Live comparison sheet with sample quotes",
+      "title": "Quote comparison",
+      "rfq": "Concrete and rebar — Al Malqa villas, phase 2",
+      "sample": "Sample quotes. Change a rule and watch the decision.",
+      "rules": "Your rules",
+      "priority": "The AI weighs",
+      "priorities": {
+        "price": "Price only",
+        "balanced": "Balanced",
+        "speed": "Speed"
+      },
+      "delivery": "Deliver within",
+      "days": "{count, plural, one {# day} other {# days}}",
+      "fewer": "Fewer days",
+      "more": "More days",
+      "warranty": "Require a warranty",
+      "spend": "Spend limit",
+      "lower": "Lower the limit",
+      "higher": "Raise the limit",
+      "rank": "Rank",
+      "supplier": "Supplier",
+      "total": "Total excl. VAT",
+      "deliveryCol": "Delivery",
+      "warrantyCol": "Warranty",
+      "score": "Score",
+      "months": "{count, plural, one {# month} other {# months}}",
+      "none": "None",
+      "aiPick": "AI pick",
+      "approved": "Auto-approved",
+      "approvedDetail": "PO sent to {supplier}. {amount} below the average of the other quotes.",
+      "held": "Waiting for you",
+      "reasons": {
+        "delivery": "{supplier} delivers in {days} days, over your {limit}-day limit.",
+        "warranty": "{supplier} offers no warranty, and you require one.",
+        "spend": "{amount} is over your {limit} limit, so a manager approves it."
+      },
+      "stamp": "Approved",
+      "suppliers": {
+        "eastern": "Eastern Province Trading",
+        "rashid": "Al Rashid Building Materials",
+        "najd": "Najd Steel & Cement"
+      },
+      "status": "Decision: {status}"
+    },
+    "how": {
+      "title": "One RFQ, from request to purchase order",
+      "lede": "The same four steps for every purchase — and a record of each one.",
+      "steps": {
+        "send": {
+          "title": "Send the RFQ",
+          "body": "Paste the request from an email or type it. Each supplier gets a private link, in their own language.",
+          "artifact": "Invitation · reply by 6 Nov"
+        },
+        "collect": {
+          "title": "Collect the quotes",
+          "body": "Suppliers fill in a short form or reply with a PDF. Clarix reads it, in Arabic or English, and takes VAT out where it was included.",
+          "artifact": "quote.pdf → 2,500 SAR/unit excl. VAT"
+        },
+        "compare": {
+          "title": "Compare line by line",
+          "body": "Every quote side by side, excluding VAT, next to each supplier's last price and the market average.",
+          "artifact": "−4% against the market"
+        },
+        "approve": {
+          "title": "Approve and send the PO",
+          "body": "When the AI's pick passes your rules, Clarix approves it and emails the purchase order. When it doesn't, it waits for you and says why.",
+          "artifact": "PO sent · 23 Oct"
+        }
+      }
+    },
+    "features": {
+      "title": "Built for how quotes actually arrive",
+      "extraction": {
+        "title": "Reads the quotes you really get",
+        "body": "Scanned PDFs, Arabic-Indic digits, prices that include VAT, line totals with no unit price. Anything it isn't sure of is flagged; anything it can't read goes to you.",
+        "proof": "In our tests on 22 deliberately messy sample quotes, every unit price it returned was correct.",
+        "fig": {
+          "unit": "Unit price excl. VAT",
+          "delivery": "Delivery",
+          "warranty": "Warranty",
+          "days": "7 days",
+          "years": "5 years",
+          "warning": "Note for the buyer: prices included 15% VAT, removed."
+        }
+      },
+      "compare": {
+        "title": "Ranks on one basis",
+        "body": "Every quote is compared excluding VAT, with VAT as its own line. Missing lines are flagged, never quietly ignored."
+      },
+      "approval": {
+        "title": "Approves inside your limits",
+        "body": "Delivery days, spend limit, supplier score, warranty. Above the spend limit, a manager decides. Turn it off any time."
+      },
+      "audit": {
+        "title": "Explains every decision",
+        "body": "Invitations, quotes, recommendations and approvals land on one timeline: who, when, and which rule allowed it.",
+        "events": {
+          "invited": "4 suppliers invited",
+          "received": "Quote received from Al Rashid by email",
+          "recommended": "AI recommended Al Rashid",
+          "approved": "Auto-approved: passed delivery, warranty and spend rules"
+        }
+      },
+      "arabic": {
+        "title": "Arabic first, not translated",
+        "body": "The whole app, the supplier form and every email switch to Arabic, right to left, with Saudi VAT and Western digits.",
+        "sample": "اعتماد تلقائي: أُرسل أمر الشراء"
+      }
+    },
+    "preview": {
+      "title": "See what every award saved",
+      "body": "The dashboard measures each award against the average of the other quotes — not against a list price nobody pays.",
+      "label": "Sample workspace",
+      "savings": "Measured savings, last 6 months",
+      "rate": "Decided automatically",
+      "rateValue": "9 of 17",
+      "months": "Savings by month",
+      "recent": "Recent purchase orders",
+      "auto": "Auto",
+      "manual": "Manual"
+    },
+    "faq": {
+      "title": "Questions buyers ask",
+      "q1": "Do my suppliers need an account?",
+      "a1": "No. Each supplier gets a private link to a short form, in Arabic or English, or simply replies to the email with a PDF.",
+      "q2": "How is VAT handled?",
+      "a2": "Prices are stored excluding VAT, so quotes compare fairly. Your VAT rate (15% by default) is added as its own line on comparisons, the supplier form and the purchase order.",
+      "q3": "What does auto-approval actually approve?",
+      "a3": "Only the AI's pick, and only when it passes every rule you set. Anything else waits for you, with the reason. You can switch it off.",
+      "q4": "Can the AI misread a PDF?",
+      "a4": "It can. It flags what it isn't sure of, a quote it can't read reliably comes to you for manual entry, and you can correct any line before awarding.",
+      "q5": "Who can see our data?",
+      "a5": "Each account sees only its own RFQs and suppliers; the database enforces it. Supplier links are unguessable and open only that one RFQ.",
+      "q6": "What does it cost?",
+      "a6": "Pricing isn't final. The plans page shows illustrative tiers, and you can join the waitlist there."
+    },
+    "close": {
+      "title": "Open the demo and change a rule.",
+      "body": "Six months of a sample contractor's purchasing: RFQs, quotes, decisions and the trail behind each one."
+    }
+  },
+  "pricing": {
+    "metaTitle": "Plans — Clarix",
+    "metaDescription": "Illustrative Clarix plans for Saudi businesses, and the waitlist for when plans open.",
+    "title": "Plans",
+    "lede": "Simple tiers by how much you buy. Prices exclude VAT.",
+    "illustrative": "Illustrative pricing — not final. Join the waitlist and we'll tell you when plans open.",
+    "perMonth": "/ month",
+    "free": "Free",
+    "choose": "Join the waitlist for {tier}",
+    "tiers": {
+      "starter": {
+        "name": "Starter",
+        "for": "Trying Clarix on real purchases",
+        "f1": "Up to 5 RFQs a month",
+        "f2": "Supplier form and PDF replies",
+        "f3": "AI comparison and recommendation",
+        "f4": "Arabic and English"
+      },
+      "team": {
+        "name": "Team",
+        "for": "Teams buying every week",
+        "f1": "Unlimited RFQs",
+        "f2": "Auto-approval rules",
+        "f3": "Supplier scorecards and price history",
+        "f4": "Reports, print and CSV"
+      },
+      "business": {
+        "name": "Business",
+        "for": "Several buyers and a manager",
+        "f1": "Everything in Team",
+        "f2": "Manager approval above a spend limit",
+        "f3": "Negotiation drafts",
+        "f4": "Help importing your suppliers"
+      }
+    },
+    "popular": "Most teams",
+    "waitlist": {
+      "title": "Join the waitlist",
+      "body": "Tell us a little about your purchasing. We'll write when plans open — nothing else.",
+      "name": "Your name",
+      "email": "Work email",
+      "company": "Company",
+      "teamSize": "Team size",
+      "tier": "Plan you're interested in",
+      "anyTier": "Not sure yet",
+      "note": "Anything we should know? (optional)",
+      "submit": "Join the waitlist",
+      "sending": "Sending…",
+      "done": "You're on the list. We'll email {email} when plans open.",
+      "errors": {
+        "name": "Enter your name.",
+        "email": "Enter a valid email address.",
+        "tooMany": "Too many attempts. Please try again in a little while.",
+        "failed": "That didn't go through. Please try again."
+      },
+      "privacy": "We use your details only to contact you about Clarix."
+    }
   }
 }

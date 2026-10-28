@@ -7,12 +7,16 @@ import { Toaster } from "@/components/ui/sonner";
 import { MotionProvider } from "@/components/motion-provider";
 import { DirectionProvider } from "@/components/direction-provider";
 import { dirOf, isLocale, DEFAULT_LOCALE } from "@/i18n/config";
+import { siteOrigin } from "@/lib/site";
 import "./globals.css";
 
+// No generated fallback: next/font would put a size-matched Arial right after
+// Geist, and Arial has Arabic glyphs, so Arabic text never reached Plex Arabic.
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
   variable: "--font-geist-sans",
   weight: "100 900",
+  adjustFontFallback: false,
 });
 const geistMono = localFont({
   src: "./fonts/GeistMonoVF.woff",
@@ -31,7 +35,7 @@ const plexArabic = IBM_Plex_Sans_Arabic({
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("meta");
-  return { title: t("title"), description: t("description") };
+  return { metadataBase: new URL(siteOrigin()), title: t("title"), description: t("description") };
 }
 
 export default async function RootLayout({

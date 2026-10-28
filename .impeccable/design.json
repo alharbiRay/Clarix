@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-28T00:00:00Z",
+  "title": "Design System: Clarix",
+  "extensions": {
+    "colorMeta": {
+      "brand-violet": { "role": "primary", "displayName": "Clarix Violet", "canonical": "#7C6FE0", "tonalRamp": ["#1E1A4A", "#2E2870", "#4338CA", "#5B4FD0", "#7C6FE0", "#A39AEB", "#CBC6F4", "#EEECFC"] },
+      "stamp-violet": { "role": "primary", "displayName": "Stamp Violet", "canonical": "#5B4FD0", "tonalRamp": ["#1E1A4A", "#2E2870", "#4338CA", "#5B4FD0", "#7C6FE0", "#A39AEB", "#CBC6F4", "#EEECFC"] },
+      "approval-ink": { "role": "primary", "displayName": "Approval Ink", "canonical": "#4338CA", "tonalRamp": ["#1E1B4B", "#312E81", "#3730A3", "#4338CA", "#4F46E5", "#818CF8", "#C7D2FE", "#EEF2FF"] },
+      "approval-tint": { "role": "primary", "displayName": "Approval Tint", "canonical": "rgb(124 111 224 / 0.08)" },
+      "pick-tint": { "role": "primary", "displayName": "Pick Tint", "canonical": "rgb(124 111 224 / 0.06)" },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#020617", "tonalRamp": ["#020617", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#CBD5E1", "#F1F5F9"] },
+      "ink-hover": { "role": "neutral", "displayName": "Ink Hover", "canonical": "#1E293B" },
+      "text-strong": { "role": "neutral", "displayName": "Strong Text", "canonical": "#334155" },
+      "text-body": { "role": "neutral", "displayName": "Body Text", "canonical": "#475569" },
+      "text-muted": { "role": "neutral", "displayName": "Muted Text", "canonical": "#64748B" },
+      "page-ground": { "role": "neutral", "displayName": "Page Ground", "canonical": "#F8FAFC" },
+      "sheet-white": { "role": "neutral", "displayName": "Sheet White", "canonical": "#FFFFFF" },
+      "rule-hairline": { "role": "neutral", "displayName": "Hairline Rule", "canonical": "#E2E8F0" },
+      "rule-row": { "role": "neutral", "displayName": "Row Rule", "canonical": "#F1F5F9" },
+      "rule-control": { "role": "neutral", "displayName": "Control Rule", "canonical": "#CBD5E1" },
+      "waiting-ink": { "role": "secondary", "displayName": "Waiting Amber Ink", "canonical": "#92400E", "tonalRamp": ["#451A03", "#78350F", "#92400E", "#B45309", "#D97706", "#FBBF24", "#FCD34D", "#FFFBEB"] },
+      "waiting-ink-deep": { "role": "secondary", "displayName": "Waiting Amber Deep", "canonical": "#78350F" },
+      "waiting-mark": { "role": "secondary", "displayName": "Waiting Amber Mark", "canonical": "#D97706" },
+      "waiting-ground": { "role": "secondary", "displayName": "Waiting Ground", "canonical": "#FFFBEB" },
+      "waiting-rule": { "role": "secondary", "displayName": "Waiting Rule", "canonical": "#FCD34D" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The one page headline. 1.2 leading and no tracking in RTL." },
+      "headline": { "displayName": "Headline", "purpose": "Section titles, balanced wrap." },
+      "title": { "displayName": "Title", "purpose": "Sub-feature titles; 1.125rem for steps and tier names." },
+      "body": { "displayName": "Body", "purpose": "Paragraphs at 34-62ch; ledes step to 1.125rem." },
+      "label": { "displayName": "Label", "purpose": "Control labels and segment text, sentence case." },
+      "figure": { "displayName": "Figure", "purpose": "Tabular money, counts and stepper values." },
+      "stamp": { "displayName": "Stamp", "purpose": "The word inside the approval stamp only; tracking LTR only." }
+    },
+    "shadows": [
+      { "name": "sheet", "value": "0 1px 0 rgba(15,23,42,0.04), 0 30px 60px -40px rgba(15,23,42,0.45)", "purpose": "Large document sheets: decision sheet, pricing sheet, dashboard figure." },
+      { "name": "primary-lift", "value": "0 1px 0 rgba(15,23,42,0.08), 0 8px 24px -12px rgba(15,23,42,0.45)", "purpose": "The large primary button." },
+      { "name": "knob", "value": "0 1px 2px rgba(15,23,42,0.3)", "purpose": "Toggle knob." }
+    ],
+    "motion": [
+      { "name": "ease-out-expo", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "All decision motion." },
+      { "name": "rerank-flip", "value": "260ms", "purpose": "Rows glide to their new rank (FLIP translateY)." },
+      { "name": "stamp-land", "value": "180ms", "purpose": "Approval stamp lands from scale 1.45 and opacity 0." },
+      { "name": "outcome-lit", "value": "420ms", "purpose": "Decision bar settles from saturate(2.2) brightness(0.96)." },
+      { "name": "micro", "value": "200ms", "purpose": "Toggle knob, arrow nudge, FAQ plus rotation." },
+      { "name": "reduced-motion", "value": "none", "purpose": "All of the above are off under prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "xs", "value": "440px" },
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "container", "value": "76rem" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ink button for the main action (Try the live demo, Join, featured tier).",
+      "html": "<button class=\"ds-btn-primary\">Explore the live demo <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 20px; border: 0; border-radius: 6px; background: #020617; color: #fff; font: 600 0.95rem/1 Geist, 'IBM Plex Sans Arabic', system-ui, sans-serif; box-shadow: 0 1px 0 rgba(15,23,42,0.08), 0 8px 24px -12px rgba(15,23,42,0.45); cursor: pointer; transition: background-color 150ms; } .ds-btn-primary svg { transition: transform 200ms; } .ds-btn-primary:hover { background: #1E293B; } .ds-btn-primary:hover svg { transform: translateX(2px); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px #7C6FE0; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "White ruled button beside the primary (Create an account, non-featured tiers).",
+      "html": "<button class=\"ds-btn-secondary\">Create an account</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; height: 48px; padding: 0 20px; border: 1px solid #CBD5E1; border-radius: 6px; background: #fff; color: #020617; font: 600 0.95rem/1 Geist, 'IBM Plex Sans Arabic', system-ui, sans-serif; cursor: pointer; transition: border-color 150ms, background-color 150ms; } .ds-btn-secondary:hover { border-color: #94A3B8; background: #F8FAFC; } .ds-btn-secondary:focus-visible { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px #7C6FE0; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Waitlist field: ruled white input, ink border and violet ring on focus, amber when invalid.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Work email</span><input class=\"ds-input\" type=\"email\" placeholder=\"you@company.sa\"></label>",
+      "css": ".ds-field { display: block; font-family: Geist, 'IBM Plex Sans Arabic', system-ui, sans-serif; } .ds-field-label { display: block; font-size: 0.875rem; font-weight: 500; color: #1E293B; } .ds-input { margin-top: 6px; display: block; width: 100%; padding: 10px 12px; border: 1px solid #CBD5E1; border-radius: 6px; background: #fff; color: #020617; font: 400 0.95rem/1.4 inherit; caret-color: #5B4FD0; transition: border-color 150ms; } .ds-input::placeholder { color: #94A3B8; } .ds-input:hover { border-color: #94A3B8; } .ds-input:focus { outline: none; border-color: #020617; box-shadow: 0 0 0 2px rgb(124 111 224 / 0.4); } .ds-input[aria-invalid=true] { border-color: #D97706; }"
+    },
+    {
+      "name": "Site Navigation",
+      "kind": "nav",
+      "refersTo": "nav",
+      "description": "Sticky white header bar with hairline rule, text links and the small primary button.",
+      "html": "<header class=\"ds-nav\"><span class=\"ds-nav-brand\">Clarix</span><nav class=\"ds-nav-links\"><a href=\"#\">How it works</a><a href=\"#\">Pricing</a><a href=\"#\">Questions</a></nav><button class=\"ds-nav-cta\">Try the demo</button></header>",
+      "css": ".ds-nav { display: flex; align-items: center; gap: 24px; height: 64px; padding: 0 32px; background: rgb(255 255 255 / 0.9); border-bottom: 1px solid rgb(226 232 240 / 0.8); font-family: Geist, 'IBM Plex Sans Arabic', system-ui, sans-serif; } .ds-nav-brand { font-weight: 700; font-size: 1.05rem; letter-spacing: -0.025em; color: #020617; } .ds-nav-links { display: flex; gap: 4px; } .ds-nav-links a { padding: 8px 12px; border-radius: 6px; font-size: 0.875rem; font-weight: 500; color: #475569; text-decoration: none; transition: background-color 150ms, color 150ms; } .ds-nav-links a:hover { background: #F1F5F9; color: #020617; } .ds-nav-links a:focus-visible { outline: none; box-shadow: 0 0 0 2px #7C6FE0; } .ds-nav-cta { margin-inline-start: auto; height: 36px; padding: 0 14px; border: 0; border-radius: 6px; background: #020617; color: #fff; font: 600 0.875rem/1 inherit; cursor: pointer; } .ds-nav-cta:hover { background: #1E293B; }"
+    },
+    {
+      "name": "Approval Chip",
+      "kind": "chip",
+      "refersTo": "approval-chip",
+      "description": "An approved outcome in a line: violet tint, approval ink, check.",
+      "html": "<p class=\"ds-chip-approved\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"/></svg>Auto-approved: PO sent to Al Rashid Building Materials</p>",
+      "css": ".ds-chip-approved { display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; border: 1px solid rgb(91 79 208 / 0.25); border-radius: 6px; background: rgb(124 111 224 / 0.08); color: #4338CA; font: 600 0.875rem/1.4 Geist, 'IBM Plex Sans Arabic', system-ui, sans-serif; }"
+    },
+    {
+      "name": "Segmented Priority Control",
+      "kind": "custom",
+      "refersTo": "segmented-active",
+      "description": "Three-way choice inside a ruled track; the active segment is filled ink.",
+      "html": "<div class=\"ds-seg\"><button>Price only</button><button class=\"is-active\">Balanced</button><button>Speed</button></div>",
+      "css": ".ds-seg { display: grid; grid-template-columns: repeat(3, 1fr); width: 240px; padding: 2px; border: 1px solid #CBD5E1; border-radius: 6px; background: #fff; font-family: Geist, 'IBM Plex Sans Arabic', system-ui, sans-serif; } .ds-seg button { padding: 6px 4px; border: 0; border-radius: 5px; background: transparent; color: #475569; font: 500 0.8rem/1.25 inherit; cursor: pointer; transition: color 150ms, background-color 150ms; } .ds-seg button:hover { color: #020617; } .ds-seg button.is-active { background: #020617; color: #fff; } .ds-seg button:focus-visible { outline: none; box-shadow: 0 0 0 2px #7C6FE0; }"
+    },
+    {
+      "name": "Decision Bar with Approval Stamp",
+      "kind": "custom",
+      "refersTo": "decision-bar-approved",
+      "description": "Signature: the sheet footer stating the decision, with the ruled rotated stamp that lands on approval.",
+      "html": "<div class=\"ds-decision\"><span class=\"ds-decision-disc\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"/></svg></span><p class=\"ds-decision-text\"><strong>Auto-approved</strong> PO sent to Al Rashid Building Materials. SAR 3,650 below the average of the other quotes.</p><span class=\"ds-stamp\"><span class=\"ds-stamp-word\">Approved</span><span class=\"ds-stamp-date\">Oct 28, 2026</span></span></div>",
+      "css": ".ds-decision { display: flex; align-items: flex-start; gap: 12px; padding: 16px 28px; border-top: 1px solid rgb(91 79 208 / 0.25); background: rgb(124 111 224 / 0.08); font-family: Geist, 'IBM Plex Sans Arabic', system-ui, sans-serif; animation: ds-lit 420ms cubic-bezier(0.16,1,0.3,1) both; } .ds-decision-disc { display: grid; place-items: center; flex-shrink: 0; width: 24px; height: 24px; margin-top: 2px; border-radius: 9999px; background: #5B4FD0; color: #fff; } .ds-decision-text { flex: 1; margin: 0; font-size: 0.875rem; line-height: 1.625; color: #1E293B; } .ds-decision-text strong { color: #4338CA; font-weight: 600; } .ds-stamp { align-self: center; flex-shrink: 0; margin-inline-start: auto; padding: 4px 10px; border: 2px solid #5B4FD0; border-radius: 4px; outline: 1px solid rgb(91 79 208 / 0.6); outline-offset: 2px; color: #5B4FD0; text-align: center; rotate: -7deg; animation: ds-stamp 180ms cubic-bezier(0.16,1,0.3,1) both; } .ds-stamp-word { display: block; font-size: 0.8rem; font-weight: 700; line-height: 1.25; letter-spacing: 0.14em; text-transform: uppercase; } .ds-stamp-date { display: block; font-size: 0.6rem; font-weight: 500; line-height: 1.25; font-variant-numeric: tabular-nums; } @keyframes ds-stamp { from { opacity: 0; scale: 1.45; } to { opacity: 1; scale: 1; } } @keyframes ds-lit { from { filter: saturate(2.2) brightness(0.96); } to { filter: none; } } @media (prefers-reduced-motion: reduce) { .ds-decision, .ds-stamp { animation: none; } }"
+    },
+    {
+      "name": "Held Decision Bar",
+      "kind": "custom",
+      "refersTo": "decision-bar-held",
+      "description": "The same footer when a rule holds the decision for the buyer: amber, no stamp.",
+      "html": "<div class=\"ds-held\"><span class=\"ds-held-disc\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 6v6l4 2\"/></svg></span><p class=\"ds-held-text\"><strong>Waiting for you</strong> SAR 56,900 is over your SAR 50,000 spend limit.</p></div>",
+      "css": ".ds-held { display: flex; align-items: flex-start; gap: 12px; padding: 16px 28px; border-top: 1px solid #FCD34D; background: #FFFBEB; font-family: Geist, 'IBM Plex Sans Arabic', system-ui, sans-serif; } .ds-held-disc { display: grid; place-items: center; flex-shrink: 0; width: 24px; height: 24px; margin-top: 2px; border-radius: 9999px; background: #D97706; color: #fff; } .ds-held-text { margin: 0; font-size: 0.875rem; line-height: 1.625; color: #1E293B; } .ds-held-text strong { color: #78350F; font-weight: 600; }"
+    },
+    {
+      "name": "Document Sheet",
+      "kind": "card",
+      "refersTo": "decision-sheet",
+      "description": "The paper sheet: white, 12px, hairline border, sheet shadow, header over a 1px ink rule, rows on hairlines.",
+      "html": "<section class=\"ds-sheet\"><header class=\"ds-sheet-head\"><strong>Quote comparison</strong><span>Sample quotes</span></header><ol class=\"ds-sheet-rows\"><li class=\"is-pick\"><span>1</span><span>Al Rashid Building Materials</span><span>SAR 48,250</span></li><li><span>2</span><span>Najd Steel &amp; Cement</span><span class=\"is-over\">SAR 56,900</span></li></ol></section>",
+      "css": ".ds-sheet { overflow: hidden; border: 1px solid rgb(203 213 225 / 0.8); border-radius: 12px; background: #fff; box-shadow: 0 1px 0 rgba(15,23,42,0.04), 0 30px 60px -40px rgba(15,23,42,0.45); font-family: Geist, 'IBM Plex Sans Arabic', system-ui, sans-serif; color: #020617; } .ds-sheet-head { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 28px; border-bottom: 1px solid #020617; font-size: 0.95rem; } .ds-sheet-head span { font-size: 0.75rem; color: #64748B; } .ds-sheet-rows { list-style: none; margin: 0; padding: 0; } .ds-sheet-rows li { display: grid; grid-template-columns: 3rem 1fr 8.5rem; gap: 12px; align-items: center; padding: 16px 28px; border-bottom: 1px solid #F1F5F9; font-weight: 600; font-variant-numeric: tabular-nums; } .ds-sheet-rows li > span:first-child { font-size: 1.5rem; line-height: 1; color: #64748B; } .ds-sheet-rows li > span:last-child { text-align: end; } .ds-sheet-rows li.is-pick { background: rgb(124 111 224 / 0.06); } .ds-sheet-rows li.is-pick > span:first-child { color: #020617; } .ds-sheet-rows .is-over { color: #92400E; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Sheet That Decides",
+    "overview": "Clarix looks like a tender comparison sheet: white paper laid on a cool slate ground, slate-950 ink, hairline rules between rows and a heavy 2px rule where a new section of the document opens. Structure comes from rules, columns and margin notes, never from stacked cards or decoration. The density is the density of a working document: figures sit in tabular columns, labels are small and plain, headings are short and heavy.\n\nColour is almost absent, which is what makes the two status inks legible. Violet is the brand and the mark of approval; at its stamp strength it appears only where something has been decided in the buyer's favour. Amber marks the opposite: a value that breaks a rule, or a decision waiting for the buyer. Everything else is slate.\n\nThe system is bilingual by construction. Geist sets Latin text and figures, IBM Plex Sans Arabic sets Arabic, both in the same stack, and every layout uses logical properties so Arabic mirrors without a second stylesheet. Numbers stay Western and left-to-right in both languages.",
+    "keyCharacteristics": [
+      "Paper-white sheets on a slate-50 ground, ruled rather than boxed.",
+      "One saturated mark (the violet approval stamp); amber only for \"waiting for you\".",
+      "Geist with tight negative tracking in LTR; Plex Sans Arabic with no tracking in RTL.",
+      "Tabular figures everywhere money or counts line up; money written \"SAR 12,345\".",
+      "Motion only states a decision: rows glide to a new rank, the stamp lands, the decision bar lights."
+    ],
+    "rules": [
+      { "name": "The Stamp Means Approval Rule", "body": "Stamp violet at full strength marks something decided in the buyer's favour, and only that. It is never a decorative accent, a link colour or a heading colour.", "section": "colors" },
+      { "name": "The Amber Is A Question Rule", "body": "Amber appears only where a value breaks a rule or a decision is waiting for the buyer. It is never a warning-flavoured highlight for emphasis.", "section": "colors" },
+      { "name": "The No Gradient Rule", "body": "Surfaces are flat colour. Tints are alpha over white, never gradients.", "section": "colors" },
+      { "name": "The LTR-Only Tracking Rule", "body": "Negative tracking (-0.02 to -0.038em) applies to Latin headlines only. Arabic gets no tracking and taller leading.", "section": "typography" },
+      { "name": "The Tabular Figures Rule", "body": "Every money amount, count, day count and score uses tabular numerals, Western digits in both languages, written \"SAR 12,345\". Numeric figures and charts render dir=\"ltr\".", "section": "typography" },
+      { "name": "The Rules Not Boxes Rule", "body": "Inside a sheet, structure is drawn with hairline rules and columns. No cards inside cards.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do draw structure with hairline rules (slate-200) and open sections with a 2px ink rule.",
+      "Do keep stamp violet for approval and amber for \"waiting for you\" or over-limit values, nothing else.",
+      "Do use Clarix Violet for every focus ring (2px) and for text selection.",
+      "Do set every figure tabular with Western digits, money as \"SAR 12,345\", numeric blocks dir=\"ltr\".",
+      "Do use logical properties for all spacing, borders and positioning so RTL mirrors for free.",
+      "Do apply negative tracking only to LTR headlines; Arabic gets none and taller leading.",
+      "Do turn off every animation under prefers-reduced-motion."
+    ],
+    "donts": [
+      "Don't use gradients or nest cards inside cards.",
+      "Don't set text in Clarix Violet on white; use stamp violet or approval ink.",
+      "Don't use the ruled stamp, or stamp violet at full strength, for anything that is not an approval.",
+      "Don't use amber for emphasis or decoration.",
+      "Don't add uppercase tracked labels above headings; the uppercase tracked style belongs to the stamp word alone.",
+      "Don't use Arabic-Indic digits, even in Arabic."
+    ]
+  }
+}

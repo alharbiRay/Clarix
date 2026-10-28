@@ -12,6 +12,8 @@ const PUBLIC_PREFIXES = [
   "/api/health",
   "/api/jobs", // CRON_SECRET-protected
   "/demo", // demo entry page (the session itself is opened by a POST server action)
+  "/pricing", // public plans + waitlist
+  "/opengraph-image", // share card
 ];
 
 export function isPublicPath(pathname: string): boolean {

@@ -644,3 +644,38 @@ moving parts for a project with no DSN configured yet.
   caller's. A quote token is rarely seen twice, so per-key pruning would leave its rows forever.
 - **Smaller fixes.** The RFQ search ignores a repeated `?q=`. The rate-limit copy no longer
   blames "this connection". SECURITY.md lists `setLocale` and the proxy assumption.
+
+# Phase 12: Landing page and pricing
+
+## D-072: The landing page proves the product instead of describing it
+The first screen holds a working comparison sheet with three labeled sample quotes. The visitor
+changes the approval rules and watches the same ranking and approval logic decide: stamped
+"approved", or "waiting for you" with the reason. The category default (a headline beside a
+dashboard screenshot, then a row of feature cards) was refused on purpose.
+- The sheet stays in the brand's world: slate ink, the violet as stamp ink, amber only for holds.
+- The demo is the primary action, as a working POST form.
+- No customers, testimonials or savings claims are invented. The numbers shown are labeled as
+  sample data or synthetic tests.
+
+## D-073: Prices are illustrative, the waitlist only collects
+The tiers carry SAR prices excluding VAT, marked "illustrative — not final" on the page, and they
+list only built capabilities. There is no billing.
+- The waitlist stores a lead (0020) and nothing else: no email is sent yet.
+- Leads are readable only in the Supabase dashboard. RLS has no policies, and table access is
+  revoked from `anon` and `authenticated`.
+- Writes go through the server after validation and a per-IP limit.
+
+## D-074: Arabic glyphs go to Plex Arabic, not Arial
+`next/font` adds a size-matched Arial fallback right after Geist in the font stack. Geist has no
+Arabic glyphs and Arial does, so since Phase 10 every Arabic word had rendered in Arial instead of
+IBM Plex Sans Arabic. `adjustFontFallback: false` on Geist removes that fallback. The cost is a
+little more layout shift for Latin text while Geist loads, which is small because the font is
+self-hosted and preloaded.
+
+## D-075: `rounded-lg` restored
+The documenter found that `borderRadius.lg` in `tailwind.config.ts` was a `color-mix(…<alpha-value>…)`
+expression, which is not a valid length. Every `rounded-lg` therefore rendered square. It is back
+to `var(--radius)` (8px), as shadcn intends. Two other pieces of drift stay as they are and are
+left to the owner:
+- the sidebar avatar's indigo-to-violet gradient;
+- a third chart violet, `#6D5FD6`.
