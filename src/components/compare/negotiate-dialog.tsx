@@ -281,7 +281,7 @@ export function NegotiateDialog({
                 aria-describedby={`${uid}-body-count`}
                 className={cn(fieldClass, "mt-1 py-2 leading-relaxed")}
               />
-              <p id={`${uid}-body-count`} className="mt-1 text-right text-xs tabular-nums text-slate-400">
+              <p id={`${uid}-body-count`} className="mt-1 text-end text-xs tabular-nums text-slate-400">
                 {draft.body.length} / 4000
               </p>
             </div>

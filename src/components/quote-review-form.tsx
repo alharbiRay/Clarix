@@ -164,7 +164,7 @@ export function QuoteReviewForm({
           <AlertTriangle className="h-4 w-4 !text-amber-600" />
           <AlertTitle>Check these before confirming</AlertTitle>
           <AlertDescription>
-            <ul className="mt-1 list-disc space-y-1 pl-4 text-sm">
+            <ul className="mt-1 list-disc space-y-1 ps-4 text-sm">
               {warnings.map((w, i) => (
                 <li key={i}>{w}</li>
               ))}
@@ -198,7 +198,7 @@ export function QuoteReviewForm({
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <p className="font-medium">
-                      <span className="mr-2 text-xs text-slate-400">{i + 1}.</span>
+                      <span className="me-2 text-xs text-slate-400">{i + 1}.</span>
                       {item.name}
                     </p>
                     {item.description && (
@@ -237,7 +237,7 @@ export function QuoteReviewForm({
                         }
                       />
                     </div>
-                    <div className="pb-2 text-right">
+                    <div className="pb-2 text-end">
                       <p className="text-xs text-slate-400">Line total</p>
                       <p className="w-24 text-sm font-semibold">
                         {lineTotal === null ? "—" : formatMoney(lineTotal, currency)}

@@ -415,7 +415,7 @@ export function RfqForm() {
             {suppliers.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {suppliers.map((email) => (
-                  <Badge key={email} variant="secondary" className="gap-1 pr-1">
+                  <Badge key={email} variant="secondary" className="gap-1 pe-1">
                     {email}
                     <button
                       type="button"

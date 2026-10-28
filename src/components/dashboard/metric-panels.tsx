@@ -41,9 +41,9 @@ export function OpsStrip({ kpis }: { kpis: Kpis }) {
           key={c.label}
           className={[
             "p-5",
-            i % 2 === 1 ? "border-l border-slate-100" : "",
+            i % 2 === 1 ? "border-s border-slate-100" : "",
             i >= 2 ? "border-t border-slate-100 lg:border-t-0" : "",
-            i === 2 ? "lg:border-l" : "",
+            i === 2 ? "lg:border-s" : "",
           ].join(" ")}
         >
           <p className="text-xs font-medium text-slate-500">{c.label}</p>
@@ -99,7 +99,7 @@ export function ReviewQueue({ items, extractions = [] }: { items: ReviewItem[]; 
                   </p>
                   <p className="mt-1 text-xs text-slate-500">Received {formatDate(x.submittedAt)}</p>
                 </div>
-                <ArrowRight size={15} className="mt-1 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-500 motion-reduce:transition-none" aria-hidden />
+                <ArrowRight size={15} className="mt-1 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5 group-hover:text-slate-500 motion-reduce:transition-none" aria-hidden />
               </Link>
             </li>
           ))}
@@ -123,7 +123,7 @@ export function ReviewQueue({ items, extractions = [] }: { items: ReviewItem[]; 
                 </div>
                 <ArrowRight
                   size={15}
-                  className="mt-1 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-500 motion-reduce:transition-none"
+                  className="mt-1 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5 group-hover:text-slate-500 motion-reduce:transition-none"
                   aria-hidden
                 />
               </Link>
@@ -159,7 +159,7 @@ export function SupplierSpendPanel({ rows, currency }: { rows: SupplierSpend[]; 
                     style={{ width: `${Math.max((r.spend / max) * 100, 2)}%` }}
                   />
                 </div>
-                <span className="w-12 shrink-0 text-right text-xs text-slate-500 tabular">
+                <span className="w-12 shrink-0 text-end text-xs text-slate-500 tabular">
                   {r.awards} PO{r.awards === 1 ? "" : "s"}
                 </span>
               </div>
@@ -188,12 +188,12 @@ export function TopSavingsTable({ rows }: { rows: RfqSavings[] }) {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
-              <tr className="text-left text-xs text-slate-500">
+              <tr className="text-start text-xs text-slate-500">
                 <th scope="col" className="px-6 py-3 font-medium">RFQ</th>
                 <th scope="col" className="px-3 py-3 font-medium">Awarded to</th>
-                <th scope="col" className="px-3 py-3 text-right font-medium">Paid</th>
-                <th scope="col" className="px-3 py-3 text-right font-medium">Avg. alternative</th>
-                <th scope="col" className="px-6 py-3 text-right font-medium">Saved</th>
+                <th scope="col" className="px-3 py-3 text-end font-medium">Paid</th>
+                <th scope="col" className="px-3 py-3 text-end font-medium">Avg. alternative</th>
+                <th scope="col" className="px-6 py-3 text-end font-medium">Saved</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -205,13 +205,13 @@ export function TopSavingsTable({ rows }: { rows: RfqSavings[] }) {
                     </Link>
                   </td>
                   <td className="max-w-[180px] truncate px-3 py-3 text-slate-600"><bdi>{r.awardedLabel}</bdi></td>
-                  <td className="px-3 py-3 text-right text-slate-600">{formatMoneyWhole(r.awardedTotal ?? 0, r.currency)}</td>
-                  <td className="px-3 py-3 text-right text-slate-600">{formatMoneyWhole(r.baseline ?? 0, r.currency)}</td>
-                  <td className="px-6 py-3 text-right">
+                  <td className="px-3 py-3 text-end text-slate-600">{formatMoneyWhole(r.awardedTotal ?? 0, r.currency)}</td>
+                  <td className="px-3 py-3 text-end text-slate-600">{formatMoneyWhole(r.baseline ?? 0, r.currency)}</td>
+                  <td className="px-6 py-3 text-end">
                     <span className={r.savings < 0 ? "font-semibold text-red-700" : "font-semibold text-emerald-700"}>
                       {formatMoneyWhole(r.savings, r.currency)}
                     </span>
-                    <span className="ml-1.5 text-xs text-slate-500">{formatPct(r.savingsPct)}</span>
+                    <span className="ms-1.5 text-xs text-slate-500">{formatPct(r.savingsPct)}</span>
                   </td>
                 </tr>
               ))}

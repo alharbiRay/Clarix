@@ -30,10 +30,10 @@ function qs(report: Report, extra: Record<string, string> = {}) {
   return p.toString();
 }
 
-const th = "px-3 py-2 text-left text-xs font-semibold text-slate-500";
-const thNum = "px-3 py-2 text-right text-xs font-semibold text-slate-500";
+const th = "px-3 py-2 text-start text-xs font-semibold text-slate-500";
+const thNum = "px-3 py-2 text-end text-xs font-semibold text-slate-500";
 const td = "px-3 py-2 text-sm text-slate-800";
-const tdNum = "px-3 py-2 text-right text-sm tabular-nums text-slate-800";
+const tdNum = "px-3 py-2 text-end text-sm tabular-nums text-slate-800";
 
 export default async function ReportsPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const supabase = createClient();
@@ -104,7 +104,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
         <Link href="/reports" className="h-9 px-1 text-sm leading-9 text-slate-600 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0]">
           Reset
         </Link>
-        <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        <div className="ms-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
             <Download size={13} aria-hidden="true" />
             CSV
@@ -192,7 +192,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
                   <tbody>
                     {report.months.map((m) => (
                       <tr key={m.month} className="border-b border-slate-50 last:border-0">
-                        <th scope="row" className={`${td} text-left font-normal`}>{formatMonthLabel(m.month, true)}</th>
+                        <th scope="row" className={`${td} text-start font-normal`}>{formatMonthLabel(m.month, true)}</th>
                         <td className={tdNum}>{formatMoneyWhole(m.spend, c)}</td>
                         <td className={tdNum}>{formatMoneyWhole(m.savings, c)}</td>
                         <td className={tdNum}>{m.awarded}</td>
@@ -231,7 +231,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
                   <tbody>
                     {report.suppliers.map((s) => (
                       <tr key={s.key} className="border-b border-slate-50 last:border-0">
-                        <th scope="row" className={`${td} text-left font-medium`}>
+                        <th scope="row" className={`${td} text-start font-medium`}>
                           <Link href={`/suppliers/${s.key}`} className="hover:underline print:no-underline">
                             <bdi>{s.label}</bdi>
                           </Link>
@@ -278,7 +278,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
                   <tbody>
                     {report.categories.map((k) => (
                       <tr key={k.category} className="border-b border-slate-50 last:border-0">
-                        <th scope="row" className={`${td} text-left font-normal`}>{k.label}</th>
+                        <th scope="row" className={`${td} text-start font-normal`}>{k.label}</th>
                         <td className="px-3 py-2" aria-hidden="true">
                           <div className="h-2 rounded-full bg-slate-100 print:border print:border-slate-300">
                             <div className="h-2 rounded-full bg-[#6D5FD6] print:[print-color-adjust:exact]" style={{ width: `${Math.max(1, Math.round(k.share * 100))}%` }} />
@@ -318,7 +318,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
                     {report.awards.map((a) => (
                       <tr key={a.rfqId} className="border-b border-slate-50 last:border-0 print:break-inside-avoid">
                         <td className={`${td} whitespace-nowrap tabular-nums`}>{formatDay(a.awardedOn)}</td>
-                        <th scope="row" className={`${td} text-left font-medium`}>
+                        <th scope="row" className={`${td} text-start font-medium`}>
                           <Link href={`/rfqs/${a.rfqId}`} className="hover:underline print:no-underline">
                             <bdi>{a.title}</bdi>
                           </Link>

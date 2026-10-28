@@ -28,7 +28,7 @@ export default async function DashboardLayout({
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 print:bg-white">
       <AppSidebar email={user.email!} fullName={profile?.full_name ?? null} />
-      <div className="ml-60 print:ml-0">
+      <div className="ms-60 print:ms-0">
         {profile?.is_demo && <DemoBanner />}
         <AppTopbar unreadCount={unreadCount ?? 0} />
         <main className="p-8 print:p-0">{children}</main>

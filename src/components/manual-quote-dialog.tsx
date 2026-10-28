@@ -168,7 +168,7 @@ export function ManualQuoteDialog({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-medium">
-                        <span className="mr-1.5 text-xs text-slate-400">{i + 1}.</span>
+                        <span className="me-1.5 text-xs text-slate-400">{i + 1}.</span>
                         {item.name}
                       </p>
                       <p className="text-xs text-slate-400">
@@ -189,7 +189,7 @@ export function ManualQuoteDialog({
                           }))
                         }
                       />
-                      <p className="w-20 pb-1.5 text-right text-xs font-medium text-slate-500">
+                      <p className="w-20 pb-1.5 text-end text-xs font-medium text-slate-500">
                         {lineTotal === null ? "—" : formatMoney(lineTotal, currency)}
                       </p>
                     </div>

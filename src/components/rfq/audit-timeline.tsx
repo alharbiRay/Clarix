@@ -83,7 +83,7 @@ export function AuditTimeline({ events }: { events: TimelineEvent[] }) {
   }
 
   return (
-    <ol className="relative space-y-5 before:absolute before:bottom-2 before:left-[15px] before:top-2 before:w-px before:bg-slate-200">
+    <ol className="relative space-y-5 before:absolute before:bottom-2 before:start-[15px] before:top-2 before:w-px before:bg-slate-200">
       {events.map((e) => {
         const d = describeAuditEvent(e);
         // A hold-for-review is an auto_approval_decided event too, but reads as a warning.

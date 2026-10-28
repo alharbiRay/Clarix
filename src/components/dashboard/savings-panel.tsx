@@ -100,7 +100,7 @@ export function SavingsPanel(props: SavingsPanelProps) {
       aria-labelledby="savings-heading"
       className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,5fr)_minmax(0,8fr)]"
     >
-      <div className="flex flex-col justify-between gap-6 p-6 lg:border-r lg:border-slate-100 lg:p-8">
+      <div className="flex flex-col justify-between gap-6 p-6 lg:border-e lg:border-slate-100 lg:p-8">
         <div>
           <h2 id="savings-heading" className="text-sm font-medium text-slate-500">
             Saved this month

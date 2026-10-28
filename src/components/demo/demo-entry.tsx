@@ -29,7 +29,7 @@ function SubmitButton({ prominent }: { prominent: boolean }) {
           <ArrowRight
             size={15}
             aria-hidden
-            className="transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none"
+            className="transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5 motion-reduce:transition-none"
           />
         </>
       )}

@@ -151,9 +151,9 @@ export default async function RfqDetailPage({
         <div className="space-y-1.5">
           <Link
             href="/rfqs"
-            className="-ml-1 inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
+            className="-ms-1 inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
           >
-            <ArrowLeft size={13} />
+            <ArrowLeft size={13} className="rtl:rotate-180" />
             All RFQs
           </Link>
           <div className="flex items-center gap-3">
@@ -264,7 +264,7 @@ export default async function RfqDetailPage({
                     <TableHead className="text-xs font-semibold text-slate-500">
                       Item
                     </TableHead>
-                    <TableHead className="text-right text-xs font-semibold text-slate-500">
+                    <TableHead className="text-end text-xs font-semibold text-slate-500">
                       Quantity
                     </TableHead>
                     <TableHead className="text-xs font-semibold text-slate-500">
@@ -284,7 +284,7 @@ export default async function RfqDetailPage({
                           </p>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-end">
                         {item.quantity}
                       </TableCell>
                       <TableCell className="text-slate-500">
@@ -325,7 +325,7 @@ export default async function RfqDetailPage({
                     <TableHead className="text-xs font-semibold text-slate-500">
                       Invited
                     </TableHead>
-                    <TableHead className="text-right text-xs font-semibold text-slate-500">
+                    <TableHead className="text-end text-xs font-semibold text-slate-500">
                       Quote link
                     </TableHead>
                   </TableRow>
@@ -351,7 +351,7 @@ export default async function RfqDetailPage({
                         <TableCell className="text-slate-500">
                           {formatDate(supplier.invited_at)}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-end">
                           <CopyLinkButton
                             url={`${appUrl}/quote/${supplier.token}`}
                           />
@@ -414,10 +414,10 @@ export default async function RfqDetailPage({
                       <TableHead className="text-xs font-semibold text-slate-500">
                         Received
                       </TableHead>
-                      <TableHead className="text-right text-xs font-semibold text-slate-500">
+                      <TableHead className="text-end text-xs font-semibold text-slate-500">
                         Total
                       </TableHead>
-                      <TableHead className="text-right text-xs font-semibold text-slate-500">
+                      <TableHead className="text-end text-xs font-semibold text-slate-500">
                         Status
                       </TableHead>
                       <TableHead className="w-10" />
@@ -447,12 +447,12 @@ export default async function RfqDetailPage({
                           <TableCell className="text-slate-500">
                             {formatDate(quote.submitted_at)}
                           </TableCell>
-                          <TableCell className="text-right font-semibold">
+                          <TableCell className="text-end font-semibold">
                             {total === null
                               ? "—"
                               : formatMoney(total, rfq.currency)}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-end">
                             {quote.status === "needs_review" ? (
                               <Button
                                 asChild
@@ -473,7 +473,7 @@ export default async function RfqDetailPage({
                               </span>
                             )}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-end">
                             <QuoteRowActions
                               quoteId={quote.id}
                               supplierLabel={supplierLabel}

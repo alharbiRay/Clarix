@@ -322,9 +322,9 @@ export default async function ComparePage({
         <div className="space-y-1.5">
           <Link
             href={`/rfqs/${params.id}`}
-            className="-ml-1 inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
+            className="-ms-1 inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
           >
-            <ArrowLeft size={13} />
+            <ArrowLeft size={13} className="rtl:rotate-180" />
             {rfq.title}
           </Link>
           <h1 className="text-2xl font-bold tracking-tight">Compare quotes</h1>
@@ -552,14 +552,14 @@ export default async function ComparePage({
               <div className="overflow-x-auto rounded-xl border border-slate-100">
                 <table className="w-full min-w-[640px] text-sm">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50 text-left">
+                    <tr className="border-b border-slate-100 bg-slate-50 text-start">
                       <th className="px-4 py-3 text-xs font-semibold text-slate-500">
                         Item
                       </th>
                       {columns.map((col) => (
                         <th
                           key={col.quote.id}
-                          className={`px-4 py-3 text-right text-xs font-semibold text-slate-600 ${
+                          className={`px-4 py-3 text-end text-xs font-semibold text-slate-600 ${
                             col.pending ? "bg-amber-50/60" : ""
                           }`}
                         >
@@ -604,7 +604,7 @@ export default async function ComparePage({
                       <tr key={item.id} className="border-b border-slate-100">
                         <td className="px-4 py-3">
                           <p className="font-medium">
-                            <span className="mr-2 text-xs text-slate-400">
+                            <span className="me-2 text-xs text-slate-400">
                               {i + 1}.
                             </span>
                             {item.name}
@@ -642,7 +642,7 @@ export default async function ComparePage({
                           return (
                             <td
                               key={col.quote.id}
-                              className={`px-4 py-3 text-right align-top ${
+                              className={`px-4 py-3 text-end align-top ${
                                 isBest
                                   ? "bg-emerald-50/70"
                                   : col.pending
@@ -698,7 +698,7 @@ export default async function ComparePage({
                         return (
                           <td
                             key={col.quote.id}
-                            className={`px-4 py-3 text-right ${
+                            className={`px-4 py-3 text-end ${
                               isBest
                                 ? "bg-emerald-50"
                                 : col.pending
@@ -760,7 +760,7 @@ export default async function ComparePage({
                         {columns.map((col) => (
                           <td
                             key={col.quote.id}
-                            className="px-4 py-3 text-right text-xs text-slate-600"
+                            className="px-4 py-3 text-end text-xs text-slate-600"
                           >
                             {row.render(col) ?? (
                               <span className="text-slate-300">—</span>
@@ -775,7 +775,7 @@ export default async function ComparePage({
                         {columns.map((col) => {
                           const n = negotiation.get(col.quote.id);
                           return (
-                            <td key={col.quote.id} className="px-4 py-3 text-right">
+                            <td key={col.quote.id} className="px-4 py-3 text-end">
                               {n ? (
                                 <NegotiateDialog
                                   rfqId={rfq.id}
@@ -879,7 +879,7 @@ export default async function ComparePage({
                     <AlertTriangle size={13} />
                     Verify before awarding
                   </p>
-                  <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-amber-800">
+                  <ul className="mt-2 list-disc space-y-1 ps-4 text-xs text-amber-800">
                     {recommendation.data.risks.map((r, i) => (
                       <li key={i}>{r}</li>
                     ))}

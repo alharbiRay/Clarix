@@ -14,7 +14,7 @@ const config: Config = {
   	extend: {
   		fontFamily: {
   			// The CSS variables are set by next/font in src/app/layout.tsx.
-  			sans: ['var(--font-geist-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+  			sans: ['var(--font-geist-sans)', 'var(--font-arabic)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
   			mono: ['var(--font-geist-mono)', 'ui-monospace', 'monospace'],
   		},
   		colors: {

@@ -91,11 +91,11 @@ export function ItemPriceHistory({
           <tbody className="divide-y divide-slate-100">
             {recent.map((p, i) => (
               <tr key={i} className={p.current ? "font-semibold" : undefined}>
-                <td className="py-1 pr-2 text-slate-500">{formatDate(p.at)}</td>
-                <td className="max-w-[120px] truncate py-1 pr-2">
+                <td className="py-1 pe-2 text-slate-500">{formatDate(p.at)}</td>
+                <td className="max-w-[120px] truncate py-1 pe-2">
                   <bdi>{p.supplierLabel}</bdi>
                 </td>
-                <td className="py-1 text-right tabular">{formatMoney(p.unitPrice, currency)}</td>
+                <td className="py-1 text-end tabular">{formatMoney(p.unitPrice, currency)}</td>
               </tr>
             ))}
           </tbody>

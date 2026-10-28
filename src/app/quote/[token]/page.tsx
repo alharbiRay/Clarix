@@ -19,7 +19,7 @@ function PublicShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex max-w-3xl items-center gap-2.5 px-6 py-4">
           <Logo className="h-8 w-8" />
           <span className="text-lg font-bold tracking-tight">Clarix</span>
-          <span className="ml-auto text-xs text-slate-400">
+          <span className="ms-auto text-xs text-slate-400">
             Supplier quote portal
           </span>
         </div>

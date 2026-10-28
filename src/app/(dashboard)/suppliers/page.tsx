@@ -93,13 +93,13 @@ export default async function SuppliersPage({
 
       <FadeIn delay={0.03} className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <nav aria-label="Sort suppliers" className="flex items-center gap-1">
-          <span className="mr-1 text-xs font-medium text-slate-500">Sort</span>
+          <span className="me-1 text-xs font-medium text-slate-500">Sort</span>
           <Chip href={hrefFor(params, { sort: "score" })} active={params.sort === "score"}>Score</Chip>
           <Chip href={hrefFor(params, { sort: "name" })} active={params.sort === "name"}>Name</Chip>
           <Chip href={hrefFor(params, { sort: "recent" })} active={params.sort === "recent"}>Recent</Chip>
         </nav>
         <nav aria-label="Filter by minimum score" className="flex items-center gap-1">
-          <span className="mr-1 text-xs font-medium text-slate-500">Score</span>
+          <span className="me-1 text-xs font-medium text-slate-500">Score</span>
           <Chip href={hrefFor(params, { min: null })} active={params.min === null}>Any</Chip>
           {SCORE_FILTERS.map((m) => (
             <Chip key={m} href={hrefFor(params, { min: m })} active={params.min === m}>
@@ -113,7 +113,7 @@ export default async function SuppliersPage({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[880px] text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-left text-xs text-slate-500">
+              <tr className="border-b border-slate-100 text-start text-xs text-slate-500">
                 <th scope="col" className="px-6 py-3 font-medium">Supplier</th>
                 <th scope="col" className="px-3 py-3 font-medium">Score</th>
                 <th scope="col" className="px-3 py-3 font-medium">Quoted</th>
@@ -164,7 +164,7 @@ export default async function SuppliersPage({
                       {metrics.avgPriceVsLowest === null ? "—" : `+${formatPct(metrics.avgPriceVsLowest)}`}
                     </td>
                     <td className="px-3 py-3 text-slate-500">{formatDate(metrics.lastActive)}</td>
-                    <td className="px-6 py-3 text-right">
+                    <td className="px-6 py-3 text-end">
                       <InviteToRfqDialog supplierId={id} supplierLabel={label} rfqs={openRfqs} />
                     </td>
                   </tr>

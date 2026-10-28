@@ -122,7 +122,7 @@ export function SupplierQuoteForm({
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <p className="font-medium">
-                      <span className="mr-2 text-xs text-slate-400">
+                      <span className="me-2 text-xs text-slate-400">
                         {i + 1}.
                       </span>
                       {item.name}
@@ -159,7 +159,7 @@ export function SupplierQuoteForm({
                         }
                       />
                     </div>
-                    <div className="pb-2 text-right">
+                    <div className="pb-2 text-end">
                       <p className="text-xs text-slate-400">Line total</p>
                       <p className="w-24 text-sm font-semibold">
                         {lineTotal === null

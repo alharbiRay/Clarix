@@ -19,12 +19,12 @@ export function AppTopbar({ unreadCount = 0 }: { unreadCount?: number }) {
       >
         <Search
           size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+          className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400"
         />
         <input
           name="q"
           placeholder="Search RFQs, suppliers..."
-          className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-sm outline-none transition-colors focus:border-slate-400 focus:bg-white"
+          className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 ps-9 pe-4 text-sm outline-none transition-colors focus:border-slate-400 focus:bg-white"
         />
       </form>
       <div className="flex items-center gap-3">
@@ -36,7 +36,7 @@ export function AppTopbar({ unreadCount = 0 }: { unreadCount?: number }) {
         >
           <Bell size={18} aria-hidden />
           {unreadCount > 0 && (
-            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" aria-hidden />
+            <span className="absolute end-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" aria-hidden />
           )}
         </Link>
         <Link

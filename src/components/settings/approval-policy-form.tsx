@@ -217,7 +217,7 @@ export function ApprovalPolicyForm({
             aria-hidden="true"
             className={cn(
               "inline-block h-5 w-5 rounded-full bg-white shadow-[0_1px_2px_rgba(15,23,42,0.25)] transition-transform motion-reduce:transition-none",
-              enabled ? "translate-x-[22px]" : "translate-x-0.5"
+              enabled ? "translate-x-[22px] rtl:-translate-x-[22px]" : "translate-x-0.5 rtl:-translate-x-0.5"
             )}
           />
         </button>

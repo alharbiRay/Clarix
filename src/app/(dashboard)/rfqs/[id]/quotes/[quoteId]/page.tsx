@@ -80,9 +80,9 @@ export default async function QuoteReviewPage({
       <FadeIn className="space-y-1.5">
         <Link
           href={`/rfqs/${params.id}`}
-          className="-ml-1 inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
+          className="-ms-1 inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
         >
-          <ArrowLeft size={13} />
+          <ArrowLeft size={13} className="rtl:rotate-180" />
           {rfq.title}
         </Link>
         <h1 className="text-2xl font-bold tracking-tight">

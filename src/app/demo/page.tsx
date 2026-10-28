@@ -41,12 +41,12 @@ export default function DemoPage() {
           explained. Click anything — nothing you do here is saved.
         </p>
 
-        <ol className="mt-8 space-y-5 border-l border-slate-200 pl-5">
+        <ol className="mt-8 space-y-5 border-s border-slate-200 ps-5">
           {TOUR.map((stop) => (
             <li key={stop.title} className="relative">
               <span
                 aria-hidden
-                className="absolute -left-[25px] top-1.5 h-2 w-2 rounded-full bg-[#7C6FE0] ring-4 ring-slate-50"
+                className="absolute -start-[25px] top-1.5 h-2 w-2 rounded-full bg-[#7C6FE0] ring-4 ring-slate-50"
               />
               <p className="text-sm font-semibold text-slate-900">{stop.title}</p>
               <p className="mt-1 text-sm leading-relaxed text-slate-600">{stop.body}</p>

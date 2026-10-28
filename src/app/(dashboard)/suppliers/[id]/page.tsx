@@ -110,9 +110,9 @@ export default async function SupplierDetailPage({
       <FadeIn>
         <Link
           href="/suppliers"
-          className="-ml-1 inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
+          className="-ms-1 inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
         >
-          <ArrowLeft size={13} />
+          <ArrowLeft size={13} className="rtl:rotate-180" />
           Suppliers
         </Link>
         <div className="mt-1.5 flex items-start justify-between gap-4">
@@ -214,10 +214,10 @@ export default async function SupplierDetailPage({
                       <TableHead className="text-xs font-semibold text-slate-500">
                         Submitted
                       </TableHead>
-                      <TableHead className="text-right text-xs font-semibold text-slate-500">
+                      <TableHead className="text-end text-xs font-semibold text-slate-500">
                         Total
                       </TableHead>
-                      <TableHead className="text-right text-xs font-semibold text-slate-500">
+                      <TableHead className="text-end text-xs font-semibold text-slate-500">
                         Status
                       </TableHead>
                     </TableRow>
@@ -240,10 +240,10 @@ export default async function SupplierDetailPage({
                         <TableCell className="text-slate-500">
                           {formatDate(quote.submitted_at)}
                         </TableCell>
-                        <TableCell className="text-right font-semibold">
+                        <TableCell className="text-end font-semibold">
                           {total === null || !rfq ? "—" : formatMoney(total, rfq.currency)}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-end">
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium capitalize text-slate-600">
                             {quote.status.replace("_", " ")}
                           </span>
