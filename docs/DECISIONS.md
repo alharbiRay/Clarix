@@ -474,3 +474,20 @@ It fails closed, because both actions cost money.
 ## D-056: Replies go to the buyer
 Negotiation emails set reply-to to the buyer's own address, not the inbound PDF address. A
 negotiation is a conversation, and inbound intake already refuses a second quote from the same supplier.
+
+## D-057: Phase 8 review fixes
+- **The database owns the rate limits** (migration 0016, applied to production immediately). 0015
+  trusted the caller's limit and window, so a signed-in user could reset their own bucket. The
+  function now ignores those arguments and applies fixed limits per known action (20/hour for
+  drafts and for sends). It uses a fixed one-day cleanup and refuses the demo account and the
+  service role. The table was empty when the fix went in.
+- **No precise default target.** The target field starts empty. The buyer sees the gap rounded
+  down to 5%, and a warning appears if the number they enter is within 2 points of the real gap,
+  since that would let the supplier estimate the competing price.
+- **The leak check matches whole words.** It ignores words shared with the supplier, the buyer, the
+  RFQ or its items. It skips single first names, generic email domains, and numbers that are
+  percentages, durations, quantities or the supplier's own figures. Small competitor amounts count
+  only next to a currency. "7 400" and "7.4k" are caught.
+- **Send matches the draft.** The language and target the draft was written with are what's sent and
+  logged. The server validates both, and the rate limit is charged only once a request is valid.
+- **An incomplete own quote is described as incomplete**, never as "the lowest".

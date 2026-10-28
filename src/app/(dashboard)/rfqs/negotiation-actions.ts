@@ -10,7 +10,9 @@ import { sendNegotiationEmail } from "@/lib/email";
 import {
   buildNegotiationContext,
   buildNegotiationPrompt,
+  cleanSubject,
   detectLanguage,
+  validateTargetPercent,
   findPrivacyLeaks,
   sensitiveTermsFor,
   templateDraft,
@@ -28,11 +30,16 @@ const MAX_SUBJECT = 200;
 const MIN_BODY = 20;
 const MAX_BODY = 4000;
 
+export type DraftSource = "ai" | "ai_edited" | "template" | "template_edited";
+const SOURCES: DraftSource[] = ["ai", "ai_edited", "template", "template_edited"];
+
 export type DraftResult =
   | {
       draft: Draft;
       language: Language;
       source: "ai" | "template";
+      /** The target the draft was written with (sent back unchanged on send). */
+      targetPercent: number | null;
       notice: string | null;
       demo?: boolean;
     }
@@ -99,26 +106,35 @@ export async function draftNegotiationReply(input: {
   if ("user" in auth) {
     buyerId = auth.user.id;
   } else {
+    // Demo: requireWritableUser already confirmed a signed-in (demo) user.
     const { data } = await supabase.auth.getUser();
     if (!data.user) return { error: "Not authenticated" };
     buyerId = data.user.id;
   }
-
-  if (!demo) {
-    const limit = await consume(supabase, "negotiation_draft", DRAFT_LIMIT);
-    if ("error" in limit) return { error: limit.error! };
-  }
+  const target = validateTargetPercent(input.targetPercent);
+  if (target !== null && typeof target === "object") return { error: target.error };
 
   const loaded = await loadSnapshot(supabase, input.rfqId, buyerId);
   if ("error" in loaded) return { error: loaded.error };
   const language = input.language === "ar" || input.language === "en" ? input.language : defaultLanguage(loaded.snapshot, input.quoteId);
-  const ctx = buildNegotiationContext(loaded.snapshot, input.quoteId, { language, targetPercent: input.targetPercent });
+  const ctx = buildNegotiationContext(loaded.snapshot, input.quoteId, { language, targetPercent: target });
   if ("error" in ctx) return { error: ctx.error };
 
   // The demo is a shared session: show the flow without spending AI quota.
   if (demo) {
-    return { draft: templateDraft(ctx), language, source: "template", notice: "In the demo, drafts come from a template and sending is turned off.", demo: true };
+    return {
+      draft: templateDraft(ctx),
+      language,
+      source: "template",
+      targetPercent: target,
+      notice: "In the demo, drafts come from a template and sending is turned off.",
+      demo: true,
+    };
   }
+
+  // Charged only once the request is known to be valid, right before the AI call.
+  const limit = await consume(supabase, "negotiation_draft", DRAFT_LIMIT);
+  if ("error" in limit) return { error: limit.error! };
 
   try {
     const draft = await generateNegotiationDraft(buildNegotiationPrompt(ctx));
@@ -129,10 +145,11 @@ export async function draftNegotiationReply(input: {
         draft: templateDraft(ctx),
         language,
         source: "template",
-        notice: "The AI draft mentioned details about other suppliers, so Clarix replaced it with a safe template.",
+        targetPercent: target,
+        notice: "Clarix's privacy check flagged the AI draft, so it was replaced with a safe template.",
       };
     }
-    return { draft, language, source: "ai", notice: null };
+    return { draft: { subject: cleanSubject(draft.subject), body: draft.body }, language, source: "ai", targetPercent: target, notice: null };
   } catch (e) {
     const busy = isGeminiRateLimited(e);
     console.error(JSON.stringify({ event: "negotiation.draft_failed", rfqId: input.rfqId, quota: busy, error: String(e).slice(0, 300) }));
@@ -140,6 +157,7 @@ export async function draftNegotiationReply(input: {
       draft: templateDraft(ctx),
       language,
       source: "template",
+      targetPercent: target,
       notice: busy
         ? "The AI is busy right now (usage limit reached). Here's a template to start from."
         : "The AI couldn't write a draft this time. Here's a template to start from.",
@@ -155,22 +173,22 @@ export async function sendNegotiationMessage(input: {
   body: string;
   language: Language;
   targetPercent: number | null;
-  source: "ai" | "template" | "manual";
+  source: DraftSource;
 }): Promise<{ success: true } | { error: string }> {
-  const subject = (input.subject ?? "").trim();
+  const subject = cleanSubject(input.subject ?? "");
   const body = (input.body ?? "").trim();
   if (!subject) return { error: "Add a subject line." };
   if (subject.length > MAX_SUBJECT) return { error: `Keep the subject under ${MAX_SUBJECT} characters.` };
   if (body.length < MIN_BODY) return { error: "The message is too short to send." };
   if (body.length > MAX_BODY) return { error: `Keep the message under ${MAX_BODY} characters.` };
   if (input.language !== "ar" && input.language !== "en") return { error: "Choose a language." };
+  const target = validateTargetPercent(input.targetPercent);
+  if (target !== null && typeof target === "object") return { error: target.error };
+  if (!SOURCES.includes(input.source)) return { error: "Unknown draft source." };
 
   const supabase = createClient();
   const auth = await requireWritableUser(supabase);
   if ("error" in auth) return { error: auth.error };
-
-  const limit = await consume(supabase, "negotiation_send", SEND_LIMIT);
-  if ("error" in limit) return { error: limit.error! };
 
   const loaded = await loadSnapshot(supabase, input.rfqId, auth.user.id);
   if ("error" in loaded) return { error: loaded.error };
@@ -184,6 +202,10 @@ export async function sendNegotiationMessage(input: {
   if (leaks.length > 0) {
     return { error: `This message ${leaks.join(" and ")}. Remove it before sending — suppliers never see each other's details.` };
   }
+
+  // Charged only for a message that is actually about to go out.
+  const limit = await consume(supabase, "negotiation_send", SEND_LIMIT);
+  if ("error" in limit) return { error: limit.error! };
 
   try {
     await sendNegotiationEmail({ to: supplier.email, replyTo: loaded.buyerEmail, subject, body, language: input.language });
@@ -203,7 +225,7 @@ export async function sendNegotiationMessage(input: {
       supplier: label,
       quoteId: input.quoteId,
       language: input.language,
-      targetPercent: input.targetPercent,
+      targetPercent: target,
       source: input.source,
       subject,
       emailDelivered: true,

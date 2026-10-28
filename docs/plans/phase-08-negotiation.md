@@ -14,3 +14,6 @@
    - **Send:** 20 per hour. It re-checks privacy on the final text, so a buyer's own edit can't leak either. Sent via Resend with reply-to set to the buyer. Logged as `negotiation_sent`. Remembers the language.
    - **Demo:** drafts come from the template with no AI call, and sending is refused.
 4. UI: a "Negotiate" row on the compare page while no PO has been sent. The dialog has a language toggle (default: saved preference, else a guess from the name), an optional target %, and an editable draft that is right-to-left for Arabic. It can be copied or sent.
+5. Review fixes (D-057): migration 0016 (rate-limit hardening, applied right away), an empty-by-default
+   target with a gap warning, word-boundary leak matching with an allow-list, send locked to the draft,
+   the limit charged only for valid requests, and an "unknown" position for incomplete quotes.

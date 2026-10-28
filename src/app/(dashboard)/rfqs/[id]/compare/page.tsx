@@ -26,7 +26,7 @@ import {
 import { ManualQuoteDialog } from "@/components/manual-quote-dialog";
 import { ApproveAwardButton } from "@/components/approve-award-button";
 import { NegotiateDialog } from "@/components/compare/negotiate-dialog";
-import { buildNegotiationContext, detectLanguage } from "@/lib/negotiation";
+import { buyerHint, detectLanguage } from "@/lib/negotiation";
 import { snapshotFromRows } from "@/lib/negotiation/snapshot";
 import { formatDate, formatMoney } from "@/lib/format";
 import {
@@ -278,17 +278,13 @@ export default async function ComparePage({
   const negotiationSnapshot = snapshotFromRows(rfq as any, null);
   const negotiation = new Map(
     confirmedColumns.map((c) => {
-      const ctx = buildNegotiationContext(negotiationSnapshot, c.quote.id, { language: "en", targetPercent: null });
+      const hint = buyerHint(negotiationSnapshot, c.quote.id);
       const saved = c.supplier.supplier_id ? preferredLanguage.get(c.supplier.supplier_id) : null;
       const language: "ar" | "en" =
         saved === "ar" || saved === "en" ? saved : detectLanguage(`${c.supplier.company_name ?? ""} ${c.supplier.contact_name ?? ""}`);
       return [
         c.quote.id,
-        {
-          language,
-          suggestedPercent: "error" in ctx ? null : ctx.suggestedPercent,
-          lowerOfferExists: "error" in ctx ? false : ctx.lowerOfferExists,
-        },
+        { language, ...hint },
       ] as const;
     })
   );
@@ -786,8 +782,9 @@ export default async function ComparePage({
                                   quoteId={col.quote.id}
                                   supplierLabel={col.label}
                                   defaultLanguage={n.language}
-                                  suggestedPercent={n.suggestedPercent}
-                                  lowerOfferExists={n.lowerOfferExists}
+                                  position={n.position}
+                                  gapPercent={n.gapPercent}
+                                  hintPercent={n.hintPercent}
                                   isDemo={isDemo}
                                 />
                               ) : (

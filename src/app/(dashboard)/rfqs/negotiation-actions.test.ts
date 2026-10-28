@@ -16,6 +16,7 @@ import { DEMO_READ_ONLY_ERROR } from "@/lib/auth/session";
 const quota = () => new Error(JSON.stringify({ error: { code: 429, status: "RESOURCE_EXHAUSTED", message: "Quota exceeded" } }));
 
 let allowed = true;
+let consumed: string[] = [];
 function seed({ isDemo = false, poSent = false } = {}) {
   allowed = true;
   db = Object.assign(
@@ -44,7 +45,11 @@ function seed({ isDemo = false, poSent = false } = {}) {
     }),
     { auth: { getUser: async () => ({ data: { user: { id: "buyer-1" } }, error: null }) } }
   );
-  db.rpcHandlers.consume_rate_limit = () => allowed;
+  consumed = [];
+  db.rpcHandlers.consume_rate_limit = (args) => {
+    consumed.push(args.p_action as string);
+    return allowed;
+  };
 }
 
 describe("draftNegotiationReply", () => {
@@ -64,7 +69,7 @@ describe("draftNegotiationReply", () => {
   it("replaces an AI draft that leaks a competitor with a safe template", async () => {
     generateNegotiationDraft.mockResolvedValueOnce({ subject: "Offer", body: "Al Rashid Trading offered SAR 7,400 — please match it." });
     const r = await draftNegotiationReply({ rfqId: "rfq-1", quoteId: "q1", language: "en", targetPercent: null });
-    expect(r).toMatchObject({ source: "template", notice: expect.stringMatching(/other suppliers/) });
+    expect(r).toMatchObject({ source: "template", notice: expect.stringMatching(/privacy check/) });
     if ("draft" in r) expect(r.draft.body).not.toMatch(/Rashid|7,400/);
   });
 
@@ -87,6 +92,20 @@ describe("draftNegotiationReply", () => {
     const r = await draftNegotiationReply({ rfqId: "rfq-1", quoteId: "q1", language: "en", targetPercent: 5 });
     expect(r).toMatchObject({ source: "template", demo: true });
     expect(generateNegotiationDraft).not.toHaveBeenCalled();
+  });
+
+  it("doesn't charge the limit for a request that can't be drafted", async () => {
+    expect(await draftNegotiationReply({ rfqId: "rfq-1", quoteId: "nope", language: "en", targetPercent: null })).toEqual({ error: "Quote not found." });
+    expect(await draftNegotiationReply({ rfqId: "rfq-1", quoteId: "q1", language: "en", targetPercent: 90 })).toEqual({
+      error: expect.stringMatching(/1 to 50/),
+    });
+    expect(consumed).toEqual([]);
+  });
+
+  it("returns the target it drafted with, so Send matches the text", async () => {
+    generateNegotiationDraft.mockResolvedValueOnce({ subject: "Line\r\nBreak", body: "Dear Fahad, could you reduce by about 5%? Thanks." });
+    const r = await draftNegotiationReply({ rfqId: "rfq-1", quoteId: "q1", language: "en", targetPercent: 5 });
+    expect(r).toMatchObject({ targetPercent: 5, draft: { subject: "Line Break" } });
   });
 
   it("refuses once a PO has been sent", async () => {
@@ -132,6 +151,21 @@ describe("sendNegotiationMessage", () => {
     expect(r).toEqual({ error: expect.stringMatching(/Al Rashid Trading.*7,400|7,400.*Al Rashid Trading/) });
     expect(email.sendNegotiationEmail).not.toHaveBeenCalled();
     expect(db.tables.audit_events).toHaveLength(0);
+  });
+
+  it("doesn't charge the send limit for a message it refuses", async () => {
+    await sendNegotiationMessage({ ...clean, body: "Al Rashid Trading quoted 7,400. Can you beat it?" });
+    await sendNegotiationMessage({ ...clean, body: "hi" });
+    expect(consumed).toEqual([]);
+    await sendNegotiationMessage(clean);
+    expect(consumed).toEqual(["negotiation_send"]);
+  });
+
+  it("validates the target and the source before anything else", async () => {
+    expect(await sendNegotiationMessage({ ...clean, targetPercent: 60 })).toEqual({ error: expect.stringMatching(/1 to 50/) });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(await sendNegotiationMessage({ ...clean, source: "made_up" as any })).toEqual({ error: "Unknown draft source." });
+    expect(email.sendNegotiationEmail).not.toHaveBeenCalled();
   });
 
   it("validates the message", async () => {
