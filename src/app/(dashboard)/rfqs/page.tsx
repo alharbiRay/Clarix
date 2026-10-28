@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus, SearchX } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { ilikeAnyFilter } from "@/lib/postgrest";
 import {
   Table,
   TableBody,
@@ -33,7 +34,7 @@ export default async function RfqsPage({
     .order("created_at", { ascending: false });
 
   if (q) {
-    query = query.or(`title.ilike.%${q}%,project.ilike.%${q}%`);
+    query = query.or(ilikeAnyFilter(["title", "project"], q));
   }
 
   const { data } = await query;

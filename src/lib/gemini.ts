@@ -18,7 +18,14 @@ import {
 
 export { isGeminiQuotaError } from "@/lib/gemini-errors";
 
-const MODEL = "gemini-2.5-flash";
+/**
+ * The Gemini model for every call. gemini-2.5-flash stopped accepting new
+ * API keys (404 "no longer available to new users"), so the default is the
+ * stable Flash that answered reliably in testing (3.7/3.8 were overloaded on
+ * 2026-10-28); GEMINI_MODEL switches models without a code change.
+ */
+export const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
+const MODEL = GEMINI_MODEL;
 
 function getClient() {
   if (!process.env.GEMINI_API_KEY) {

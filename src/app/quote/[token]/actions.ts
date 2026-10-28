@@ -5,7 +5,8 @@ import { scheduleAutoRecommendation } from "@/lib/jobs/schedule";
 import { ensureSupplierProfile } from "@/lib/supplier-profile";
 import { quoteSchema, type QuoteFormValues } from "@/lib/validations/quote";
 import { recordAuditEvent } from "@/lib/audit";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { clientIp, consumePublicRateLimit } from "@/lib/rate-limit";
 import { isLocale, QUOTE_LOCALE_COOKIE } from "@/i18n/config";
 import { translatorFor } from "@/i18n/translator";
 
@@ -22,7 +23,19 @@ export async function submitQuote(token: string, values: QuoteFormValues, langua
     return { error: locale === "en" ? (parsed.error.errors[0]?.message ?? te("invalid")) : te("invalid") };
   }
 
+  // Tokens are 48 hex characters (gen_random_bytes(24)); anything else can't match.
+  if (typeof token !== "string" || !/^[0-9a-f]{48}$/.test(token)) return { error: te("invalidLink") };
+
   const supabase = createAdminClient();
+
+  // Public endpoint: cap attempts per IP (guessing links) and per link (hammering one form).
+  const ip = clientIp(headers());
+  if (
+    !(await consumePublicRateLimit(supabase, "quote_submit_ip", ip)) ||
+    !(await consumePublicRateLimit(supabase, "quote_submit_token", token))
+  ) {
+    return { error: te("tooMany") };
+  }
 
   const { data: supplier } = await supabase
     .from("rfq_suppliers")

@@ -187,27 +187,29 @@ export function SavingsPanel(props: SavingsPanelProps) {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <table className="sr-only">
-              <caption>{t("tableCaption", { currency })}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t("month")}</th>
-                  <th scope="col">{t("savingsCol")}</th>
-                  <th scope="col">{t("spend")}</th>
-                  <th scope="col">{t("pos")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {series.map((p) => (
-                  <tr key={p.month}>
-                    <th scope="row">{formatMonthLabel(p.month, true, locale)}</th>
-                    <td>{formatMoneyWhole(p.savings, currency)}</td>
-                    <td>{formatMoneyWhole(p.spend, currency)}</td>
-                    <td>{p.awarded}</td>
+            <div className="sr-only">
+              <table>
+                <caption>{t("tableCaption", { currency })}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("month")}</th>
+                    <th scope="col">{t("savingsCol")}</th>
+                    <th scope="col">{t("spend")}</th>
+                    <th scope="col">{t("pos")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {series.map((p) => (
+                    <tr key={p.month}>
+                      <th scope="row">{formatMonthLabel(p.month, true, locale)}</th>
+                      <td>{formatMoneyWhole(p.savings, currency)}</td>
+                      <td>{formatMoneyWhole(p.spend, currency)}</td>
+                      <td>{p.awarded}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         ) : (
           <div className="mt-4 flex h-56 flex-col items-start justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-6">

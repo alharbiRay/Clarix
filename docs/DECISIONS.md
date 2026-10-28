@@ -578,3 +578,51 @@ translated.
 On the supplier page, the outer `<html lang dir>` and the toast position follow the visitor's
 browser, not the supplier's language. The page itself, its widgets and its portals use the
 supplier's language. Project names and supplier notes are the buyer's own text and are not translated.
+
+
+# Phase 11: Engineering hardening
+
+## D-066: One repair attempt, then manual entry
+Invalid Gemini output (bad JSON, wrong shape) gets exactly one repair call. The call carries the
+original input, the bad output and the validation problems, so the model fixes this answer rather
+than rolling the dice again.
+- **If the repair also fails:** `GeminiOutputError`. The same input would fail the same way, so
+  the job runner gives up at once instead of spending two more attempts.
+- **Emailed PDFs:** the buyer gets a "needs manual entry" notification.
+- **Uploads:** the dialog says to add the quote by hand.
+- **Recommendations:** the existing "generate it from the compare page" notice applies.
+- **Quota and network errors** are not output errors. They keep their retries and backoff.
+
+## D-067: Default model is gemini-3.5-flash, overridable
+`gemini-2.5-flash` returns 404 "no longer available to new users" for this project's key. The
+live evals caught it; production has run no AI jobs yet, so no buyer was affected.
+- `gemini-3.8-flash` and `gemini-3.7-flash` were overloaded during testing (503 and 504).
+- `gemini-3.5-flash` answered structured-output calls in about 3 seconds and scored perfectly on
+  every eval case it completed.
+- `GEMINI_MODEL` switches models without a code change.
+
+## D-068: Evals run against a baseline by default
+The harness needs an injectable model. A mock that returns the labels would score 100% and prove
+nothing, so the default "model" is a simple rule-based extractor that never sees the labels.
+- The harness, scoring and report run offline, in tests and in CI.
+- The baseline is a floor for the live model. It scores 46% on unit prices and 0% on Arabic, which
+  shows where a model is needed.
+- Live runs need `RUN_LIVE_EVALS=true` and spend real quota.
+- Cases that error (quota, network) are listed but left out of the accuracy. They say nothing
+  about extraction quality.
+
+## D-069: Public rate limits use hashed keys and fail open
+The supplier form and the demo entry have no account to rate-limit. They are keyed by a SHA-256
+of the IP or the quote token, so no raw IP is ever stored. The limits live in the database
+(0019), and only the service role can call the function.
+- If the check itself fails, the request is allowed and the failure is logged. Losing a
+  supplier's quote to a database hiccup would be worse than a brief window without a limit.
+- The token is format-checked first, so junk links never reach the database.
+
+## D-070: No Sentry for now
+The brief allowed Sentry only if it degrades cleanly without a DSN. `@sentry/nextjs` wraps the
+Next config, adds instrumentation files and uploads source maps at build time. That is a lot of
+moving parts for a project with no DSN configured yet.
+- Background jobs already log structured JSON (`jobs.*` events), failed jobs keep their error, and
+  buyers are notified of failures. Vercel runtime logs cover the rest.
+- Revisit when there is a team to receive alerts.

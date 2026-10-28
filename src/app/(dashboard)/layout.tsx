@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { AppSidebar } from "@/components/app-sidebar";
+import { AppSidebar, MobileNav } from "@/components/app-sidebar";
 import { AppTopbar } from "@/components/app-topbar";
 import { DemoBanner } from "@/components/demo/demo-banner";
 import { getLocale, getTranslations } from "next-intl/server";
@@ -42,13 +42,16 @@ export default async function DashboardLayout({
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 print:bg-white">
       <AppSidebar email={user.email!} fullName={profile?.full_name ?? null} />
-      <div className="ms-60 print:ms-0">
+      <div className="min-w-0 lg:ms-60 print:ms-0">
         {profile?.is_demo && <DemoBanner />}
         {profile?.is_demo && (
           <p className="mb-3 hidden text-xs font-medium text-slate-600 print:block">{t("printNote")}</p>
         )}
-        <AppTopbar unreadCount={unreadCount ?? 0} />
-        <main className="p-8 print:p-0">{children}</main>
+        <AppTopbar
+          unreadCount={unreadCount ?? 0}
+          mobileNav={<MobileNav email={user.email!} fullName={profile?.full_name ?? null} />}
+        />
+        <main className="p-4 sm:p-6 lg:p-8 print:p-0">{children}</main>
       </div>
     </div>
   );

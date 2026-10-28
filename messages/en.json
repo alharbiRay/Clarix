@@ -14,7 +14,8 @@
     "settings": "Settings",
     "buyer": "Buyer",
     "signOut": "Sign out",
-    "mainNav": "Main navigation"
+    "mainNav": "Main navigation",
+    "openMenu": "Open menu"
   },
   "topbar": {
     "search": "Search RFQs, suppliers…",
@@ -61,7 +62,8 @@
     "fullName": "Full name",
     "checkEmail": "Check your email to confirm your account.",
     "reasonSessionUnavailable": "We couldn't confirm your session just now — our sign-in service was slow to respond. Please sign in again.",
-    "reasonDemoUnavailable": "The demo workspace isn't available right now. You can still create a free account below."
+    "reasonDemoUnavailable": "The demo workspace isn't available right now. You can still create a free account below.",
+    "reasonDemoBusy": "You've opened the demo many times in the last hour. Try again a little later, or create a free account below."
   },
   "vat": {
     "exclNote": "All prices exclude VAT.",
@@ -112,7 +114,8 @@
       "deadline": "The deadline for this RFQ has passed.",
       "duplicate": "A quote has already been submitted for this invitation.",
       "badItem": "Invalid line item in submission.",
-      "failed": "Your quote couldn't be saved. Please try again in a moment."
+      "failed": "Your quote couldn't be saved. Please try again in a moment.",
+      "tooMany": "Too many attempts from this connection. Please wait a few minutes and try again."
     }
   },
   "emails": {

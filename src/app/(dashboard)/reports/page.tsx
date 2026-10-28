@@ -186,7 +186,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
                 <MonthlyBars title={t("spend")} currency={c} data={report.months.map((m) => ({ month: m.month, value: m.spend }))} />
                 <MonthlyBars title={t("savings")} currency={c} data={report.months.map((m) => ({ month: m.month, value: m.savings }))} />
               </div>
-              <div className="overflow-x-auto print:overflow-visible">
+              <div className="relative overflow-x-auto print:overflow-visible">
                 <table className="w-full min-w-[420px] print:min-w-0">
                   <thead className="border-b border-slate-100">
                     <tr>
@@ -221,7 +221,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
                 {t("supplierComparisonHint")}
               </CardDescription>
             </CardHeader>
-            <CardContent className="overflow-x-auto print:overflow-visible">
+            <CardContent className="relative overflow-x-auto print:overflow-visible">
               {report.suppliers.length === 0 ? (
                 <p className="text-sm text-slate-500">{t("noSupplierActivity")}</p>
               ) : (
@@ -313,7 +313,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
               <CardTitle className="text-sm font-semibold">{t("posCol")}</CardTitle>
               <CardDescription className="text-xs text-slate-500">{t("newestFirst")}</CardDescription>
             </CardHeader>
-            <CardContent className="overflow-x-auto print:overflow-visible">
+            <CardContent className="relative overflow-x-auto print:overflow-visible">
               {report.awards.length === 0 ? (
                 <p className="text-sm text-slate-500">{t("noPos")}</p>
               ) : (

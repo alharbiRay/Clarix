@@ -1,6 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { clientIp, consumePublicRateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_DEMO_EMAIL, openDemoSession } from "@/lib/demo/session";
@@ -10,6 +12,11 @@ export async function startDemoSession() {
   const admin = createAdminClient();
   const supabase = createClient();
   const email = process.env.DEMO_ACCOUNT_EMAIL || DEFAULT_DEMO_EMAIL;
+
+  // Each session mints a magic link: cap how many one visitor can open.
+  if (!(await consumePublicRateLimit(admin, "demo_start_ip", clientIp(headers())))) {
+    redirect("/login?reason=demo_busy");
+  }
 
   const result = await openDemoSession({
     admin,

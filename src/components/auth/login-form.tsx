@@ -24,9 +24,10 @@ import { safeNextPath } from "@/lib/auth/safe-redirect";
 import { DemoEntry } from "@/components/demo/demo-entry";
 
 /** Message for /login?reason=… — set by src/middleware.ts when the session check fails. */
-const REASONS: Record<string, "reasonSessionUnavailable" | "reasonDemoUnavailable"> = {
+const REASONS: Record<string, "reasonSessionUnavailable" | "reasonDemoUnavailable" | "reasonDemoBusy"> = {
   session_unavailable: "reasonSessionUnavailable",
   demo_unavailable: "reasonDemoUnavailable",
+  demo_busy: "reasonDemoBusy",
 };
 
 export function LoginForm({ reason, next, tab }: { reason?: string; next?: string; tab?: string }) {

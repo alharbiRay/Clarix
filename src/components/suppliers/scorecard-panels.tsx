@@ -96,17 +96,19 @@ export function ScoreTrend({ points }: { points: { month: string; score: number 
           </bdi>
         </figcaption>
       )}
-      <table className="sr-only">
-        <caption>{t("trendCaption")}</caption>
-        <tbody>
-          {points.map((p) => (
-            <tr key={p.month}>
-              <th scope="row">{formatMonthLabel(p.month, true, locale)}</th>
-              <td>{p.score ?? t("notScored")}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="sr-only">
+        <table>
+          <caption>{t("trendCaption")}</caption>
+          <tbody>
+            {points.map((p) => (
+              <tr key={p.month}>
+                <th scope="row">{formatMonthLabel(p.month, true, locale)}</th>
+                <td>{p.score ?? t("notScored")}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }
