@@ -120,6 +120,12 @@ export function checkStructuredOutput<T>(text: string, zodSchema: z.ZodType<T>):
 }
 
 const MAX_ECHOED_OUTPUT = 8_000;
+/**
+ * Callers run under a 60s function limit and one request can take 45s, so
+ * a repair only starts while there's time for it. Past this, the failure is
+ * left retryable (a plain Error) rather than declared permanent.
+ */
+const REPAIR_BUDGET_MS = 25_000;
 
 /**
  * Runs a structured-output call and validates it with zod. Invalid output
@@ -131,29 +137,41 @@ export async function generateStructured<T>(
   parts: GeminiPart[],
   responseSchema: Schema,
   zodSchema: z.ZodType<T>,
-  generate: RawGenerate = liveGenerate()
+  generate: RawGenerate = liveGenerate(),
+  now: () => number = Date.now
 ): Promise<T> {
+  const started = now();
   const first = await generate(parts, responseSchema);
-  if (!first.text) {
-    throw new GeminiOutputError(
-      first.blockReason ? `The model declined to process this request (${first.blockReason}).` : "The model returned no output."
-    );
+  // A refusal reads the same every time; an empty answer without one is
+  // usually a glitch (overload, cut-off) and gets the repair attempt.
+  if (!first.text && first.blockReason) {
+    throw new GeminiOutputError(`The model declined to process this request (${first.blockReason}).`);
   }
-  const checked = checkStructuredOutput(first.text, zodSchema);
+  const checked: Checked<T> = first.text
+    ? checkStructuredOutput(first.text, zodSchema)
+    : { ok: false, problem: "The response was empty." };
   if (checked.ok) return checked.data;
 
+  if (now() - started > REPAIR_BUDGET_MS) {
+    throw new Error(`Gemini output was unusable and there's no time left to repair it: ${checked.problem}`);
+  }
   console.warn(`[gemini] invalid structured output, attempting one repair: ${checked.problem}`);
-  const repairPrompt = `Your previous response could not be used. ${checked.problem}
+  const repairPrompt = first.text
+    ? `Your previous response could not be used. ${checked.problem}
 
 Previous response:
 ${first.text.slice(0, MAX_ECHOED_OUTPUT)}
 
-Answer the original request again, returning ONLY JSON that matches the required schema exactly. Do not invent values: use null where the source has no value.`;
+Answer the original request again, returning ONLY JSON that matches the required schema exactly. Do not invent values: use null where the source has no value.`
+    : `Your previous response was empty. Answer the original request, returning ONLY JSON that matches the required schema exactly. Do not invent values: use null where the source has no value.`;
   const second = await generate([...parts, { text: repairPrompt }], responseSchema);
+  if (!second.text && second.blockReason) {
+    throw new GeminiOutputError(`The model declined to process this request (${second.blockReason}).`);
+  }
   const repaired = second.text ? checkStructuredOutput(second.text, zodSchema) : null;
   if (repaired?.ok) return repaired.data;
 
-  const problem = repaired ? repaired.problem : "The model returned no output on the repair attempt.";
+  const problem = repaired ? repaired.problem : "The model returned no output, twice.";
   console.error(`[gemini] structured output still invalid after repair: ${problem}`);
   throw new GeminiOutputError(problem);
 }

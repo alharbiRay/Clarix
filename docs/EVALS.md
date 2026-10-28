@@ -31,8 +31,10 @@ RUN_LIVE_EVALS=true npx tsx --env-file=.env.local evals/extraction/run.ts --writ
 
 - The first command runs offline. A rule-based baseline stands in for the model.
 - The second calls Gemini (about 22 to 44 requests, spaced for the free tier's per-minute limit).
-- `--write` updates the matching block below.
-- Unit tests (`evals/extraction/evals.test.ts`) run the harness offline only.
+- `--write` replaces the matching generated block below. Commentary goes outside the markers.
+- Unit tests (`evals/extraction/evals.test.ts`) run the harness offline only. CI runs the offline
+  baseline as a smoke test (the harness must complete with no errors). It has no accuracy
+  threshold: accuracy is tracked here, run by run.
 
 The baseline is a floor, not a competitor. It shows what keyword matching and "first number on the
 line" get you, and so which cases need a model: Arabic item names, VAT removal, line totals, tables.
@@ -94,10 +96,15 @@ Misses:
 | Warranty period | 100% | 100% | 100% |
 
 Misses:
-- `en-euro`: delivery: expected 15, got 21. The model turned "15 working days" into calendar days, which is defensible. The label keeps the stated number.
-- `ar-chat`, `en-both-prices`, `en-dollar-sign`, `ar-line-totals`, `en-alternative-brand`: error 429. The free-tier daily quota ran out partway through the run. Run them again once billing is enabled.
+- `en-euro`: delivery: expected 15, got 21
+- `ar-chat`, `en-both-prices`, `en-dollar-sign`, `ar-line-totals`, `en-alternative-brand`: error 429 (quota)
+<!-- evals:live:end -->
 
-Notes from this run:
+### About the latest live run
+
+- **`en-euro`:** the model turned "15 working days" into 21 calendar days. That is defensible, but
+  the label keeps the stated number.
+- **The five 429 errors:** the free-tier daily quota ran out partway through the run. Run them
+  again once billing is enabled.
 - The model removed VAT correctly in both VAT-inclusive cases (English and Arabic). It divided line totals by quantity, read Arabic-Indic digits, kept prices in AED instead of converting them, and returned null for the lump-sum and unavailable items instead of inventing prices.
 - An earlier run on the same day failed every case. `gemini-2.5-flash` now returns 404 ("no longer available to new users"), so the default model changed to `gemini-3.5-flash` (D-067).
-<!-- evals:live:end -->

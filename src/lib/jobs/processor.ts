@@ -38,9 +38,12 @@ export interface JobHooks {
 
 /** Thrown by a handler when retrying cannot help (bad input, deleted RFQ). */
 export class PermanentJobError extends Error {
-  constructor(message: string) {
+  /** Why, when the buyer's notice should say something specific. */
+  readonly reason?: "needs_manual_entry";
+  constructor(message: string, options: { reason?: "needs_manual_entry" } = {}) {
     super(message);
     this.name = "PermanentJobError";
+    this.reason = options.reason;
   }
 }
 

@@ -131,7 +131,7 @@ export async function processInboundEmailQuote(
     if (result.quotaExceeded && result.cause) throw result.cause;
     // An unreadable PDF reads the same on every attempt: give up now, and the
     // give-up hook tells the buyer to enter it manually.
-    if (result.needsManualEntry) throw new PermanentJobError(result.error);
+    if (result.needsManualEntry) throw new PermanentJobError(result.error, { reason: "needs_manual_entry" });
     throw new Error(result.error);
   }
   return { outcome: "created", quoteId: (result as { quoteId: string }).quoteId };

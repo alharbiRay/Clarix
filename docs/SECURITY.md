@@ -22,13 +22,14 @@ How Clarix keeps each buyer's data private, and what the Phase 11 security pass 
 ## Server-side authorization
 
 Every server action checks the session on the server (`requireWritableUser` or
-`auth.getUser()`) before doing anything, then queries through the RLS-scoped client. Four actions
-are public by design:
+`auth.getUser()`) before doing anything, then queries through the RLS-scoped client. Five actions
+work signed out by design:
 
 | Action | Why public | Protection |
 | --- | --- | --- |
 | `submitQuote` | The supplier has no account | Unguessable 48-hex token (format-checked before any query); rate limited per IP and per token; RFQ status, deadline and duplicate checks; zod validation |
 | `setQuoteLocale` | Supplier page language | Sets its own cookie only; touches no data |
+| `setLocale` | The language switch on the login page | Sets the cookie; writes `profiles.locale` only for the signed-in user |
 | `startDemoSession` | "Try the demo" | POST-only form action; rate limited per IP |
 | `exitDemoToSignup` | Leaving the demo | Ends only this browser's session |
 
@@ -52,14 +53,24 @@ Resend webhook, background jobs and the demo entry.
 
   If the check itself fails, the request is allowed and the failure is logged, so a database
   hiccup never blocks a supplier's quote.
+
+  The client IP is the first `x-forwarded-for` hop. That is safe on Vercel, which replaces the
+  header with the real client address. Behind another proxy (Cloudflare, or self-hosted), read
+  that proxy's client-IP header instead, or every visitor shares one bucket and spoofing becomes
+  possible.
 - **Signed-in AI actions.** Negotiation drafts and sends are limited per account (0015/0016).
 
 ## Input handling
 
 - **Validation.** All form input goes through zod on the server. Supplier and buyer text is
   HTML-escaped in every email.
-- **PDFs.** Size (10 MB) and the `%PDF-` magic bytes are checked on every path (buyer upload and
-  emailed reply) before Gemini or Storage sees the file. The declared content type isn't trusted.
+- **PDFs.** Size and the `%PDF-` magic bytes are checked on every path before Gemini or Storage
+  sees the file. The declared content type isn't trusted.
+  - Buyer uploads go through a server action, so Vercel's request cap of about 4.5 MB applies.
+    The limit is 4 MB, checked in the browser and on the server (`bodySizeLimit` in
+    `next.config.mjs`).
+  - Emailed replies are downloaded server-side and may be up to 10 MB, which is also the storage
+    bucket's limit.
 - **Search.** User text in PostgREST filters is quoted and escaped (`ilikeAnyFilter`), so it can't
   add filter conditions.
 - **AI output.**

@@ -54,4 +54,22 @@ describe("generateStructured", () => {
     const generate = vi.fn<RawGenerate>(async () => { throw quota; });
     await expect(generateStructured(parts, responseSchema, schema, generate)).rejects.toBe(quota);
   });
+
+  it("treats an empty answer without a refusal as invalid output and repairs it", async () => {
+    const generate = replies(null, '{"price": 12.5, "currency": "SAR"}');
+    expect(await generateStructured(parts, responseSchema, schema, generate)).toEqual({ price: 12.5, currency: "SAR" });
+    expect(generate.mock.calls[1][0].at(-1)!.text).toMatch(/empty/);
+  });
+
+  it("leaves the failure retryable when there's no time left for a repair", async () => {
+    let t = 0;
+    const generate = vi.fn<RawGenerate>(async () => {
+      t += 30_000;
+      return { text: "{}" };
+    });
+    const err = await generateStructured(parts, responseSchema, schema, generate, () => t).catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(GeminiOutputError);
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
 });

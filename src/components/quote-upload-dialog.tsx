@@ -56,6 +56,11 @@ export function QuoteUploadDialog({
       toast.error(t("chooseFile"));
       return;
     }
+    // Checked here too: a larger body is refused by the server before our action runs.
+    if (file.size > 4 * 1024 * 1024) {
+      toast.error(t("tooLarge"));
+      return;
+    }
 
     const formData = new FormData();
     formData.set("rfqId", rfqId);

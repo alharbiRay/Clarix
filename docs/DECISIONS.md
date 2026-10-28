@@ -626,3 +626,21 @@ moving parts for a project with no DSN configured yet.
 - Background jobs already log structured JSON (`jobs.*` events), failed jobs keep their error, and
   buyers are notified of failures. Vercel runtime logs cover the rest.
 - Revisit when there is a team to receive alerts.
+
+## D-071: Phase 11 review fixes
+- **An empty answer is invalid output.** An empty response with no block reason gets the repair
+  attempt. It is usually transient (overload, cut-off). Only an explicit refusal is permanent
+  straight away.
+- **Repairs have a time budget.** A repair starts only within 25 seconds of the first call.
+  Callers run under a 60-second limit, and one request can take 45 seconds. Past that point the
+  failure stays retryable instead of becoming "manual entry".
+- **A typed reason drives the buyer's notice.** `PermanentJobError` carries
+  `reason: "needs_manual_entry"`, instead of the notice depending on the wording of the error
+  message.
+- **The upload limit is 4 MB.** PDF uploads post through a server action. The Next default of
+  1 MB is raised to 4.5 MB (`bodySizeLimit`), which is Vercel's request cap. The file is checked
+  in the browser and on the server. Emailed replies keep the 10 MB limit.
+- **Rate-limit rows are pruned globally.** Old rows are deleted on every call, not just the
+  caller's. A quote token is rarely seen twice, so per-key pruning would leave its rows forever.
+- **Smaller fixes.** The RFQ search ignores a repeated `?q=`. The rate-limit copy no longer
+  blames "this connection". SECURITY.md lists `setLocale` and the proxy assumption.

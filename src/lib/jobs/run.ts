@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { runAutoRecommendation } from "@/lib/auto-recommendation";
 import { processInboundEmailQuote } from "@/lib/inbound-email";
 import {
+  PermanentJobError,
   processJobs,
   type Job,
   type JobHandler,
@@ -78,7 +79,7 @@ export function buildJobHooks(supabase: SupabaseClient): JobHooks {
         supabase
       );
       const title = await rfqTitle(supabase, job.rfq_id);
-      const unreadable = error instanceof Error && /couldn't read this PDF reliably/i.test(error.message);
+      const unreadable = error instanceof PermanentJobError && error.reason === "needs_manual_entry";
       const message =
         job.type === JOB_TYPES.inboundEmailQuote
           ? unreadable

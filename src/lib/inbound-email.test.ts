@@ -50,6 +50,14 @@ function setup(
 }
 
 describe("processInboundEmailQuote", () => {
+  it("gives up at once, flagged for manual entry, when the AI can't read the PDF", async () => {
+    const { db, deps } = setup();
+    deps.createQuote = vi.fn(async () => ({ error: "The AI couldn't read this PDF reliably. Enter the quote manually.", needsManualEntry: true }));
+    const err = await processInboundEmailQuote(db as never, job, deps).catch((e) => e);
+    expect(err).toBeInstanceOf(PermanentJobError);
+    expect(err.reason).toBe("needs_manual_entry");
+  });
+
   it("extracts the PDF into a quote tagged with the email id", async () => {
     const { db, deps } = setup();
     expect(await processInboundEmailQuote(db as never, job, deps)).toEqual({ outcome: "created", quoteId: "q-1" });

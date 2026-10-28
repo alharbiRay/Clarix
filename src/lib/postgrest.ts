@@ -6,7 +6,9 @@
  * or change filter conditions. Here the value is double-quoted (PostgREST's
  * escape for reserved characters, with `\` and `"` backslash-escaped), and
  * LIKE wildcards in the input are escaped so "100%" searches for "100%".
- * Input is capped at 100 characters.
+ * Input is capped at 100 characters. PostgREST also reads `*` as `%` in
+ * like/ilike values and offers no escape for it: "a*b" matches like a
+ * wildcard. Harmless here (results are RLS-scoped anyway).
  */
 export function ilikeAnyFilter(columns: string[], q: string): string {
   // LIKE level: a literal backslash, % or _ in the search text.

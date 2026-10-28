@@ -18,6 +18,7 @@ create table public.public_rate_limit_events (
 );
 
 create index public_rate_limit_events_lookup_idx on public.public_rate_limit_events (key_hash, action, created_at desc);
+create index public_rate_limit_events_created_idx on public.public_rate_limit_events (created_at);
 
 alter table public.public_rate_limit_events enable row level security;
 revoke all on public.public_rate_limit_events from anon, authenticated;
@@ -47,8 +48,10 @@ begin
   end case;
 
   perform pg_advisory_xact_lock(hashtext(p_key_hash || ':' || p_action));
-  delete from public.public_rate_limit_events
-   where key_hash = p_key_hash and action = p_action and created_at < now() - interval '1 day';
+  -- Every key, not just this one: a quote token is rarely seen again, so
+  -- per-key cleanup would leave its rows forever. Indexed, and the table
+  -- never holds more than a day of events.
+  delete from public.public_rate_limit_events where created_at < now() - interval '1 day';
   select count(*) into used from public.public_rate_limit_events
    where key_hash = p_key_hash and action = p_action and created_at >= now() - make_interval(secs => window_secs);
   if used >= max_events then

@@ -20,13 +20,13 @@ import { isLocale } from "@/i18n/config";
 export default async function RfqsPage({
   searchParams,
 }: {
-  searchParams: { q?: string };
+  searchParams: { q?: string | string[] };
 }) {
   const supabase = createClient();
   const t = await getTranslations("rfqs");
   const rawLocale = await getLocale();
   const locale = isLocale(rawLocale) ? rawLocale : "en";
-  const q = searchParams.q?.trim();
+  const q = typeof searchParams.q === "string" ? searchParams.q.trim() : undefined;
 
   let query = supabase
     .from("rfqs")
