@@ -25,7 +25,7 @@ export function PricingSheet() {
             return (
               <li key={k} className={cn("relative flex flex-col p-6 sm:p-8", featured && "bg-[#7C6FE0]/[0.05]")}>
                 {featured && (
-                  <span className="absolute end-5 top-5 rotate-[-6deg] rounded-[4px] border-2 border-[#5B4FD0] px-2 py-0.5 text-[0.7rem] font-bold uppercase tracking-[0.12em] text-[#5B4FD0] outline outline-1 outline-offset-2 outline-[#5B4FD0]/60 rtl:tracking-normal">
+                  <span className="absolute end-6 top-7 text-xs font-semibold text-slate-600 sm:end-8 sm:top-9">
                     {t("popular")}
                   </span>
                 )}

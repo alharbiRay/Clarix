@@ -27,12 +27,12 @@ export async function HowItWorks() {
           <h2 id="how-title" className={h2}>{t("title")}</h2>
           <p className="mt-4 text-lg leading-relaxed text-slate-600">{t("lede")}</p>
         </div>
-        <ol className="mt-14 grid gap-10 border-t-2 border-slate-950 pt-8 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
+        <ol className="ms-[1.125rem] mt-14 grid gap-14 border-s-2 border-slate-950 ps-9 lg:ms-0 lg:grid-cols-4 lg:gap-8 lg:border-s-0 lg:border-t-2 lg:ps-0 lg:pt-8">
           {steps.map(({ key, icon: Icon }, i) => (
             <li key={key} className="relative">
               <span
                 aria-hidden
-                className="absolute -top-[2.65rem] start-0 grid h-9 w-9 place-items-center rounded-full border-2 border-slate-950 bg-white text-sm font-bold tabular-nums text-slate-950"
+                className="absolute -start-[3.45rem] -top-1 grid h-9 w-9 place-items-center rounded-full border-2 border-slate-950 bg-slate-50 text-sm font-bold tabular-nums text-slate-950 lg:-top-[2.65rem] lg:start-0"
               >
                 {i + 1}
               </span>
@@ -73,28 +73,28 @@ export async function Features() {
               {t("extraction.proof")}
             </p>
           </div>
-          <figure className="rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-6" aria-hidden>
-            <div dir="rtl" lang="ar" className="rounded-md border border-slate-200 bg-white px-4 py-3 font-[family-name:var(--font-arabic)] text-[0.95rem] leading-loose text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
+          <figure aria-hidden>
+            <div dir="rtl" lang="ar" className="border-y border-slate-300 py-4 font-[family-name:var(--font-arabic)] text-[0.98rem] leading-loose text-slate-700">
               <p>الأسعار شاملة ضريبة القيمة المضافة 15%</p>
-              <p>مكيف سبليت 24000 وحدة: <span className="bg-amber-100 px-1">2,875 ريال</span></p>
-              <p>التوريد والتركيب خلال <span className="bg-amber-100 px-1">7 أيام</span> · ضمان <span className="bg-amber-100 px-1">5 سنوات</span></p>
+              <p>مكيف سبليت 24000 وحدة: <span className="font-semibold text-slate-950 underline decoration-[#7C6FE0] decoration-2 underline-offset-[6px]">2,875 ريال</span></p>
+              <p>التوريد والتركيب خلال <span className="font-semibold text-slate-950 underline decoration-[#7C6FE0] decoration-2 underline-offset-[6px]">7 أيام</span> · ضمان <span className="font-semibold text-slate-950 underline decoration-[#7C6FE0] decoration-2 underline-offset-[6px]">5 سنوات</span></p>
             </div>
-            <div className="my-3 flex justify-center text-slate-400">
+            <div className="flex justify-center py-3 text-slate-400">
               <ArrowRight size={18} className="rotate-90" />
             </div>
-            <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 text-sm">
+            <dl className="grid grid-cols-3 divide-x divide-slate-200 border-t-2 border-slate-950 text-sm rtl:divide-x-reverse">
               {[
                 [t("extraction.fig.unit"), formatMoney(2500, "SAR")],
                 [t("extraction.fig.delivery"), t("extraction.fig.days")],
                 [t("extraction.fig.warranty"), t("extraction.fig.years")],
               ].map(([k, v]) => (
-                <div key={k} className="bg-white px-3 py-2.5">
+                <div key={k} className="px-3 py-3 first:ps-0">
                   <dt className="text-[0.7rem] text-slate-500">{k}</dt>
                   <dd className="mt-0.5 font-semibold tabular-nums text-slate-950">{v}</dd>
                 </div>
               ))}
             </dl>
-            <p className="mt-2.5 text-xs text-slate-600">{t("extraction.fig.warning")}</p>
+            <p className="mt-1 border-t border-slate-200 pt-2.5 text-xs text-slate-600">{t("extraction.fig.warning")}</p>
           </figure>
         </div>
 
@@ -189,7 +189,7 @@ export async function DashboardPreview() {
         <figure className="rounded-xl border border-slate-300/80 bg-white shadow-[0_1px_0_rgba(15,23,42,0.04),0_30px_60px_-40px_rgba(15,23,42,0.45)]">
           <figcaption className="flex items-center justify-between border-b border-slate-200 px-5 py-3 text-xs">
             <span className="font-semibold text-slate-950">Clarix</span>
-            <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-900 ring-1 ring-amber-200">{t("label")}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700 ring-1 ring-slate-200">{t("label")}</span>
           </figcaption>
           <div className="grid gap-6 p-5 sm:grid-cols-[1fr_1.3fr] sm:p-6">
             <div>
@@ -215,8 +215,8 @@ export async function DashboardPreview() {
             <ul className="mt-2 divide-y divide-slate-100">
               {recent.map((r) => (
                 <li key={r.title} className="flex items-center gap-3 py-2 text-sm">
-                  <span className="min-w-0 flex-1 truncate text-slate-800"><bdi>{r.title}</bdi></span>
-                  <span className="hidden truncate text-slate-500 sm:block sm:max-w-[12rem]"><bdi>{r.supplier}</bdi></span>
+                  <span dir="auto" className="min-w-0 flex-1 truncate text-start text-slate-800">{r.title}</span>
+                  <span dir="auto" className="hidden truncate text-start text-slate-500 sm:block sm:max-w-[12rem]">{r.supplier}</span>
                   <span className="tabular-nums text-slate-950">{formatMoneyWhole(r.total, "SAR")}</span>
                   <span className={`rounded px-1.5 py-0.5 text-[0.7rem] font-medium ${r.auto ? "bg-[#7C6FE0]/10 text-[#4338CA]" : "bg-slate-100 text-slate-600"}`}>
                     {r.auto ? t("auto") : t("manual")}
@@ -261,15 +261,15 @@ export async function Faq() {
 export async function Close() {
   const t = await getTranslations("landing.close");
   return (
-    <section aria-labelledby="close-title" className="bg-slate-950 py-20 text-white sm:py-24">
-      <div className={`${wrap} flex flex-col gap-8 md:flex-row md:items-end md:justify-between`}>
-        <div className="max-w-2xl">
-          <h2 id="close-title" className="text-balance text-[clamp(1.9rem,3.6vw,3rem)] font-semibold leading-[1.08] ltr:tracking-[-0.025em]">
-            {t("title")}
-          </h2>
-          <p className="mt-4 max-w-[52ch] text-lg leading-relaxed text-slate-300">{t("body")}</p>
-        </div>
-        <div className="[&_button]:bg-white [&_button]:text-slate-950 [&_button:hover]:bg-slate-200">
+    <section aria-labelledby="close-title" className="py-20 sm:py-24">
+      <div className={wrap}>
+        <div className="flex flex-col gap-8 border-t-2 border-slate-950 pt-10 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-2xl">
+            <h2 id="close-title" className="text-balance text-[clamp(1.9rem,3.6vw,3rem)] font-semibold leading-[1.08] text-slate-950 ltr:tracking-[-0.025em]">
+              {t("title")}
+            </h2>
+            <p className="mt-4 max-w-[52ch] text-lg leading-relaxed text-slate-600">{t("body")}</p>
+          </div>
           <DemoButton />
         </div>
       </div>

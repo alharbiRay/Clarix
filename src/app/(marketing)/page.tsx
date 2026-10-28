@@ -49,7 +49,7 @@ export default async function LandingPage() {
               >
                 {t("title")}
               </h1>
-              <p className="mt-5 max-w-[60ch] text-base leading-relaxed text-slate-600 sm:mt-6 sm:text-[1.15rem]">{t("lede")}</p>
+              <p className="mt-5 max-w-[68ch] text-base leading-relaxed text-slate-600 sm:mt-6 sm:text-[1.15rem]">{t("lede")}</p>
             </div>
             <div className="flex flex-col gap-3 lg:pb-2">
               <div className="flex flex-wrap items-center gap-3">

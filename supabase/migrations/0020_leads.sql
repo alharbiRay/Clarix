@@ -23,7 +23,7 @@ create table public.leads (
   created_at   timestamptz not null default now()
 );
 
--- One row per email: a repeat sign-up updates it instead of piling up.
+-- One row per email: a repeat sign-up keeps the first row (the app treats it as done).
 create unique index leads_email_idx on public.leads (lower(email));
 
 alter table public.leads enable row level security;

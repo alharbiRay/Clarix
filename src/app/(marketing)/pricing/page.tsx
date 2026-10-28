@@ -34,7 +34,7 @@ export default async function PricingPage() {
             </h1>
             <p className="mt-4 text-lg leading-relaxed text-slate-600">{t("lede")}</p>
           </div>
-          <p className="flex max-w-sm gap-2 rounded-md border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm leading-relaxed text-amber-900">
+          <p className="flex max-w-sm gap-2 border-s-0 border-t border-slate-300 pt-3 text-sm leading-relaxed text-slate-700 md:border-t-0 md:pt-0">
             <Info size={16} aria-hidden className="mt-0.5 shrink-0" />
             {t("illustrative")}
           </p>

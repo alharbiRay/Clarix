@@ -68,7 +68,7 @@ function Stepper({
   canInc: boolean;
 }) {
   const btn =
-    "grid h-8 w-8 place-items-center rounded-md border border-slate-300 bg-white text-slate-700 transition-colors hover:border-slate-400 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0] disabled:cursor-not-allowed disabled:opacity-35";
+    "grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-300 bg-white text-slate-700 transition-colors hover:border-slate-400 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0] disabled:cursor-not-allowed disabled:opacity-35";
   return (
     <div>
       <div className="text-[0.8rem] font-medium text-slate-600">{label}</div>
@@ -141,7 +141,7 @@ export function DecisionSheet() {
 
       <div className="grid lg:grid-cols-[18.5rem_1fr]">
         {/* Rules: the margin of the sheet */}
-        <div className="border-b border-slate-200 bg-slate-50/70 px-5 py-5 sm:px-7 lg:border-b-0 lg:border-e">
+        <div className="order-2 border-t border-slate-200 bg-slate-50/70 px-5 py-5 sm:px-7 lg:order-none lg:border-e lg:border-t-0">
           <h3 className="text-xs font-semibold text-slate-950">{t("rules")}</h3>
 
           <fieldset className="mt-4">
@@ -162,7 +162,7 @@ export function DecisionSheet() {
             </div>
           </fieldset>
 
-          <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-1">
+          <div className="mt-5 grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2 lg:grid-cols-1">
             <Stepper
               label={t("delivery")}
               value={t("days", { count: rules.maxDeliveryDays })}
@@ -211,7 +211,7 @@ export function DecisionSheet() {
         </div>
 
         {/* The ranked quotes */}
-        <div className="min-w-0">
+        <div className="order-1 min-w-0 lg:order-none">
           <div
             aria-hidden
             className="hidden grid-cols-[3rem_minmax(0,1fr)_8.5rem_6rem_6.5rem_4rem] gap-3 border-b border-slate-200 px-7 py-2.5 text-[0.7rem] font-medium text-slate-500 md:grid"
@@ -241,7 +241,7 @@ export function DecisionSheet() {
                   <span
                     className={cn(
                       "row-span-2 text-2xl font-semibold tabular-nums leading-none md:row-span-1",
-                      moved.has(q.id) ? "text-[#5B4FD0]" : "text-slate-300",
+                      moved.has(q.id) ? "text-[#5B4FD0]" : "text-slate-500",
                       isPick && "text-slate-950"
                     )}
                   >
