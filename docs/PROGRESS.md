@@ -19,7 +19,7 @@ One branch and PR per phase, merged into `master` in order (merge commits, no sq
 | 11. Engineering hardening | merged (reviewed, fixes applied) | `feat/phase-11-hardening` | [#15](https://github.com/alharbiRay/Clarix/pull/15) | tsc, lint, 687 tests, build, CI green, live evals, 375px layout checked on every signed-in page |
 | 12. Landing + pricing | merged (finish-reviewed, fixes applied) | `feat/phase-12-landing` | [#16](https://github.com/alharbiRay/Clarix/pull/16) | tsc, lint, 701 tests, build, finish review (impeccable), desktop and phone captures in both languages |
 
-| Final. README case study + docs | merged | `docs/final-readme` | see below | README, ARCHITECTURE refresh, this file |
+| Final. README case study + docs | merged | `docs/final-readme` | [#17](https://github.com/alharbiRay/Clarix/pull/17) | README, ARCHITECTURE refresh, this file |
 
 All twelve phases are merged. Each PR's description lists its verification, and each phase has a
 plan in `docs/plans/`. Every phase from 6 on went through an independent code review, and the
