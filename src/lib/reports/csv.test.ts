@@ -24,6 +24,10 @@ describe("toCsv", () => {
     );
   });
 
+  it("also neutralises a leading tab or carriage return", () => {
+    expect(toCsv([["\tcmd", "\rcmd"]])).toBe("﻿'\tcmd,\"'\rcmd\"\r\n");
+  });
+
   it("writes numbers with two decimals and empty cells for null", () => {
     expect(toCsv([[1234.5, null, 0]])).toBe("﻿1234.50,,0.00\r\n");
   });

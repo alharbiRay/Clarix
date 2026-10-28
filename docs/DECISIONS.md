@@ -512,3 +512,22 @@ A test checks the totals against the dashboard's functions on the demo data.
 A BOM and CRLF make Arabic open correctly in Excel. Text cells that start with = + - @ get an
 apostrophe prefix, because supplier names and RFQ titles are user-controlled. Numbers keep their
 sign and have two decimals.
+
+## D-061: Phase 9 review fixes
+- **One supplier key.** An invite not linked to a profile is matched to the profile by email, as the
+  scorecard does, so a winner's spend never drops out of the supplier table. A test checks that
+  supplier spend adds up to total spend.
+- **Each column says where it comes from.**
+  - "Won" and "Win rate" use the scorecard's RFQs created in the range.
+  - "POs sent", spend and savings use purchase orders sent in the range.
+  Earlier, wins from one population sat next to a rate from the other.
+- **Categories use phrases first, then services, then keywords.** Unit words are ignored. There are
+  new Safety & PPE and HVAC groups, and a test fixes each misclassification the review found.
+- **Print.** Wide tables drop their minimum width, charts scale to the printed column, and demo
+  printouts are marked as demo data.
+- **Smaller fixes.**
+  - Charts no longer take keyboard focus.
+  - Partial months are marked.
+  - Years before 2000 are rejected.
+  - Negative savings read "above the average".
+  - The monthly CSV writes "Sep 2026" so Excel doesn't turn it into a date.

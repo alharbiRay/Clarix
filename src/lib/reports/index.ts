@@ -38,7 +38,11 @@ export interface SupplierRow {
   label: string;
   quoted: number;
   invited: number;
-  wins: number;
+  /** Purchase orders sent to them in the range (the same population as spend). */
+  posSent: number;
+  /** Scorecard: RFQs created in the range that they won, out of those decided. */
+  won: number;
+  decided: number;
   winRate: number | null;
   spend: number;
   savings: number;
@@ -75,6 +79,8 @@ export interface Report {
   filters: ReportFilters;
   currency: string;
   months: SeriesPoint[];
+  /** First/last months only partly inside the range (e.g. from the 15th). */
+  partialMonths: string[];
   totals: {
     spend: number;
     savings: number;
@@ -97,7 +103,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function isRealDate(s: unknown): s is string {
-  if (typeof s !== "string" || !DATE_RE.test(s)) return false;
+  if (typeof s !== "string" || !DATE_RE.test(s) || s < "2000-01-01") return false;
   const d = new Date(`${s}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
 }
@@ -132,10 +138,6 @@ function inviteOf(rfq: MetricsRfq, quoteId: string | null) {
   return quote ? rfq.invites.find((i) => i.id === quote.invite_id) : undefined;
 }
 
-/** The same key computeRfqSavings uses for the awarded supplier. */
-function keyOfInvite(invite: MetricsRfq["invites"][number]) {
-  return invite.supplier_id ?? invite.label ?? invite.id;
-}
 
 export function buildReport(rfqs: MetricsRfq[], filters: ReportFilters, now: Date = new Date()): Report {
   const currency = primaryCurrency(rfqs);
@@ -144,18 +146,42 @@ export function buildReport(rfqs: MetricsRfq[], filters: ReportFilters, now: Dat
     const d = dayKey(iso);
     return d >= filters.from && d <= filters.to;
   };
+  // One key per supplier. Invites aren't always linked to the supplier
+  // profile (linking is best-effort), so an unlinked one is matched to its
+  // profile by email, as the scorecard does; otherwise it falls back to its label.
+  const profileByEmail = new Map<string, string>();
+  for (const r of rfqs) for (const i of r.invites) if (i.supplier_id && i.email) profileByEmail.set(i.email.trim().toLowerCase(), i.supplier_id);
+  const keyOf = (i: MetricsRfq["invites"][number]) =>
+    i.supplier_id ?? (i.email ? profileByEmail.get(i.email.trim().toLowerCase()) : undefined) ?? i.label ?? i.id;
   const forSupplier = (rfq: MetricsRfq) => {
     if (!filters.supplier) return true;
     const invite = inviteOf(rfq, rfq.award?.quote_id ?? null);
-    return Boolean(invite && keyOfInvite(invite) === filters.supplier);
+    return Boolean(invite && keyOf(invite) === filters.supplier);
   };
 
   // Awards (PO sent) in range, for the chosen supplier.
   const awardedInScope = rfqs.filter((r) => r.award?.po_sent_at && inRange(r.award.po_sent_at) && forSupplier(r));
   const savings = measuredSavings(awardedInScope, currency);
   const byRfq = new Map(rfqs.map((r) => [r.id, r]));
+  const byRfqEarly = byRfq;
 
-  const months = savingsSeriesForMonths(awardedInScope, monthKeysBetween(filters.from.slice(0, 7), filters.to.slice(0, 7)), currency);
+  const monthKeys = monthKeysBetween(filters.from.slice(0, 7), filters.to.slice(0, 7));
+  const months = savingsSeriesForMonths(awardedInScope, monthKeys, currency);
+  const lastDay = (key: string) => {
+    const [y, m] = key.split("-").map(Number);
+    return `${key}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`;
+  };
+  const partialMonths = monthKeys.filter(
+    (k, i) => (i === 0 && filters.from !== `${k}-01`) || (i === monthKeys.length - 1 && filters.to !== lastDay(k))
+  );
+  // Metrics key (computeRfqSavings) → our supplier key, per award.
+  const ourKey = new Map<string, string>();
+  const keyForSavings = (x: RfqSavings) => {
+    const invite = inviteOf(byRfqEarly.get(x.rfqId)!, x.awardedQuoteId);
+    const k = invite ? keyOf(invite) : x.supplierKey;
+    ourKey.set(x.supplierKey, k);
+    return k;
+  };
 
   const measured = savings.filter((s) => s.basis === "average_of_other_quotes");
   const measuredBaseline = round2(measured.reduce((a, s) => a + (s.baseline ?? 0), 0));
@@ -197,7 +223,7 @@ export function buildReport(rfqs: MetricsRfq[], filters: ReportFilters, now: Dat
       title: s.title,
       awardedOn: dayKey(s.awardedAt),
       supplier: s.awardedLabel,
-      supplierKey: s.supplierKey,
+      supplierKey: keyForSavings(s),
       total: s.awardedTotal,
       baseline: s.baseline,
       savings: s.savings,
@@ -217,15 +243,34 @@ export function buildReport(rfqs: MetricsRfq[], filters: ReportFilters, now: Dat
   const createdInRange = rfqs.filter((r) => inRange(r.created_at));
   const labels = new Map<string, { label: string; email?: string }>();
   for (const r of [...createdInRange, ...awardedInScope]) {
-    for (const i of r.invites) if (i.supplier_id && !labels.has(i.supplier_id)) labels.set(i.supplier_id, { label: i.label, email: i.email });
+    for (const i of r.invites) {
+      const k = keyOf(i);
+      if (!labels.has(k) && (i.supplier_id || profileByEmail.has(i.email?.trim().toLowerCase() ?? "") || awardedInScope.includes(r))) {
+        labels.set(k, { label: i.label, email: i.email });
+      }
+    }
   }
-  const spend = new Map(spendBySupplier(awardedInScope, currency).map((s) => [s.supplierKey, s]));
+  // spendBySupplier keys by the metrics key; fold those into ours.
+  const spend = new Map<string, { spend: number; awards: number }>();
+  for (const e of spendBySupplier(awardedInScope, currency)) {
+    const k = ourKey.get(e.supplierKey) ?? e.supplierKey;
+    const cur = spend.get(k) ?? { spend: 0, awards: 0 };
+    spend.set(k, { spend: round2(cur.spend + e.spend), awards: cur.awards + e.awards });
+  }
   const savingsBySupplier = new Map<string, number>();
-  for (const s of measured) savingsBySupplier.set(s.supplierKey, round2((savingsBySupplier.get(s.supplierKey) ?? 0) + s.savings));
+  for (const s of measured) {
+    const k = ourKey.get(s.supplierKey) ?? s.supplierKey;
+    savingsBySupplier.set(k, round2((savingsBySupplier.get(k) ?? 0) + s.savings));
+  }
 
   const supplierOptions = Array.from(labels.entries())
     .map(([key, v]) => ({ key, label: v.label }))
     .sort((a, b) => a.label.localeCompare(b.label));
+  // Keep a filtered supplier selectable even when this range doesn't include them.
+  if (filters.supplier && !supplierOptions.some((o) => o.key === filters.supplier)) {
+    const known = rfqs.flatMap((r) => r.invites).find((i) => keyOf(i) === filters.supplier);
+    supplierOptions.push({ key: filters.supplier, label: known?.label ?? "Selected supplier" });
+  }
 
   const suppliers: SupplierRow[] = supplierOptions
     .filter((o) => !filters.supplier || o.key === filters.supplier)
@@ -236,7 +281,9 @@ export function buildReport(rfqs: MetricsRfq[], filters: ReportFilters, now: Dat
         label,
         quoted: m.quoted,
         invited: m.invited,
-        wins: spend.get(key)?.awards ?? 0,
+        posSent: spend.get(key)?.awards ?? 0,
+        won: m.awarded,
+        decided: m.decidedQuotes,
         winRate: m.winRate,
         spend: spend.get(key)?.spend ?? 0,
         savings: savingsBySupplier.get(key) ?? 0,
@@ -244,13 +291,14 @@ export function buildReport(rfqs: MetricsRfq[], filters: ReportFilters, now: Dat
         responseRate: m.responseRate,
       };
     })
-    .filter((s) => s.invited > 0 || s.wins > 0)
+    .filter((s) => s.invited > 0 || s.posSent > 0)
     .sort((a, b) => b.spend - a.spend || b.quoted - a.quoted || a.label.localeCompare(b.label));
 
   return {
     filters,
     currency,
     months,
+    partialMonths,
     totals,
     autoApproval: { decided: decided.length, automatic, rate: decided.length === 0 ? null : automatic / decided.length },
     suppliers,

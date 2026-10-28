@@ -74,6 +74,7 @@ describe("parseReportFilters", () => {
       supplier: "sup-a",
     });
     expect(parseReportFilters({ from: "2026-02-30", to: "yesterday" }, NOW)).toEqual(defaultFilters(NOW));
+    expect(parseReportFilters({ to: "0050-06-15" }, NOW)).toEqual(defaultFilters(NOW));
   });
 
   it("caps the range at 36 months", () => {
@@ -111,8 +112,8 @@ describe("buildReport", () => {
 
   it("compares suppliers: quotes, wins, spend, savings delivered", () => {
     expect(report.suppliers).toEqual([
-      expect.objectContaining({ key: "sup-b", label: "Gulf Office", wins: 1, spend: 150, savings: -50 }),
-      expect.objectContaining({ key: "sup-a", label: "Al Rashid", wins: 1, spend: 100, savings: 50 }),
+      expect.objectContaining({ key: "sup-b", label: "Gulf Office", posSent: 1, spend: 150, savings: -50 }),
+      expect.objectContaining({ key: "sup-a", label: "Al Rashid", posSent: 1, spend: 100, savings: 50 }),
     ]);
     expect(report.suppliers[0].quoted).toBeGreaterThan(0);
   });
@@ -129,6 +130,32 @@ describe("buildReport", () => {
     expect(one.categories.map((c) => c.category)).toEqual(["construction"]);
     // Still offers every supplier in range to switch to.
     expect(one.supplierOptions.map((o) => o.key).sort()).toEqual(["sup-a", "sup-b"]);
+  });
+
+  it("marks months only partly inside the range", () => {
+    expect(buildReport(data, { from: "2026-08-15", to: "2026-10-20", supplier: null }, NOW).partialMonths).toEqual(["2026-08", "2026-10"]);
+    expect(buildReport(data, { from: "2026-08-01", to: "2026-09-30", supplier: null }, NOW).partialMonths).toEqual([]);
+  });
+
+  it("wins and win rate come from the same RFQs (created in range); POs sent and spend from POs in range", () => {
+    const aug = buildReport(data, { from: "2026-08-01", to: "2026-08-31", supplier: null }, NOW);
+    expect(aug.suppliers.find((x) => x.key === "sup-a")).toMatchObject({ won: 1, decided: 1, winRate: 1, posSent: 1 });
+  });
+
+  it("an unlinked winner is matched to their profile by email (no spend goes missing)", () => {
+    const unlinked = rfq("r9", { created: "2026-09-20T08:00:00Z", poSent: "2026-09-21T08:00:00Z" });
+    unlinked.invites[0] = { ...unlinked.invites[0], supplier_id: null };
+    const all = [...data, unlinked];
+    const rep = buildReport(all, defaultFilters(NOW), NOW);
+    expect(rep.suppliers.reduce((x, y) => x + y.spend, 0)).toBeCloseTo(rep.totals.spend, 2);
+    expect(rep.suppliers.find((x) => x.key === "sup-a")).toMatchObject({ posSent: 2, spend: 200 });
+    expect(rep.awards.find((x) => x.rfqId === "r9")!.supplierKey).toBe("sup-a");
+    expect(buildReport(all, { ...defaultFilters(NOW), supplier: "sup-a" }, NOW).totals.awards).toBe(2);
+  });
+
+  it("keeps a filtered supplier selectable when the range has none of their activity", () => {
+    const empty = buildReport(data, { from: "2026-06-01", to: "2026-06-30", supplier: "sup-a" }, NOW);
+    expect(empty.supplierOptions).toContainEqual({ key: "sup-a", label: "Al Rashid" });
   });
 
   it("respects a narrow date range", () => {
@@ -149,8 +176,9 @@ describe("buildReport on the demo dataset", () => {
     const bySupplier = spendBySupplier(rfqs, currency);
     for (const s of bySupplier) {
       const row = wide.suppliers.find((r) => r.key === s.supplierKey);
-      if (row) expect(row.spend).toBeCloseTo(s.spend, 2);
+      expect(row?.spend ?? 0).toBeCloseTo(s.spend, 2);
     }
+    expect(wide.suppliers.reduce((a, r) => a + r.spend, 0)).toBeCloseTo(wide.totals.spend, 2);
     expect(wide.categories.reduce((a, c) => a + c.spend, 0)).toBeCloseTo(wide.totals.spend, 2);
     expect(wide.categories.find((c) => c.category === "other")).toBeUndefined();
   });

@@ -124,7 +124,9 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
       {empty ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-slate-500">
-            Nothing to report for this period yet. Try a wider date range, or come back once purchase orders have gone out.
+            {supplierName
+              ? "Nothing to report for this supplier in this period. Try a wider date range or all suppliers."
+              : "Nothing to report for this period yet. Try a wider date range, or come back once purchase orders have gone out."}
           </CardContent>
         </Card>
       ) : (
@@ -141,7 +143,11 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
               <dt className="text-xs font-medium text-slate-500">Savings</dt>
               <dd className="mt-1 text-xl font-semibold tabular-nums tracking-tight">{formatMoneyWhole(report.totals.savings, c)}</dd>
               <dd className="text-xs text-slate-500">
-                {report.totals.savingsPct === null ? "No competing quotes to compare" : `${formatPct(report.totals.savingsPct)} below the average other quote`}
+                {report.totals.savingsPct === null
+                  ? "No competing quotes to compare"
+                  : report.totals.savingsPct < 0
+                    ? `${formatPct(-report.totals.savingsPct)} above the average other quote`
+                    : `${formatPct(report.totals.savingsPct)} below the average other quote`}
               </dd>
             </div>
             <div className="p-4">
@@ -154,7 +160,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
             <div className="p-4">
               <dt className="text-xs font-medium text-slate-500">Suppliers</dt>
               <dd className="mt-1 text-xl font-semibold tabular-nums tracking-tight">{report.suppliers.length}</dd>
-              <dd className="text-xs text-slate-500">quoted or won in this period</dd>
+              <dd className="text-xs text-slate-500">invited or sent a PO in this period</dd>
             </div>
           </dl>
 
@@ -179,8 +185,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
                 <MonthlyBars title="Spend" currency={c} data={report.months.map((m) => ({ month: m.month, value: m.spend }))} />
                 <MonthlyBars title="Savings" currency={c} data={report.months.map((m) => ({ month: m.month, value: m.savings }))} />
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[420px]">
+              <div className="overflow-x-auto print:overflow-visible">
+                <table className="w-full min-w-[420px] print:min-w-0">
                   <thead className="border-b border-slate-100">
                     <tr>
                       <th scope="col" className={th}>Month</th>
@@ -192,7 +198,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
                   <tbody>
                     {report.months.map((m) => (
                       <tr key={m.month} className="border-b border-slate-50 last:border-0">
-                        <th scope="row" className={`${td} text-start font-normal`}>{formatMonthLabel(m.month, true)}</th>
+                        <th scope="row" className={`${td} text-start font-normal`}>
+                          {formatMonthLabel(m.month, true)}
+                          {report.partialMonths.includes(m.month) && <span className="ms-1 text-xs text-slate-500">(part of month)</span>}
+                        </th>
                         <td className={tdNum}>{formatMoneyWhole(m.spend, c)}</td>
                         <td className={tdNum}>{formatMoneyWhole(m.savings, c)}</td>
                         <td className={tdNum}>{m.awarded}</td>
@@ -208,21 +217,22 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
             <CardHeader>
               <CardTitle className="text-sm font-semibold">Supplier comparison</CardTitle>
               <CardDescription className="text-xs text-slate-500">
-                Invitations and quotes on RFQs created in this period; wins, spend and savings from purchase orders sent in it.
+                Quotes, wins and win rate: RFQs created in this period. POs sent, spend and savings: purchase orders sent in it.
               </CardDescription>
             </CardHeader>
-            <CardContent className="overflow-x-auto">
+            <CardContent className="overflow-x-auto print:overflow-visible">
               {report.suppliers.length === 0 ? (
                 <p className="text-sm text-slate-500">No supplier activity in this period.</p>
               ) : (
-                <table className="w-full min-w-[720px]">
+                <table className="w-full min-w-[720px] print:min-w-0 print:text-[11px]">
                   <thead className="border-b border-slate-100">
                     <tr>
                       <th scope="col" className={th}>Supplier</th>
                       <th scope="col" className={thNum}>Quoted</th>
                       <th scope="col" className={thNum}>Response rate</th>
-                      <th scope="col" className={thNum}>Wins</th>
+                      <th scope="col" className={thNum}>Won</th>
                       <th scope="col" className={thNum}>Win rate</th>
+                      <th scope="col" className={thNum}>POs sent</th>
                       <th scope="col" className={thNum}>Spend</th>
                       <th scope="col" className={thNum}>Savings delivered</th>
                       <th scope="col" className={thNum}>Price vs lowest</th>
@@ -240,8 +250,11 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
                           {s.quoted} of {s.invited}
                         </td>
                         <td className={tdNum}>{formatPct(s.responseRate)}</td>
-                        <td className={tdNum}>{s.wins}</td>
+                        <td className={tdNum}>
+                          {s.won} of {s.decided}
+                        </td>
                         <td className={tdNum}>{formatPct(s.winRate)}</td>
+                        <td className={tdNum}>{s.posSent}</td>
                         <td className={tdNum}>{formatMoneyWhole(s.spend, c)}</td>
                         <td className={tdNum}>{formatMoneyWhole(s.savings, c)}</td>
                         <td className={tdNum}>{s.avgPriceVsLowest === null ? "—" : s.avgPriceVsLowest === 0 ? "Lowest" : `+${formatPct(s.avgPriceVsLowest)}`}</td>
@@ -268,10 +281,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
                   <thead className="border-b border-slate-100">
                     <tr>
                       <th scope="col" className={th}>Category</th>
-                      <th scope="col" className={`${th} w-2/5`}>
-                        <span className="sr-only">Share of spend</span>
-                      </th>
-                      <th scope="col" className={thNum}>Share</th>
+                      <th scope="col" className={`${thNum} w-1/2`}>Share</th>
                       <th scope="col" className={thNum}>Spend</th>
                     </tr>
                   </thead>
@@ -279,12 +289,15 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
                     {report.categories.map((k) => (
                       <tr key={k.category} className="border-b border-slate-50 last:border-0">
                         <th scope="row" className={`${td} text-start font-normal`}>{k.label}</th>
-                        <td className="px-3 py-2" aria-hidden="true">
-                          <div className="h-2 rounded-full bg-slate-100 print:border print:border-slate-300">
-                            <div className="h-2 rounded-full bg-[#6D5FD6] print:[print-color-adjust:exact]" style={{ width: `${Math.max(1, Math.round(k.share * 100))}%` }} />
+                        <td className={tdNum}>
+                          {/* The bar is decoration for the percentage next to it. */}
+                          <div className="flex items-center justify-end gap-3">
+                            <div className="h-2 flex-1 rounded-full bg-slate-100 print:border print:border-slate-300" aria-hidden="true">
+                              <div className="h-2 rounded-full bg-[#6D5FD6] print:[print-color-adjust:exact]" style={{ width: `${Math.max(1, Math.round(k.share * 100))}%` }} />
+                            </div>
+                            <span className="w-10 shrink-0">{formatPct(k.share)}</span>
                           </div>
                         </td>
-                        <td className={tdNum}>{formatPct(k.share)}</td>
                         <td className={tdNum}>{formatMoneyWhole(k.spend, c)}</td>
                       </tr>
                     ))}
@@ -299,11 +312,11 @@ export default async function ReportsPage({ searchParams }: { searchParams: Reco
               <CardTitle className="text-sm font-semibold">Purchase orders</CardTitle>
               <CardDescription className="text-xs text-slate-500">Newest first.</CardDescription>
             </CardHeader>
-            <CardContent className="overflow-x-auto">
+            <CardContent className="overflow-x-auto print:overflow-visible">
               {report.awards.length === 0 ? (
                 <p className="text-sm text-slate-500">No purchase orders in this period.</p>
               ) : (
-                <table className="w-full min-w-[720px]">
+                <table className="w-full min-w-[720px] print:min-w-0 print:text-[11px]">
                   <thead className="border-b border-slate-100">
                     <tr>
                       <th scope="col" className={th}>Date</th>

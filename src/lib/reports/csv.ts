@@ -26,6 +26,9 @@ export function toCsv(rows: Cell[][]): string {
   return "﻿" + rows.map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const monthLabel = (key: string) => `${MONTHS[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
+
 const pct = (v: number | null) => (v === null ? null : Math.round(v * 10000) / 100);
 
 export function reportCsv(report: Report, section: CsvSection): string {
@@ -34,18 +37,21 @@ export function reportCsv(report: Report, section: CsvSection): string {
     case "monthly":
       return toCsv([
         ["Month", "Currency", "Spend", "Savings", "POs sent"],
-        ...report.months.map((m) => [m.month, c, m.spend, m.savings, String(m.awarded)]),
+        // "Sep 2026", not "2026-09" (Excel turns that into a date).
+        ...report.months.map((m) => [monthLabel(m.month), c, m.spend, m.savings, String(m.awarded)]),
       ]);
     case "suppliers":
       return toCsv([
-        ["Supplier", "Invited", "Quoted", "Response rate %", "Wins", "Win rate %", "Currency", "Spend", "Savings delivered", "Avg. price vs lowest %"],
+        ["Supplier", "Invited", "Quoted", "Response rate %", "Won (RFQs created in range)", "Decided", "Win rate %", "POs sent in range", "Currency", "Spend", "Savings delivered", "Avg. price vs lowest %"],
         ...report.suppliers.map((s) => [
           s.label,
           String(s.invited),
           String(s.quoted),
           pct(s.responseRate),
-          String(s.wins),
+          String(s.won),
+          String(s.decided),
           pct(s.winRate),
+          String(s.posSent),
           c,
           s.spend,
           s.savings,
