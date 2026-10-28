@@ -42,9 +42,7 @@ review fixes are recorded in `docs/DECISIONS.md`.
    - The model defaults to `gemini-3.5-flash` because `gemini-2.5-flash` now returns 404 for
      this key. Set `GEMINI_MODEL` in Vercel to change it (D-067).
    - Rotate the Gemini API key if it was ever shared outside Vercel and `.env.local`.
-2. **Vercel:** confirm that `NEXT_PUBLIC_APP_URL` is the production address. It is set, but its
-   value was not read. It now also drives canonical URLs, Open Graph, the sitemap and robots, and
-   `NEXT_PUBLIC_*` values are fixed at build time, so redeploy after changing it.
+2. ~~**Vercel:** confirm `NEXT_PUBLIC_APP_URL`~~ Verified on 2026-10-28: production serves canonical, Open Graph and sitemap URLs on `https://clarix.website`. `NEXT_PUBLIC_*` values are fixed at build time, so redeploy after changing it.
 3. **GitHub Actions:** add the variable `APP_URL` and the secret `CRON_SECRET` for the
    15-minute job sweep. Until then only the daily Vercel cron sweeps. GitHub pauses schedules
    after 60 days with no repo activity.
