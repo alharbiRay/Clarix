@@ -2,10 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { updatePriceAlertThreshold } from "@/app/(dashboard)/settings/actions";
 import { Button } from "@/components/ui/button";
 
 export function PriceAlertForm({ initialPercent }: { initialPercent: number }) {
+  const t = useTranslations("priceAlert");
   const [value, setValue] = useState(String(initialPercent));
   const [saved, setSaved] = useState(initialPercent);
   const [touched, setTouched] = useState(false);
@@ -24,14 +26,14 @@ export function PriceAlertForm({ initialPercent }: { initialPercent: number }) {
           if (result.error) toast.error(result.error);
           else {
             setSaved(parsed);
-            toast.success(`Price alerts now flag changes of ${parsed}% or more`);
+            toast.success(t("saved", { pct: parsed }));
           }
         });
       }}
     >
       <div>
         <label htmlFor="price-alert" className="text-xs font-medium text-slate-600">
-          Flag price changes of at least
+          {t("label")}
         </label>
         <div className="mt-1 flex items-center gap-2">
           <input
@@ -52,14 +54,14 @@ export function PriceAlertForm({ initialPercent }: { initialPercent: number }) {
         </div>
       </div>
       <Button type="submit" size="sm" className="h-9" disabled={!valid || isPending || parsed === saved}>
-        {isPending ? "Saving…" : "Save"}
+        {isPending ? t("saving") : t("save")}
       </Button>
       <p
         id="price-alert-help"
         aria-live="polite"
         className={touched && !valid ? "w-full text-xs text-red-700" : "w-full text-xs text-slate-500"}
       >
-        {touched && !valid ? "Enter a whole number from 1 to 100." : "Whole number from 1 to 100. Default 10%."}
+        {touched && !valid ? t("error") : t("help")}
       </p>
     </form>
   );

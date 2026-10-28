@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { saveApprovalPolicy, updateAutoApprovalSetting } from "@/app/(dashboard)/settings/actions";
 import { Button } from "@/components/ui/button";
 import { MAX_SPEND_LIMIT, parsePolicy, type ApprovalPolicy, type ApprovalRule } from "@/lib/approval/rules";
@@ -40,14 +41,7 @@ export function parseNumberInput(raw: string): number | null {
   return /^\d+(\.\d+)?$/.test(s) ? Number(s) : Number.NaN;
 }
 
-const HELD_LABEL: Record<ApprovalRule, string> = {
-  requirements_not_met: "delivery, warranty, score or an incomplete quote fell short",
-  above_spend_limit: "needed a manager (spend limit)",
-  recommended_differs_from_cheapest: "the AI picked a pricier supplier",
-  ai_pick_unmatched: "the AI's pick couldn't be matched to a quote",
-  auto_approval_disabled: "auto-approval is off",
-  all_rules_passed: "",
-};
+// Keys into policy.held (all_rules_passed never appears among held RFQs).
 
 const inputClass =
   "h-9 rounded-md border border-slate-200 bg-white px-3 text-sm tabular-nums text-slate-900 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0] aria-[invalid=true]:border-red-400 disabled:cursor-not-allowed disabled:bg-slate-50";
@@ -107,6 +101,7 @@ export function ApprovalPolicyForm({
   previewUnavailable?: boolean;
 }) {
   const uid = useId();
+  const t = useTranslations("policy");
   const [enabled, setEnabled] = useState(initial.enabled);
   const [draft, setDraft] = useState<Draft>(() => toDraft(initial));
   const [saved, setSaved] = useState<Draft>(() => toDraft(initial));
@@ -144,13 +139,13 @@ export function ApprovalPolicyForm({
 
   // Field-level errors, shown next to the field that caused them.
   const days = parseNumberInput(draft.maxDeliveryDays);
-  const daysError = days === null || !Number.isInteger(days) || days < 1 || days > 365 ? "Whole number of days, 1 to 365." : null;
+  const daysError = days === null || !Number.isInteger(days) || days < 1 || days > 365 ? t("daysError") : null;
   const limit = parseNumberInput(draft.spendLimit);
   const limitError =
-    limit !== null && (Number.isNaN(limit) || limit > MAX_SPEND_LIMIT) ? "Enter an amount, like 50,000, or leave it empty for no limit." : null;
+    limit !== null && (Number.isNaN(limit) || limit > MAX_SPEND_LIMIT) ? t("limitError") : null;
   const score = parseNumberInput(draft.minSupplierScore);
   const scoreError =
-    score !== null && (!Number.isInteger(score) || score < 0 || score > 100) ? "Whole number from 0 to 100, or leave it empty." : null;
+    score !== null && (!Number.isInteger(score) || score < 0 || score > 100) ? t("scoreError") : null;
   const anyFieldError = Boolean(daysError || limitError || scoreError);
 
   // The switch is the kill switch: it takes effect immediately, whatever
@@ -164,7 +159,7 @@ export function ApprovalPolicyForm({
         setEnabled(!next);
         toast.error(result.error);
       } else {
-        toast.success(next ? "Auto-approval turned on" : "Auto-approval turned off");
+        toast.success(next ? t("turnedOn") : t("turnedOff"));
       }
     });
   }
@@ -179,7 +174,7 @@ export function ApprovalPolicyForm({
         return;
       }
       setSaved(draft);
-      toast.success("Approval rules saved");
+      toast.success(t("saved"));
     });
   }
 
@@ -193,11 +188,10 @@ export function ApprovalPolicyForm({
       <div className="flex items-start justify-between gap-4">
         <div>
           <p id={`${uid}-switch-label`} className="text-sm font-medium text-slate-800">
-            Approve automatically
+            {t("switchLabel")}
           </p>
           <p id={`${uid}-switch-hint`} className="text-xs text-slate-500">
-            When an AI recommendation passes every rule below, Clarix approves it and sends the PO. Anything else
-            waits for you. This switch takes effect immediately.
+            {t("switchHint")}
           </p>
         </div>
         <button
@@ -227,7 +221,7 @@ export function ApprovalPolicyForm({
         <div className="grid gap-5 sm:grid-cols-2">
           <div className={cn(rulesOff && "opacity-60")}>
             <label htmlFor={`${uid}-days`} className="text-sm font-medium text-slate-800">
-              Delivery within
+              {t("deliveryWithin")}
             </label>
             <div className="mt-1 flex items-center gap-2">
               <input
@@ -242,16 +236,16 @@ export function ApprovalPolicyForm({
                 aria-describedby={`${uid}-days-hint`}
                 className={cn(inputClass, "w-24")}
               />
-              <span className="text-sm text-slate-600">days</span>
+              <span className="text-sm text-slate-600">{t("days")}</span>
             </div>
             <p id={`${uid}-days-hint`} className={cn("mt-1 text-xs", daysError ? "text-red-700" : "text-slate-500")}>
-              {daysError ?? "Slower or unconfirmed delivery waits for review."}
+              {daysError ?? t("daysHint")}
             </p>
           </div>
 
           <div>
             <label htmlFor={`${uid}-limit`} className="text-sm font-medium text-slate-800">
-              Spend limit <span className="font-normal text-slate-500">(optional)</span>
+              {t("spendLimit")} <span className="font-normal text-slate-500">{t("optional")}</span>
             </label>
             <div className="mt-1 flex items-center gap-2">
               <span className="text-sm text-slate-600">{limitCurrency}</span>
@@ -260,7 +254,7 @@ export function ApprovalPolicyForm({
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
-                placeholder="No limit"
+                placeholder={t("noLimit")}
                 value={draft.spendLimit}
                 onChange={(e) => set("spendLimit", e.target.value)}
                 aria-invalid={Boolean(limitError)}
@@ -270,13 +264,13 @@ export function ApprovalPolicyForm({
             </div>
             <p id={`${uid}-limit-hint`} className={cn("mt-1 text-xs", limitError ? "text-red-700" : "text-slate-500")}>
               {limitError ??
-                `Orders above this always need a manager, including ones approved by hand. RFQs in other currencies need a manager too.`}
+                t("limitHint")}
             </p>
           </div>
 
           <div className={cn(rulesOff && "opacity-60")}>
             <label htmlFor={`${uid}-score`} className="text-sm font-medium text-slate-800">
-              Minimum supplier score <span className="font-normal text-slate-500">(optional)</span>
+              {t("minScore")} <span className="font-normal text-slate-500">{t("optional")}</span>
             </label>
             <div className="mt-1 flex items-center gap-2">
               <input
@@ -285,7 +279,7 @@ export function ApprovalPolicyForm({
                 inputMode="numeric"
                 autoComplete="off"
                 disabled={rulesOff}
-                placeholder="None"
+                placeholder={t("none")}
                 value={draft.minSupplierScore}
                 onChange={(e) => set("minSupplierScore", e.target.value)}
                 aria-invalid={Boolean(scoreError)}
@@ -295,7 +289,7 @@ export function ApprovalPolicyForm({
               <span className="text-sm text-slate-600">/ 100</span>
             </div>
             <p id={`${uid}-score-hint`} className={cn("mt-1 text-xs", scoreError ? "text-red-700" : "text-slate-500")}>
-              {scoreError ?? "From the supplier scorecard. Suppliers without a score yet wait for review."}
+              {scoreError ?? t("scoreHint")}
             </p>
           </div>
         </div>
@@ -306,44 +300,47 @@ export function ApprovalPolicyForm({
             checked={draft.requireWarranty}
             onChange={(v) => set("requireWarranty", v)}
             disabled={rulesOff}
-            label="Require a warranty"
-            hint="Quotes without warranty terms wait for review."
+            label={t("requireWarranty")}
+            hint={t("requireWarrantyHint")}
           />
           <Check
             id={`${uid}-cheapest`}
             checked={draft.requireCheapest}
             onChange={(v) => set("requireCheapest", v)}
             disabled={rulesOff}
-            label="Only when the AI picks the cheapest complete quote"
-            hint="Turn off to let the AI choose a pricier supplier when it judges them better value. Quotes with unpriced lines are never approved automatically."
+            label={t("requireCheapest")}
+            hint={t("requireCheapestHint")}
           />
         </div>
       </div>
 
       <section aria-labelledby={`${uid}-preview`} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
         <h3 id={`${uid}-preview`} className="text-xs font-semibold text-slate-700">
-          On your past RFQs
+          {t("previewTitle")}
         </h3>
         <div aria-live="polite" className="mt-1 text-sm text-slate-700">
           {previewUnavailable ? (
-            <p className="text-slate-500">The preview couldn&apos;t load right now. Your rules still save normally.</p>
+            <p className="text-slate-500">{t("previewUnavailable")}</p>
           ) : !preview ? (
-            <p className="text-slate-500">Fix the highlighted field to see the preview.</p>
+            <p className="text-slate-500">{t("previewFix")}</p>
           ) : preview.total === 0 ? (
             <p className="text-slate-500">
-              No past RFQs with an automatic AI recommendation yet. This fills in as you compare quotes.
+              {t("previewEmpty")}
             </p>
           ) : (
             <>
               <p>
-                <strong className="font-semibold tabular-nums text-slate-900">{preview.autoApproved}</strong> of{" "}
-                <span className="tabular-nums">{preview.total}</span> would have been approved automatically.
+                {t.rich("previewResult", {
+                  auto: preview.autoApproved,
+                  total: preview.total,
+                  b: (chunks) => <strong className="font-semibold tabular-nums text-slate-900">{chunks}</strong>,
+                })}
               </p>
               {heldEntries.length > 0 && (
                 <ul className="mt-1.5 space-y-0.5 text-xs text-slate-600">
                   {heldEntries.map(([rule, n]) => (
                     <li key={rule}>
-                      <span className="tabular-nums">{n}</span> held: {HELD_LABEL[rule]}
+                      {t("heldLine", { count: n, reason: t(`held.${rule}`) })}
                     </li>
                   ))}
                 </ul>
@@ -355,7 +352,7 @@ export function ApprovalPolicyForm({
 
       <div className="flex items-center gap-3">
         <Button type="submit" size="sm" className="h-9" disabled={!parsed.ok || anyFieldError || !dirty || isSaving}>
-          {isSaving ? "Saving…" : "Save rules"}
+          {isSaving ? t("saving") : t("save")}
         </Button>
         {dirty && !isSaving && (
           <button
@@ -363,7 +360,7 @@ export function ApprovalPolicyForm({
             onClick={() => setDraft(saved)}
             className="rounded text-sm text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0]"
           >
-            Discard changes
+            {t("discard")}
           </button>
         )}
       </div>

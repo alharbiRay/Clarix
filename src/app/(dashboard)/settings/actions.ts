@@ -68,3 +68,26 @@ export async function updatePriceAlertThreshold(percent: number) {
   revalidatePath("/settings");
   return { success: true };
 }
+
+/**
+ * Sets the VAT rate shown on top of quoted prices (comparison, supplier form,
+ * reports). Quote prices are always stored excluding VAT (D-062). Takes a
+ * percentage (0–50, up to 2 decimals); stored as a fraction. 0 hides VAT.
+ */
+export async function updateVatRate(percent: number) {
+  if (typeof percent !== "number" || !Number.isFinite(percent) || percent < 0 || percent > 50 || Math.round(percent * 100) !== percent * 100) {
+    return { error: "Enter a percentage from 0 to 50." };
+  }
+  const supabase = createClient();
+  const auth = await requireWritableUser(supabase);
+  if ("error" in auth) return { error: auth.error };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ vat_rate: Math.round(percent * 100) / 10000 })
+    .eq("id", auth.user.id);
+  if (error) return { error: "Couldn't save the VAT rate. Try again." };
+
+  revalidatePath("/settings");
+  return { success: true };
+}

@@ -5,7 +5,7 @@ let db: FakeSupabase;
 vi.mock("@/lib/supabase/server", () => ({ createClient: () => db }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-import { saveApprovalPolicy, updateAutoApprovalSetting, updatePriceAlertThreshold } from "@/app/(dashboard)/settings/actions";
+import { saveApprovalPolicy, updateAutoApprovalSetting, updatePriceAlertThreshold, updateVatRate } from "@/app/(dashboard)/settings/actions";
 import { DEFAULT_POLICY } from "@/lib/approval/rules";
 
 function signIn(isDemo = false) {
@@ -79,5 +79,25 @@ describe("updatePriceAlertThreshold", () => {
   it("is refused in the demo workspace", async () => {
     signIn(true);
     expect((await updatePriceAlertThreshold(20)).error).toMatch(/read-only demo/);
+  });
+});
+
+describe("updateVatRate", () => {
+  beforeEach(() => signIn());
+
+  it("stores a percentage as a fraction (15% → 0.15), and 0 turns VAT off", async () => {
+    expect(await updateVatRate(15)).toEqual({ success: true });
+    expect(db.tables.profiles[0].vat_rate).toBe(0.15);
+    expect(await updateVatRate(0)).toEqual({ success: true });
+    expect(db.tables.profiles[0].vat_rate).toBe(0);
+  });
+
+  it.each([-1, 51, Number.NaN, 15.555])("rejects %s", async (pct) => {
+    expect(await updateVatRate(pct)).toEqual({ error: "Enter a percentage from 0 to 50." });
+  });
+
+  it("is refused in the demo workspace", async () => {
+    signIn(true);
+    expect((await updateVatRate(15)).error).toMatch(/read-only demo/);
   });
 });
