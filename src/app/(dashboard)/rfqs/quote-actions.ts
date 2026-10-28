@@ -80,7 +80,7 @@ export async function uploadQuotePdf(formData: FormData) {
     pdfBuffer: buffer,
     source: "pdf",
   });
-  if (result.error !== undefined) return { error: result.error };
+  if (result.error !== undefined) return { error: result.error, needsManualEntry: result.needsManualEntry ?? false };
 
   revalidatePath(`/rfqs/${rfqId}`);
   revalidatePath(`/rfqs/${rfqId}/compare`);

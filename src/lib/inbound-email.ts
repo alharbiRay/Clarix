@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getResendClient } from "@/lib/resend";
-import { createQuoteFromPdf, type QuoteIntakeInput, type QuoteIntakeResult } from "@/lib/quote-intake";
+import { createQuoteFromPdf, looksLikePdf, type QuoteIntakeInput, type QuoteIntakeResult } from "@/lib/quote-intake";
 import { PermanentJobError, type Job } from "@/lib/jobs/processor";
 import type { RfqItem } from "@/lib/types";
 
@@ -41,10 +41,6 @@ function defaultDeps(): InboundEmailDeps {
   };
 }
 
-/** Magic bytes, not the sender-controlled content type, decide whether this is a PDF. */
-function looksLikePdf(buf: Buffer) {
-  return buf.subarray(0, 5).toString("latin1") === "%PDF-";
-}
 
 /**
  * The `inbound_email_quote` job handler. The Resend webhook only verifies,
@@ -133,6 +129,9 @@ export async function processInboundEmailQuote(
     // Hand the original Gemini error to the processor so a quota problem is
     // classified as such (longer backoff + buyer notification).
     if (result.quotaExceeded && result.cause) throw result.cause;
+    // An unreadable PDF reads the same on every attempt: give up now, and the
+    // give-up hook tells the buyer to enter it manually.
+    if (result.needsManualEntry) throw new PermanentJobError(result.error);
     throw new Error(result.error);
   }
   return { outcome: "created", quoteId: (result as { quoteId: string }).quoteId };

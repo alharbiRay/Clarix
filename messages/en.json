@@ -354,7 +354,8 @@
     "chooseFile": "Choose a PDF file",
     "done": "Quote extracted and confirmed automatically.",
     "extracting": "Extracting…",
-    "extract": "Extract with AI"
+    "extract": "Extract with AI",
+    "needsManualEntry": "The AI couldn't read this PDF reliably, even after a second try. Use \"Add supplier quote\" to enter it manually."
   },
   "manualQuote": {
     "trigger": "Add supplier quote",

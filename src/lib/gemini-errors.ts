@@ -77,3 +77,19 @@ export function isRetryableGeminiError(info: GeminiErrorInfo): boolean {
   }
   return false;
 }
+
+/**
+ * The model answered, but not with usable output (invalid JSON, wrong shape,
+ * or declined) — even after one repair attempt. Retrying the same input
+ * won't help: callers fall back to manual entry instead.
+ */
+export class GeminiOutputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GeminiOutputError";
+  }
+}
+
+export function isGeminiOutputError(e: unknown): e is GeminiOutputError {
+  return e instanceof GeminiOutputError || (e instanceof Error && e.name === "GeminiOutputError");
+}

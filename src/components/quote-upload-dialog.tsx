@@ -65,7 +65,10 @@ export function QuoteUploadDialog({
     startTransition(async () => {
       const result = await uploadQuotePdf(formData);
       if (result.error) {
-        toast.error(result.error);
+        if ("needsManualEntry" in result && result.needsManualEntry) {
+          toast.error(t("needsManualEntry"), { duration: 10_000 });
+          setOpen(false);
+        } else toast.error(result.error);
       } else if (result.quoteId) {
         toast.success(t("done"));
         setOpen(false);

@@ -1,4 +1,4 @@
-import { isGeminiRateLimited } from "@/lib/gemini-errors";
+import { isGeminiRateLimited, isGeminiOutputError } from "@/lib/gemini-errors";
 
 /**
  * Durable background job processor. Storage-agnostic: the Supabase-backed
@@ -131,7 +131,7 @@ export async function processJobs({
     } catch (e) {
       const message = errorMessage(e);
       const exhausted = job.attempts >= job.max_attempts;
-      if (e instanceof PermanentJobError || exhausted) {
+      if (e instanceof PermanentJobError || isGeminiOutputError(e) || exhausted) {
         await store.fail(job.id, message);
         summary.failed++;
         console.error(JSON.stringify({ event: "jobs.failed", jobId: job.id, type: job.type, attempts: job.attempts, error: message }));
