@@ -17,6 +17,8 @@ import { InviteToRfqDialog } from "@/components/suppliers/invite-to-rfq-dialog";
 import { ScoreBadge } from "@/components/suppliers/score-badge";
 import { cn } from "@/lib/utils";
 import type { Supplier } from "@/lib/types";
+import { getLocale, getTranslations } from "next-intl/server";
+import { isLocale } from "@/i18n/config";
 
 function hrefFor(current: SupplierListParams, patch: Partial<SupplierListParams>) {
   const next = { ...current, ...patch };
@@ -47,7 +49,10 @@ export default async function SuppliersPage({
 }: {
   searchParams: { sort?: string; min?: string };
 }) {
-  const supabase = createClient();
+    const supabase = createClient();
+  const t = await getTranslations("suppliers");
+  const rawLocale = await getLocale();
+  const locale = isLocale(rawLocale) ? rawLocale : "en";
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -83,24 +88,24 @@ export default async function SuppliersPage({
     <div className="mx-auto max-w-7xl space-y-6">
       <FadeIn className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Suppliers</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t("title")}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Scored 0–100 on price, responsiveness, delivery, warranty and win rate across every RFQ.
+            {t("subtitle")}
           </p>
         </div>
         <AddSupplierDialog />
       </FadeIn>
 
       <FadeIn delay={0.03} className="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <nav aria-label="Sort suppliers" className="flex items-center gap-1">
-          <span className="mr-1 text-xs font-medium text-slate-500">Sort</span>
-          <Chip href={hrefFor(params, { sort: "score" })} active={params.sort === "score"}>Score</Chip>
-          <Chip href={hrefFor(params, { sort: "name" })} active={params.sort === "name"}>Name</Chip>
-          <Chip href={hrefFor(params, { sort: "recent" })} active={params.sort === "recent"}>Recent</Chip>
+        <nav aria-label={t("sortLabel")} className="flex items-center gap-1">
+          <span className="me-1 text-xs font-medium text-slate-500">{t("sort")}</span>
+          <Chip href={hrefFor(params, { sort: "score" })} active={params.sort === "score"}>{t("sortScore")}</Chip>
+          <Chip href={hrefFor(params, { sort: "name" })} active={params.sort === "name"}>{t("sortName")}</Chip>
+          <Chip href={hrefFor(params, { sort: "recent" })} active={params.sort === "recent"}>{t("sortRecent")}</Chip>
         </nav>
-        <nav aria-label="Filter by minimum score" className="flex items-center gap-1">
-          <span className="mr-1 text-xs font-medium text-slate-500">Score</span>
-          <Chip href={hrefFor(params, { min: null })} active={params.min === null}>Any</Chip>
+        <nav aria-label={t("filterLabel")} className="flex items-center gap-1">
+          <span className="me-1 text-xs font-medium text-slate-500">{t("score")}</span>
+          <Chip href={hrefFor(params, { min: null })} active={params.min === null}>{t("any")}</Chip>
           {SCORE_FILTERS.map((m) => (
             <Chip key={m} href={hrefFor(params, { min: m })} active={params.min === m}>
               {m}+
@@ -113,15 +118,15 @@ export default async function SuppliersPage({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[880px] text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-left text-xs text-slate-500">
-                <th scope="col" className="px-6 py-3 font-medium">Supplier</th>
-                <th scope="col" className="px-3 py-3 font-medium">Score</th>
-                <th scope="col" className="px-3 py-3 font-medium">Quoted</th>
-                <th scope="col" className="px-3 py-3 font-medium">Win rate</th>
-                <th scope="col" className="px-3 py-3 font-medium">Median reply</th>
-                <th scope="col" className="px-3 py-3 font-medium">Price vs lowest</th>
-                <th scope="col" className="px-3 py-3 font-medium">Last active</th>
-                <th scope="col" className="px-6 py-3"><span className="sr-only">Actions</span></th>
+              <tr className="border-b border-slate-100 text-start text-xs text-slate-500">
+                <th scope="col" className="px-6 py-3 font-medium">{t("colSupplier")}</th>
+                <th scope="col" className="px-3 py-3 font-medium">{t("score")}</th>
+                <th scope="col" className="px-3 py-3 font-medium">{t("colQuoted")}</th>
+                <th scope="col" className="px-3 py-3 font-medium">{t("colWinRate")}</th>
+                <th scope="col" className="px-3 py-3 font-medium">{t("colMedianReply")}</th>
+                <th scope="col" className="px-3 py-3 font-medium">{t("colPriceVsLowest")}</th>
+                <th scope="col" className="px-3 py-3 font-medium">{t("colLastActive")}</th>
+                <th scope="col" className="px-6 py-3"><span className="sr-only">{t("colActions")}</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -129,8 +134,8 @@ export default async function SuppliersPage({
                 <tr>
                   <td colSpan={8} className="px-6 py-14 text-center text-sm text-slate-500">
                     {suppliers.length === 0
-                      ? "No suppliers yet. They're saved automatically the first time they quote, or add one above."
-                      : `No supplier scores ${params.min}+ yet.`}
+                      ? t("empty")
+                      : t("noneAbove", { min: params.min ?? 0 })}
                   </td>
                 </tr>
               ) : (
@@ -140,7 +145,7 @@ export default async function SuppliersPage({
                       <Link href={`/suppliers/${id}`} className="font-semibold text-slate-900 underline-offset-4 hover:underline">
                         <bdi>{label}</bdi>
                       </Link>
-                      <p className="text-xs text-slate-500">{supplier.email}</p>
+                      <p className="text-xs text-slate-500" dir="ltr">{supplier.email}</p>
                     </td>
                     <td className="px-3 py-3"><ScoreBadge score={score} /></td>
                     <td className="px-3 py-3 tabular text-slate-700">
@@ -148,7 +153,7 @@ export default async function SuppliersPage({
                       <span className="text-slate-500"> / {metrics.invited}</span>
                     </td>
                     <td className="px-3 py-3 tabular text-slate-700">{formatPct(metrics.winRate)}</td>
-                    <td className="px-3 py-3 tabular text-slate-700">{formatHours(metrics.medianResponseHours)}</td>
+                    <td className="px-3 py-3 tabular text-slate-700">{formatHours(metrics.medianResponseHours, locale)}</td>
                     <td
                       className={cn(
                         "px-3 py-3 tabular font-medium",
@@ -163,8 +168,8 @@ export default async function SuppliersPage({
                     >
                       {metrics.avgPriceVsLowest === null ? "—" : `+${formatPct(metrics.avgPriceVsLowest)}`}
                     </td>
-                    <td className="px-3 py-3 text-slate-500">{formatDate(metrics.lastActive)}</td>
-                    <td className="px-6 py-3 text-right">
+                    <td className="px-3 py-3 text-slate-500">{formatDate(metrics.lastActive, locale)}</td>
+                    <td className="px-6 py-3 text-end">
                       <InviteToRfqDialog supplierId={id} supplierLabel={label} rfqs={openRfqs} />
                     </td>
                   </tr>

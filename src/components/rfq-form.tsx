@@ -5,6 +5,7 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Trash2, X, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { createRfq, autofillRfqFromText } from "@/app/(dashboard)/rfqs/actions";
 import { rfqSchema, CURRENCIES, type RfqFormValues } from "@/lib/validations/rfq";
 import { sanitizeDecimalInput } from "@/lib/utils";
@@ -39,6 +40,8 @@ import {
 export function RfqForm() {
   const [isPending, startTransition] = useTransition();
   const [supplierInput, setSupplierInput] = useState("");
+  const t = useTranslations("rfqForm");
+  const tv = useTranslations("validation");
 
   const form = useForm<RfqFormValues>({
     resolver: zodResolver(rfqSchema),
@@ -66,11 +69,11 @@ export function RfqForm() {
     const email = raw.trim().replace(/[,;]$/, "").toLowerCase();
     if (!email) return;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast.error(`"${email}" is not a valid email`);
+      toast.error(t("invalidEmail", { email }));
       return;
     }
     if (suppliers.includes(email)) {
-      toast.error("Supplier already added");
+      toast.error(t("alreadyAdded"));
       return;
     }
     form.setValue("suppliers", [...suppliers, email], { shouldValidate: true });
@@ -87,13 +90,13 @@ export function RfqForm() {
 
   function handleAutofill() {
     if (!pasteText.trim()) {
-      toast.error("Paste some text first");
+      toast.error(t("pasteFirst"));
       return;
     }
     startAutofillTransition(async () => {
       const result = await autofillRfqFromText(pasteText);
       if (result.error || !result.data) {
-        toast.error(result.error ?? "Autofill failed");
+        toast.error(result.error ?? t("autofillFailed"));
         return;
       }
       const data = result.data;
@@ -129,7 +132,7 @@ export function RfqForm() {
         }
       }
 
-      toast.success("Form filled in — review before creating the RFQ.");
+      toast.success(t("filled"));
     });
   }
 
@@ -147,18 +150,19 @@ export function RfqForm() {
         <Card className="border-indigo-100 bg-indigo-50/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <Sparkles className="h-4 w-4 text-indigo-600" />
-              Smart paste
+              <Sparkles className="h-4 w-4 text-indigo-600" aria-hidden="true" />
+              {t("smartPaste")}
             </CardTitle>
             <CardDescription className="text-xs text-slate-400">
-              Paste an email, spec sheet, or notes describing what you need —
-              AI will fill in the title, items, and suppliers below.
+              {t("smartPasteHint")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <Textarea
               rows={4}
-              placeholder={`e.g. "Need quotes for 10 laptops (Dell Latitude or similar) and 5 monitors for the new office. Budget in SAR, need by end of next month. Reach out to sales@acmesupplies.com."`}
+              placeholder={t("pastePlaceholder")}
+              aria-label={t("smartPaste")}
+              dir="auto"
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
             />
@@ -171,20 +175,20 @@ export function RfqForm() {
               onClick={handleAutofill}
             >
               {isAutofilling ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
               ) : (
-                <Sparkles className="h-4 w-4" />
+                <Sparkles className="h-4 w-4" aria-hidden="true" />
               )}
-              Fill with AI
+              {t("fillAi")}
             </Button>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-semibold">RFQ details</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t("details")}</CardTitle>
             <CardDescription className="text-xs text-slate-400">
-              What are you requesting quotes for?
+              {t("detailsHint")}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -193,10 +197,10 @@ export function RfqForm() {
               name="title"
               render={({ field }) => (
                 <FormItem className="sm:col-span-2">
-                  <FormLabel>Title *</FormLabel>
+                  <FormLabel>{t("title")}</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="e.g. Office network equipment Q3"
+                      placeholder={t("titlePlaceholder")}
                       {...field}
                     />
                   </FormControl>
@@ -209,9 +213,9 @@ export function RfqForm() {
               name="project"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Project</FormLabel>
+                  <FormLabel>{t("project")}</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. HQ renovation" {...field} />
+                    <Input placeholder={t("projectPlaceholder")} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -223,7 +227,7 @@ export function RfqForm() {
                 name="currency"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Currency</FormLabel>
+                    <FormLabel>{t("currency")}</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -247,12 +251,12 @@ export function RfqForm() {
                 name="deadline"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Deadline</FormLabel>
+                    <FormLabel>{t("deadline")}</FormLabel>
                     <FormControl>
                       <DatePicker
                         value={field.value}
                         onChange={field.onChange}
-                        placeholder="No deadline"
+                        placeholder={t("noDeadline")}
                       />
                     </FormControl>
                     <FormMessage />
@@ -265,11 +269,11 @@ export function RfqForm() {
               name="description"
               render={({ field }) => (
                 <FormItem className="sm:col-span-2">
-                  <FormLabel>Description</FormLabel>
+                  <FormLabel>{t("description")}</FormLabel>
                   <FormControl>
                     <Textarea
                       rows={3}
-                      placeholder="Context, specs, delivery location, or anything suppliers should know."
+                      placeholder={t("descriptionPlaceholder")}
                       {...field}
                     />
                   </FormControl>
@@ -282,9 +286,9 @@ export function RfqForm() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-semibold">Line items</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t("lineItems")}</CardTitle>
             <CardDescription className="text-xs text-slate-400">
-              Each supplier will quote a price per item.
+              {t("lineItemsHint")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -298,9 +302,9 @@ export function RfqForm() {
                   name={`items.${index}.name`}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs">Item *</FormLabel>
+                      <FormLabel className="text-xs">{t("item")}</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g. 24-port PoE switch" {...field} />
+                        <Input placeholder={t("itemPlaceholder")} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -311,7 +315,7 @@ export function RfqForm() {
                   name={`items.${index}.quantity`}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs">Qty *</FormLabel>
+                      <FormLabel className="text-xs">{t("qty")}</FormLabel>
                       <FormControl>
                         <Input
                           type="text"
@@ -331,9 +335,9 @@ export function RfqForm() {
                   name={`items.${index}.unit`}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs">Unit</FormLabel>
+                      <FormLabel className="text-xs">{t("unit")}</FormLabel>
                       <FormControl>
-                        <Input placeholder="pcs" {...field} />
+                        <Input placeholder={t("unitPlaceholder")} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -346,8 +350,9 @@ export function RfqForm() {
                     size="icon"
                     disabled={fields.length === 1}
                     onClick={() => remove(index)}
+                    aria-label={t("removeItem", { n: index + 1 })}
                   >
-                    <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    <Trash2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                   </Button>
                 </div>
                 <FormField
@@ -357,7 +362,8 @@ export function RfqForm() {
                     <FormItem className="sm:col-span-4">
                       <FormControl>
                         <Input
-                          placeholder="Optional spec / description"
+                          placeholder={t("specPlaceholder")}
+                          aria-label={t("specPlaceholder")}
                           {...field}
                         />
                       </FormControl>
@@ -376,24 +382,25 @@ export function RfqForm() {
                 append({ name: "", description: "", quantity: 1, unit: "pcs" })
               }
             >
-              <Plus className="h-4 w-4" />
-              Add item
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              {t("addItem")}
             </Button>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-semibold">Suppliers</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t("suppliers")}</CardTitle>
             <CardDescription className="text-xs text-slate-400">
-              Each supplier receives an invitation with a unique quote link and
-              the option to reply with a PDF.
+              {t("suppliersHint")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex gap-2">
               <Input
-                placeholder="supplier@company.com — press Enter to add"
+                placeholder={t("supplierPlaceholder")}
+                aria-label={t("suppliers")}
+                dir="ltr"
                 value={supplierInput}
                 onChange={(e) => setSupplierInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -409,20 +416,21 @@ export function RfqForm() {
                 variant="outline"
                 onClick={() => addSupplier(supplierInput)}
               >
-                Add
+                {t("add")}
               </Button>
             </div>
             {suppliers.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {suppliers.map((email) => (
-                  <Badge key={email} variant="secondary" className="gap-1 pr-1">
+                  <Badge key={email} variant="secondary" className="gap-1 pe-1">
                     {email}
                     <button
                       type="button"
                       onClick={() => removeSupplier(email)}
+                      aria-label={t("removeSupplier", { email })}
                       className="rounded-full p-0.5 hover:bg-muted-foreground/20"
                     >
-                      <X className="h-3 w-3" />
+                      <X className="h-3 w-3" aria-hidden="true" />
                     </button>
                   </Badge>
                 ))}
@@ -430,7 +438,11 @@ export function RfqForm() {
             )}
             {form.formState.errors.suppliers && (
               <p className="text-sm font-medium text-destructive">
-                {form.formState.errors.suppliers.message}
+                {(() => {
+                  const m = form.formState.errors.suppliers.message ?? "";
+                  const map: Record<string, string> = { "Add at least one supplier email": "suppliers", "Duplicate supplier emails": "duplicates", "Invalid email": "email" };
+                  return map[m] ? tv(map[m]) : m;
+                })()}
               </p>
             )}
           </CardContent>
@@ -438,8 +450,8 @@ export function RfqForm() {
 
         <div className="flex justify-end gap-3">
           <Button type="submit" disabled={isPending} className="gap-2">
-            {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Create RFQ
+            {isPending && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+            {t("create")}
           </Button>
         </div>
       </form>

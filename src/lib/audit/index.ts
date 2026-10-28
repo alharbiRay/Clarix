@@ -6,6 +6,8 @@
  * transactions, and losing a PO over an audit row would be worse).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { translatorFor } from "@/i18n/translator";
+import type { Locale } from "@/i18n/config";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type AuditEventType =
@@ -69,20 +71,13 @@ export interface AuditDescription {
   tone: AuditTone;
 }
 
-const SOURCE_LABEL: Record<string, string> = {
-  form: "via the supplier form",
-  manual: "entered manually",
-  pdf: "as an uploaded PDF",
-  email: "by email (PDF)",
-};
-
 function str(v: unknown): string | null {
   return typeof v === "string" && v.trim() ? v.trim() : null;
 }
 function sentence(s: string | null): string | null {
   if (!s) return null;
   const t = s.charAt(0).toUpperCase() + s.slice(1);
-  return /[.!?]$/.test(t) ? t : `${t}.`;
+  return /[.!?؟]$/.test(t) ? t : `${t}.`;
 }
 function money(total: unknown, currency: unknown) {
   if (typeof total !== "number" || !Number.isFinite(total)) return null;
@@ -94,80 +89,91 @@ function humanize(type: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function describeAuditEvent(e: { event_type: string; payload: unknown }): AuditDescription {
+/**
+ * Plain-language title and detail for one event, in the viewer's language.
+ * Free text stored in the payload (AI warnings, approval reasons, override
+ * reasons) is shown as recorded.
+ */
+export function describeAuditEvent(e: { event_type: string; payload: unknown }, locale: Locale = "en"): AuditDescription {
+  const t = translatorFor(locale, "audit");
   const p = (e.payload && typeof e.payload === "object" ? e.payload : {}) as Record<string, unknown>;
   const supplier = str(p.supplier);
 
   switch (e.event_type) {
     case "rfq_created":
-      return { title: "RFQ created", detail: typeof p.items === "number" ? `${p.items} line item${p.items === 1 ? "" : "s"}.` : null, tone: "neutral" };
+      return { title: t("rfqCreated"), detail: typeof p.items === "number" ? t("lineItems", { count: p.items }) : null, tone: "neutral" };
     case "rfq_sent": {
       const n = typeof p.invited === "number" ? p.invited : null;
       const failures = typeof p.emailFailures === "number" && p.emailFailures > 0 ? p.emailFailures : 0;
       return {
-        title: n !== null ? `Sent to ${n} supplier${n === 1 ? "" : "s"}` : "RFQ sent",
-        detail: failures ? `${failures} invitation email${failures === 1 ? "" : "s"} could not be delivered.` : null,
+        title: n !== null ? t("sentTo", { count: n }) : t("rfqSent"),
+        detail: failures ? t("emailFailures", { count: failures }) : null,
         tone: failures ? "warning" : "neutral",
       };
     }
     case "quote_received": {
-      const how = SOURCE_LABEL[str(p.source) ?? ""] ?? "";
+      const source = str(p.source);
+      const how = source && ["form", "manual", "pdf", "email"].includes(source) ? t(`source.${source}`) : "";
       const total = money(p.total, p.currency);
       return {
-        title: `Quote received${supplier ? ` from ${supplier}` : ""}${how ? ` ${how}` : ""}`,
-        detail: total ? `${total} in total.` : null,
+        title: `${supplier ? t("quoteReceivedFrom", { supplier }) : t("quoteReceived")}${how ? ` ${how}` : ""}`,
+        detail: total ? t("inTotal", { total }) : null,
         tone: "neutral",
       };
     }
     case "quote_confirmed":
-      return { title: `Confirmed ${supplier ? `${supplier}'s` : "the"} extracted quote`, detail: null, tone: "neutral" };
+      return { title: supplier ? t("confirmedOf", { supplier }) : t("confirmed"), detail: null, tone: "neutral" };
     case "quote_rejected":
-      return { title: `Rejected ${supplier ? `${supplier}'s` : "a"} quote`, detail: sentence(str(p.reason)), tone: "warning" };
+      return { title: supplier ? t("rejectedOf", { supplier }) : t("rejected"), detail: sentence(str(p.reason)), tone: "warning" };
     case "quote_deleted":
-      return { title: `Deleted ${supplier ? `${supplier}'s` : "a"} quote`, detail: null, tone: "warning" };
+      return { title: supplier ? t("deletedOf", { supplier }) : t("deleted"), detail: null, tone: "warning" };
     case "extraction_completed": {
       const confidence = str(p.confidence);
+      const level = confidence && ["high", "medium", "low"].includes(confidence) ? t(`confidenceLevel.${confidence}`) : confidence;
       const warnings = Array.isArray(p.warnings) ? p.warnings.filter((w): w is string => typeof w === "string") : [];
       return {
-        title: `AI read ${supplier ? `${supplier}'s` : "the"} PDF${confidence ? ` (${confidence} confidence)` : ""}`,
-        detail: warnings.length ? `Check: ${warnings.join("; ")}.` : null,
+        title: `${supplier ? t("aiReadOf", { supplier }) : t("aiRead")}${level ? t("confidence", { level }) : ""}`,
+        detail: warnings.length ? t("check", { warnings: warnings.join("; ") }) : null,
         tone: warnings.length || confidence === "low" ? "warning" : "neutral",
       };
     }
     case "extraction_failed":
       return {
-        title: `Couldn't read ${supplier ? `${supplier}'s` : "a"} PDF automatically`,
-        detail: "Check the PDF, then enter the quote manually if needed.",
+        title: supplier ? t("extractionFailedOf", { supplier }) : t("extractionFailed"),
+        detail: t("extractionFailedDetail"),
         tone: "negative",
       };
     case "recommendation_generated": {
       const pick = str(p.recommended);
       return {
-        title: `${p.mode === "manual" ? "You generated" : "Clarix generated"} an AI recommendation`,
-        detail: pick ? `Recommended ${pick}.` : null,
+        title: p.mode === "manual" ? t("recYou") : t("recClarix"),
+        detail: pick ? t("recommended", { supplier: pick }) : null,
         tone: "neutral",
       };
     }
     case "auto_approval_decided": {
       const explanation = Array.isArray(p.explanation) ? p.explanation.filter((x): x is string => typeof x === "string") : [];
       if (p.decision === "not_evaluated") {
-        return { title: "Auto-approval skipped", detail: sentence(str(p.reason)), tone: "neutral" };
+        return { title: t("skipped"), detail: sentence(str(p.reason)), tone: "neutral" };
       }
       if (p.decision === "auto_approved") {
         return {
-          title: `Auto-approved${supplier ? `: ${supplier}` : ""}`,
+          title: supplier ? t("autoApprovedOf", { supplier }) : t("autoApproved"),
           detail: explanation.length ? sentence(explanation.join(", ")) : null,
           tone: "positive",
         };
       }
-      return { title: "Held for your review", detail: sentence(str(p.reason) ?? explanation.join(", ")), tone: "warning" };
+      return { title: t("held"), detail: sentence(str(p.reason) ?? explanation.join(", ")), tone: "warning" };
     }
     case "award_approved": {
       const aiPick = str(p.aiPick);
       const reason = str(p.reason);
       return {
-        title: p.override && aiPick ? `Approved ${supplier ?? "a supplier"} instead of the AI's pick (${aiPick})` : `Approved ${supplier ?? "the recommendation"}`,
-        detail: reason ? `Reason: ${sentence(reason)}` : null,
+        title:
+          p.override && aiPick
+            ? t("approvedInstead", { supplier: supplier ?? t("aSupplier"), aiPick })
+            : t("approved", { supplier: supplier ?? t("theRecommendation") }),
+        detail: reason ? t("reason", { reason: sentence(reason) ?? reason }) : null,
         tone: "positive",
       };
     }
@@ -175,50 +181,35 @@ export function describeAuditEvent(e: { event_type: string; payload: unknown }):
       const total = money(p.total, p.currency);
       if (p.emailDelivered === false) {
         return {
-          title: `Purchase order approved, but the email to ${supplier ?? "the supplier"} failed`,
-          detail: `${total ? `${total}. ` : ""}Contact the supplier directly to confirm the order.`,
+          title: t("poFailed", { supplier: supplier ?? t("theSupplier") }),
+          detail: `${total ? `${total}. ` : ""}${t("poFailedDetail")}`,
           tone: "warning",
         };
       }
       return {
-        title: `Purchase order sent${supplier ? ` to ${supplier}` : ""}`,
-        detail: total ? `${total}${p.automatic ? ", sent automatically" : ""}.` : null,
+        title: supplier ? t("poSentTo", { supplier }) : t("poSent"),
+        detail: total ? (p.automatic ? t("poAuto", { total }) : t("poManual", { total })) : null,
         tone: "positive",
       };
     }
     case "negotiation_sent": {
       const pct = typeof p.targetPercent === "number" ? p.targetPercent : null;
-      const lang = p.language === "ar" ? "Arabic" : p.language === "en" ? "English" : null;
-      const parts = [pct !== null ? `Asked for about ${pct}% off` : "Asked for their best price", lang ? `in ${lang}` : null];
+      const lang = p.language === "ar" ? t("langAr") : p.language === "en" ? t("langEn") : null;
+      const parts = [pct !== null ? t("askedPct", { pct }) : t("askedBest"), lang ? t("inLanguage", { language: lang }) : null];
       return {
-        title: `Negotiation message sent${supplier ? ` to ${supplier}` : ""}`,
-        detail: `${parts.filter(Boolean).join(" ")}.`,
+        title: supplier ? t("negotiationTo", { supplier }) : t("negotiation"),
+        detail: `${parts.filter(Boolean).join(" ")}${t("sentenceEnd")}`,
         tone: "neutral",
       };
     }
     case "ai_quota_error":
-      return {
-        title: "AI service rate-limited",
-        detail: "Clarix retried automatically.",
-        tone: "warning",
-      };
+      return { title: t("quota"), detail: t("quotaDetail"), tone: "warning" };
     case "job_failed":
-      if (p.jobType === "inbound_email_quote") {
-        return {
-          title: "Couldn't process a supplier's emailed quote automatically",
-          detail: "Ask them to resend it, or enter it manually.",
-          tone: "negative",
-        };
-      }
-      if (p.jobType === "auto_recommendation") {
-        return {
-          title: "Couldn't generate the AI recommendation automatically",
-          detail: "Generate it manually from the compare page.",
-          tone: "negative",
-        };
-      }
-      return { title: "Automatic processing gave up", detail: null, tone: "negative" };
+      if (p.jobType === "inbound_email_quote") return { title: t("jobEmail"), detail: t("jobEmailDetail"), tone: "negative" };
+      if (p.jobType === "auto_recommendation") return { title: t("jobRec"), detail: t("jobRecDetail"), tone: "negative" };
+      return { title: t("jobOther"), detail: null, tone: "negative" };
     default:
       return { title: humanize(e.event_type), detail: null, tone: "neutral" };
   }
 }
+

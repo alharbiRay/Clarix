@@ -531,3 +531,50 @@ sign and have two decimals.
   - Years before 2000 are rejected.
   - Negative savings read "above the average".
   - The monthly CSV writes "Sep 2026" so Excel doesn't turn it into a date.
+
+# Phase 10: Arabic/English, RTL and VAT
+
+## D-062: The language lives in a cookie, not the URL
+next-intl runs without locale routing. The `NEXT_LOCALE` cookie decides the language, then the
+browser's Accept-Language, then English. It is mirrored to `profiles.locale`, so the choice follows
+the buyer across devices and is available to emails and background jobs.
+- Every existing link (emails, bookmarks, the Resend webhook, the jobs API) keeps working.
+- Server-rendered pages already depend on the session cookie, so nothing that could be cached is lost.
+- A buyer who never touches the switcher gets the language they're using (from the browser) saved
+  on first sign-in or dashboard visit, so emails and background recommendations match the screen.
+- The supplier form has its own cookie (`CLARIX_QUOTE_LOCALE`, path `/quote`) and never reads or
+  writes the buyer's. It picks the supplier's language: their switch on the page, then their saved
+  preference, then Arabic script in their name, then the buyer's language.
+  - A buyer previewing their own link can't change their own language, or have it saved as the
+    supplier's.
+  - A language the supplier switched to replaces their saved preference. One picked for them only
+    fills a gap.
+- Radix widgets (Select, menus, tabs) get the direction from a `DirectionProvider`, because they
+  don't read `<html dir>`.
+
+## D-063: Prices are stored excluding VAT; VAT is a display line
+Every quoted price, total, saving and report figure stays excluding VAT, so quotes compare on one
+basis and the existing data stays valid. `profiles.vat_rate` (default 0.15, 0 to turn it off)
+adds a VAT line and a total including VAT on the comparison, the supplier form and the PO email.
+Gemini's PDF extraction converts prices that include VAT and says so in its warnings. The spend
+limit in approval rules is also excluding VAT, and the settings text says so.
+
+## D-064: One number style in both languages
+Western digits, and money as "SAR 14,547.50", as Saudi invoices print them and as the dashboard
+already did. The ar-SA default (Arabic-Indic digits and "ر.س.") would have mixed two styles on one
+screen. Arabic dates spell the month. Inputs still accept Arabic-Indic digits. A test keeps
+Arabic-Indic digits out of the Arabic messages.
+
+## D-065: Known gaps after Phase 10
+Text that is stored rather than rendered stays in the language it was written in:
+- notification messages;
+- approval and override reasons;
+- AI reasons on recommendations made before this phase;
+- the review-needed email's reason (an English sentence from the approval engine).
+
+Error toasts from server actions are still English, except on the supplier form, which is fully
+translated.
+
+On the supplier page, the outer `<html lang dir>` and the toast position follow the visitor's
+browser, not the supplier's language. The page itself, its widgets and its portals use the
+supplier's language. Project names and supplier notes are the buyer's own text and are not translated.

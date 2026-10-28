@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadMetricsRfqs } from "@/lib/metrics/load";
 import { buildReport, parseReportFilters } from "@/lib/reports";
 import { CSV_SECTIONS, csvFilename, reportCsv, type CsvSection } from "@/lib/reports/csv";
+import { resolveLocale } from "@/i18n/request";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,8 @@ export async function GET(req: NextRequest) {
   }
   const report = buildReport(rfqs, filters, now);
 
-  return new NextResponse(reportCsv(report, section), {
+  const locale = await resolveLocale();
+  return new NextResponse(reportCsv(report, section, locale), {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

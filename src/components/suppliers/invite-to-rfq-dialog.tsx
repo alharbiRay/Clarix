@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { inviteSupplierToRfq } from "@/app/(dashboard)/suppliers/actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,13 +40,14 @@ export function InviteToRfqDialog({
   rfqs: InvitableRfq[];
 }) {
   const router = useRouter();
+  const t = useTranslations("inviteSupplier");
   const [open, setOpen] = useState(false);
   const [rfqId, setRfqId] = useState("");
   const [isPending, startTransition] = useTransition();
 
   function handleInvite() {
     if (!rfqId) {
-      toast.error("Choose an RFQ");
+      toast.error(t("chooseRfq"));
       return;
     }
     startTransition(async () => {
@@ -53,7 +55,7 @@ export function InviteToRfqDialog({
       if (result?.error) {
         toast.error(result.error);
       } else {
-        toast.success(`${supplierLabel} added to the RFQ.`);
+        toast.success(t("added", { supplier: supplierLabel }));
         setOpen(false);
         setRfqId("");
         router.refresh();
@@ -65,28 +67,30 @@ export function InviteToRfqDialog({
     <Dialog open={open} onOpenChange={(v) => !isPending && setOpen(v)}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1.5">
-          <Send size={13} />
-          Invite to RFQ
+          <Send size={13} aria-hidden="true" className="rtl:-scale-x-100" />
+          {t("trigger")}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Invite {supplierLabel}</DialogTitle>
-          <DialogDescription>Add this supplier to one of your open RFQs.</DialogDescription>
+          <DialogTitle>
+            {t("title")} <bdi>{supplierLabel}</bdi>
+          </DialogTitle>
+          <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
 
         {rfqs.length === 0 ? (
-          <p className="text-sm text-slate-400">No open RFQs — create one first.</p>
+          <p className="text-sm text-slate-500">{t("none")}</p>
         ) : (
           <Select value={rfqId} onValueChange={setRfqId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Choose an RFQ" />
+            <SelectTrigger aria-label={t("chooseRfq")}>
+              <SelectValue placeholder={t("chooseRfq")} />
             </SelectTrigger>
             <SelectContent>
               {rfqs.map((r) => (
                 <SelectItem key={r.id} value={r.id}>
-                  {r.title}
-                  {r.status === "draft" ? " (draft)" : ""}
+                  <bdi>{r.title}</bdi>
+                  {r.status === "draft" ? ` ${t("draft")}` : ""}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -99,8 +103,8 @@ export function InviteToRfqDialog({
             disabled={isPending || rfqs.length === 0}
             className="gap-2"
           >
-            {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Invite
+            {isPending && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+            {t("invite")}
           </Button>
         </DialogFooter>
       </DialogContent>

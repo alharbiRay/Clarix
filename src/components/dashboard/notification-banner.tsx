@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { markNotificationRead } from "@/app/(dashboard)/dashboard/actions";
 import { approveAward } from "@/app/(dashboard)/rfqs/actions";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,7 @@ export function NotificationBanner({
   notifications: DashboardNotification[];
 }) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const t = useTranslations("dashboard.notifications");
   const [, startTransition] = useTransition();
 
   const visible = notifications.filter((n) => !dismissed.has(n.id));
@@ -101,7 +103,7 @@ export function NotificationBanner({
           next.delete(id);
           return next;
         });
-        toast.error("Couldn't dismiss that notification — try again.");
+        toast.error(t("dismissFailed"));
       }
     });
   }
@@ -127,6 +129,7 @@ function NotificationRow({
   onDismiss: () => void;
 }) {
   const router = useRouter();
+  const t = useTranslations("dashboard.notifications");
   const [isApproving, startApproveTransition] = useTransition();
   const style = STYLES[n.type] ?? DEFAULT_STYLE;
   const Icon = style.icon;
@@ -138,7 +141,7 @@ function NotificationRow({
       if (result?.error) {
         toast.error(result.error);
       } else {
-        toast.success("Approved — PO sent.");
+        toast.success(t("approved"));
         onDismiss();
         router.refresh();
       }
@@ -154,7 +157,7 @@ function NotificationRow({
         className={`flex min-w-0 items-center gap-2 font-medium ${style.text} hover:underline`}
       >
         <Icon size={15} className={`shrink-0 ${style.iconColor}`} />
-        <span className="truncate">{n.message}</span>
+        <span className="truncate" dir="auto">{n.message}</span>
       </Link>
       <div className="flex shrink-0 items-center gap-2">
         {approvable && (
@@ -169,13 +172,13 @@ function NotificationRow({
             ) : (
               <CheckCircle2 className="h-3 w-3" />
             )}
-            Approve
+            {t("approve")}
           </Button>
         )}
         <button
           onClick={onDismiss}
           className={`rounded-md p-1 ${style.iconColor} opacity-60 transition-opacity hover:opacity-100`}
-          aria-label="Dismiss"
+          aria-label={t("dismiss")}
         >
           <X size={14} />
         </button>

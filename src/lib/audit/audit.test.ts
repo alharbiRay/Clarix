@@ -93,3 +93,13 @@ describe("recordAuditEvent", () => {
     expect(error).toHaveBeenCalled();
   });
 });
+
+describe("describeAuditEvent in Arabic", () => {
+  it("translates titles and keeps names as recorded", () => {
+    expect(describeAuditEvent({ event_type: "po_sent", payload: { supplier: "Najd", total: 10, currency: "SAR", automatic: true } }, "ar")).toMatchObject({
+      title: "أُرسل أمر الشراء إلى Najd",
+      detail: "SAR 10.00، أُرسل تلقائيًا.",
+    });
+    expect(describeAuditEvent({ event_type: "rfq_sent", payload: { invited: 3 } }, "ar").title).toBe("أُرسل إلى 3 موردين");
+  });
+});

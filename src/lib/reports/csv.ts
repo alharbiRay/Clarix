@@ -6,6 +6,10 @@
  * and RFQ titles are user-controlled).
  */
 import type { Report } from "@/lib/reports";
+import { CATEGORY_LABELS, type Category } from "@/lib/reports/categories";
+import { translatorFor } from "@/i18n/translator";
+import type { Locale } from "@/i18n/config";
+import { formatMonthLabel } from "@/lib/metrics/format";
 
 export const CSV_SECTIONS = ["awards", "monthly", "suppliers", "categories"] as const;
 export type CsvSection = (typeof CSV_SECTIONS)[number];
@@ -27,22 +31,31 @@ export function toCsv(rows: Cell[][]): string {
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const monthLabel = (key: string) => `${MONTHS[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
+const monthLabel = (key: string, locale: Locale) =>
+  locale === "en" ? `${MONTHS[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}` : formatMonthLabel(key, true, locale);
 
 const pct = (v: number | null) => (v === null ? null : Math.round(v * 10000) / 100);
 
-export function reportCsv(report: Report, section: CsvSection): string {
+/** Headers, categories and decision words in the viewer's language; data as recorded. */
+export function reportCsv(report: Report, section: CsvSection, locale: Locale = "en"): string {
   const c = report.currency;
+  const t = translatorFor(locale, "csv");
+  const tc = translatorFor(locale, "reports.categories");
+  const categoryKey = (label: string) => (Object.keys(CATEGORY_LABELS) as Category[]).find((k) => CATEGORY_LABELS[k] === label);
+  const category = (label: string) => {
+    const k = categoryKey(label);
+    return k ? tc(k) : label;
+  };
   switch (section) {
     case "monthly":
       return toCsv([
-        ["Month", "Currency", "Spend", "Savings", "POs sent"],
+        [t("month"), t("currency"), t("spend"), t("savings"), t("posSent")],
         // "Sep 2026", not "2026-09" (Excel turns that into a date).
-        ...report.months.map((m) => [monthLabel(m.month), c, m.spend, m.savings, String(m.awarded)]),
+        ...report.months.map((m) => [monthLabel(m.month, locale), c, m.spend, m.savings, String(m.awarded)]),
       ]);
     case "suppliers":
       return toCsv([
-        ["Supplier", "Invited", "Quoted", "Response rate %", "Won (RFQs created in range)", "Decided", "Win rate %", "POs sent in range", "Currency", "Spend", "Savings delivered", "Avg. price vs lowest %"],
+        [t("supplier"), t("invited"), t("quoted"), t("responseRate"), t("won"), t("decided"), t("winRate"), t("posSentRange"), t("currency"), t("spend"), t("savingsDelivered"), t("priceVsLowest")],
         ...report.suppliers.map((s) => [
           s.label,
           String(s.invited),
@@ -60,24 +73,24 @@ export function reportCsv(report: Report, section: CsvSection): string {
       ]);
     case "categories":
       return toCsv([
-        ["Category", "Currency", "Spend", "Share %", "Line items"],
-        ...report.categories.map((k) => [k.label, c, k.spend, pct(k.share), String(k.lines)]),
+        [t("category"), t("currency"), t("spend"), t("share"), t("lineItems")],
+        ...report.categories.map((k) => [tc(k.category), c, k.spend, pct(k.share), String(k.lines)]),
       ]);
     case "awards":
     default:
       return toCsv([
-        ["PO date", "RFQ", "Supplier", "Categories", "Currency", "Total", "Baseline (avg. other quotes)", "Savings", "Savings %", "Decision"],
+        [t("poDate"), t("rfq"), t("supplier"), t("categories"), t("currency"), t("totalExVat"), t("baseline"), t("savings"), t("savingsPct"), t("decision")],
         ...report.awards.map((a) => [
           a.awardedOn,
           a.title,
           a.supplier,
-          a.categories.join("; "),
+          a.categories.map(category).join(locale === "ar" ? "؛ " : "; "),
           c,
           a.total,
           a.baseline,
           a.basis === "average_of_other_quotes" ? a.savings : null,
           pct(a.savingsPct),
-          a.automatic ? "Automatic" : "Manual",
+          a.automatic ? t("automatic") : t("manual"),
         ]),
       ]);
   }

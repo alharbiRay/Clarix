@@ -5,6 +5,8 @@
  * profile (suppliers.id = rfq_suppliers.supplier_id). Definitions and the
  * formula are in docs/METRICS.md ("Supplier scorecard").
  */
+import { translatorFor } from "@/i18n/translator";
+import type { Locale } from "@/i18n/config";
 import { completeTotal, monthBefore, monthEnd, type MetricsRfq } from "@/lib/metrics";
 
 const HOUR = 3_600_000;
@@ -252,50 +254,47 @@ export function scoreSupplier(m: SupplierMetrics): Scorecard | null {
 // ---------------------------------------------------------------------------
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
-function duration(hours: number) {
+function duration(hours: number, locale: Locale) {
+  if (locale === "ar") return hours < 48 ? `${Math.round(hours)} س` : `${Math.round((hours / 24) * 10) / 10} يوم`;
   return hours < 48 ? `${Math.round(hours)} h` : `${Math.round((hours / 24) * 10) / 10} days`;
 }
 
-export function describeSupplier(m: SupplierMetrics, _card: Scorecard | null) {
+/** Plain-language strengths and weaknesses, in the viewer's language. */
+export function describeSupplier(m: SupplierMetrics, _card: Scorecard | null, locale: Locale = "en") {
+  const t = translatorFor(locale, "scorecard");
   const strengths: string[] = [];
   const weaknesses: string[] = [];
 
   if (m.avgPriceVsLowest !== null) {
-    if (m.avgPriceVsLowest <= 0.005) strengths.push("Consistently the cheapest complete quote");
-    else if (m.avgPriceVsLowest <= 0.03)
-      strengths.push(`Usually close to the cheapest: ${pct(m.avgPriceVsLowest)} above the lowest quote on average`);
-    else if (m.avgPriceVsLowest >= 0.1)
-      weaknesses.push(`Typically ${pct(m.avgPriceVsLowest)} above the lowest quote`);
+    if (m.avgPriceVsLowest <= 0.005) strengths.push(t("cheapest"));
+    else if (m.avgPriceVsLowest <= 0.03) strengths.push(t("closeToCheapest", { pct: pct(m.avgPriceVsLowest) }));
+    else if (m.avgPriceVsLowest >= 0.1) weaknesses.push(t("aboveLowest", { pct: pct(m.avgPriceVsLowest) }));
   }
 
   if (m.responseRate !== null && m.invited >= 2) {
-    if (m.responseRate >= 0.9) strengths.push(`Quotes on ${m.quoted} of ${m.invited} invitations`);
-    else if (m.responseRate < 0.6) weaknesses.push(`Quotes on only ${m.quoted} of ${m.invited} invitations`);
+    if (m.responseRate >= 0.9) strengths.push(t("quotesOn", { quoted: m.quoted, invited: m.invited }));
+    else if (m.responseRate < 0.6) weaknesses.push(t("quotesOnOnly", { quoted: m.quoted, invited: m.invited }));
   }
 
   if (m.medianResponseHours !== null) {
-    if (m.medianResponseHours <= 12) strengths.push(`Replies fast: median ${duration(m.medianResponseHours)}`);
-    else if (m.medianResponseHours > 48) weaknesses.push(`Slow to reply: median ${duration(m.medianResponseHours)}`);
+    if (m.medianResponseHours <= 12) strengths.push(t("repliesFast", { duration: duration(m.medianResponseHours, locale) }));
+    else if (m.medianResponseHours > 48) weaknesses.push(t("repliesSlow", { duration: duration(m.medianResponseHours, locale) }));
   }
 
   if (m.fasterThanTypicalRate !== null) {
-    if (m.fasterThanTypicalRate >= 0.75)
-      strengths.push(`Delivers at or faster than typical on ${pct(m.fasterThanTypicalRate)} of quotes`);
+    if (m.fasterThanTypicalRate >= 0.75) strengths.push(t("fastDelivery", { pct: pct(m.fasterThanTypicalRate) }));
     else if (m.fasterThanTypicalRate <= 0.4 && (m.deliveryVsTypicalDays ?? 0) > 0)
-      weaknesses.push(
-        `Usually slower than typical delivery (${Math.round(m.deliveryVsTypicalDays! * 10) / 10} days over the median)`
-      );
+      weaknesses.push(t("slowDelivery", { days: Math.round(m.deliveryVsTypicalDays! * 10) / 10 }));
   }
 
   if (m.warrantyRate !== null) {
-    if (m.warrantyRate >= 0.9) strengths.push(`Offers a warranty on ${pct(m.warrantyRate)} of quotes`);
-    else if (m.warrantyRate <= 0.5) weaknesses.push(`Warranty on ${pct(m.warrantyRate)} of quotes only`);
+    if (m.warrantyRate >= 0.9) strengths.push(t("warranty", { pct: pct(m.warrantyRate) }));
+    else if (m.warrantyRate <= 0.5) weaknesses.push(t("warrantyOnly", { pct: pct(m.warrantyRate) }));
   }
 
   if (m.winRate !== null) {
-    if (m.winRate >= 0.4 && m.awarded >= 2) strengths.push(`Wins ${pct(m.winRate)} of the decided RFQs it quotes on`);
-    else if (m.awarded === 0 && m.decidedQuotes >= 4)
-      weaknesses.push(`Hasn't won any of its ${m.decidedQuotes} quotes on decided RFQs`);
+    if (m.winRate >= 0.4 && m.awarded >= 2) strengths.push(t("wins", { pct: pct(m.winRate) }));
+    else if (m.awarded === 0 && m.decidedQuotes >= 4) weaknesses.push(t("noWins", { count: m.decidedQuotes }));
   }
 
   return { strengths, weaknesses };

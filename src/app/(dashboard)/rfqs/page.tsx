@@ -13,6 +13,8 @@ import { RfqStatusBadge } from "@/components/rfq-status-badge";
 import { FadeIn } from "@/components/motion";
 import { formatDate } from "@/lib/format";
 import type { Rfq } from "@/lib/types";
+import { getLocale, getTranslations } from "next-intl/server";
+import { isLocale } from "@/i18n/config";
 
 export default async function RfqsPage({
   searchParams,
@@ -20,6 +22,9 @@ export default async function RfqsPage({
   searchParams: { q?: string };
 }) {
   const supabase = createClient();
+  const t = await getTranslations("rfqs");
+  const rawLocale = await getLocale();
+  const locale = isLocale(rawLocale) ? rawLocale : "en";
   const q = searchParams.q?.trim();
 
   let query = supabase
@@ -43,18 +48,16 @@ export default async function RfqsPage({
     <div className="space-y-7">
       <FadeIn className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">RFQs</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t("title")}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            {q
-              ? `Results for “${q}” — ${rfqs.length} found.`
-              : "All your requests for quotation."}
+            {q ? t("results", { q, count: rfqs.length }) : t("subtitle")}
           </p>
         </div>
         <Link
           href="/rfqs/new"
           className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
         >
-          <Plus size={16} /> New RFQ
+          <Plus size={16} aria-hidden="true" /> {t("newRfq")}
         </Link>
       </FadeIn>
 
@@ -65,13 +68,13 @@ export default async function RfqsPage({
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              {["Title", "Project", "Items", "Suppliers", "Quotes", "Deadline", "Status"].map(
+              {(["colTitle", "colProject", "colItems", "colSuppliers", "colQuotes", "colDeadline", "colStatus"] as const).map(
                 (h) => (
                   <TableHead
                     key={h}
                     className="px-6 text-xs font-semibold text-slate-500"
                   >
-                    {h}
+                    {t(h)}
                   </TableHead>
                 )
               )}
@@ -84,9 +87,7 @@ export default async function RfqsPage({
                   <div className="flex flex-col items-center gap-2 text-slate-400">
                     {q && <SearchX size={20} />}
                     <span className="text-sm">
-                      {q
-                        ? "No RFQs match your search."
-                        : "No RFQs yet. Create one to start collecting quotes."}
+                      {q ? t("noMatch") : t("empty")}
                     </span>
                   </div>
                 </TableCell>
@@ -99,11 +100,11 @@ export default async function RfqsPage({
                       href={`/rfqs/${rfq.id}`}
                       className="hover:underline underline-offset-4"
                     >
-                      {rfq.title}
+                      <bdi>{rfq.title}</bdi>
                     </Link>
                   </TableCell>
                   <TableCell className="px-6 text-slate-500">
-                    {rfq.project || "—"}
+                    {rfq.project ? <bdi>{rfq.project}</bdi> : "—"}
                   </TableCell>
                   <TableCell className="px-6">
                     {rfq.rfq_items[0]?.count ?? 0}
@@ -115,7 +116,7 @@ export default async function RfqsPage({
                     {rfq.quotes[0]?.count ?? 0}
                   </TableCell>
                   <TableCell className="px-6 text-slate-500">
-                    {formatDate(rfq.deadline)}
+                    {formatDate(rfq.deadline, locale)}
                   </TableCell>
                   <TableCell className="px-6">
                     <RfqStatusBadge status={rfq.status} />

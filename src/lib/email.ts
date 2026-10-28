@@ -1,5 +1,7 @@
 import { getFromAddress, getResendClient } from "@/lib/resend";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDate, formatMoney, vatPercent } from "@/lib/format";
+import { translatorFor } from "@/i18n/translator";
+import type { Locale } from "@/i18n/config";
 
 /** Logs the full Resend error (name/statusCode/message) before throwing — nothing else in this pipeline does. */
 function throwOnError(
@@ -15,9 +17,11 @@ function throwOnError(
   throw new Error(`${error.name}: ${error.message}`);
 }
 
-function wrapper(preheader: string, bodyHtml: string) {
+function wrapper(preheader: string, bodyHtml: string, locale: Locale = "en") {
+  const dir = locale === "ar" ? "rtl" : "ltr";
+  const footer = translatorFor(locale, "emails")("footer");
   return `<!doctype html>
-<html>
+<html lang="${locale}" dir="${dir}">
   <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
     <span style="display:none;font-size:1px;color:#f1f5f9;">${preheader}</span>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px;">
@@ -30,13 +34,13 @@ function wrapper(preheader: string, bodyHtml: string) {
               </td>
             </tr>
             <tr>
-              <td style="padding:28px;">
+              <td style="padding:28px;text-align:${dir === "rtl" ? "right" : "left"};" dir="${dir}">
                 ${bodyHtml}
               </td>
             </tr>
             <tr>
               <td style="padding:16px 28px;border-top:1px solid #e2e8f0;">
-                <p style="margin:0;font-size:12px;color:#94a3b8;">Sent by Clarix — an RFQ &amp; quote comparison tool.</p>
+                <p style="margin:0;font-size:12px;color:#94a3b8;">${escapeHtml(footer)}</p>
               </td>
             </tr>
           </table>
@@ -62,51 +66,58 @@ interface RfqInvitationEmailInput {
   items: { name: string; quantity: number; unit: string }[];
   formUrl: string;
   replyToAddress: string;
+  /** The supplier's language (see supplierLanguage in src/i18n/translator.ts). */
+  language?: Locale;
 }
 
 export async function sendRfqInvitationEmail(input: RfqInvitationEmailInput) {
   const resend = getResendClient();
-  const greetingName = input.contactName || input.companyName || "there";
+  const locale: Locale = input.language ?? "en";
+  const t = translatorFor(locale, "emails.invitation");
+  const end = locale === "ar" ? "left" : "right";
+  const title = escapeHtml(input.rfq.title);
+  const greetingName = escapeHtml(input.contactName || input.companyName || t("greetingFallback"));
 
   const itemRows = input.items
     .map(
       (i) => `<tr>
-        <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#0f172a;">${i.name}</td>
-        <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#475569;text-align:right;">${i.quantity} ${i.unit}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#0f172a;">${escapeHtml(i.name)}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#475569;text-align:${end};">${i.quantity} ${escapeHtml(i.unit)}</td>
       </tr>`
     )
     .join("");
 
   const body = `
-    <p style="margin:0 0 16px;font-size:15px;color:#0f172a;">Hi ${greetingName},</p>
-    <p style="margin:0 0 20px;font-size:15px;line-height:1.5;color:#334155;">
-      You've been invited to quote on <strong>${input.rfq.title}</strong>. Please review the items below and submit your pricing.
+    <p style="margin:0 0 16px;font-size:15px;color:#0f172a;">${t("greeting", { name: greetingName })}</p>
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#334155;">
+      ${t("intro", { title: `<strong>${title}</strong>` })}
     </p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
       <tr>
-        <td style="padding-bottom:6px;font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;">Item</td>
-        <td style="padding-bottom:6px;font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right;">Quantity</td>
+        <td style="padding-bottom:6px;font-size:12px;font-weight:600;color:#94a3b8;">${t("item")}</td>
+        <td style="padding-bottom:6px;font-size:12px;font-weight:600;color:#94a3b8;text-align:${end};">${t("quantity")}</td>
       </tr>
       ${itemRows}
     </table>
     <p style="margin:0 0 24px;padding:12px 16px;background:#fef3c7;border-radius:8px;font-size:14px;font-weight:600;color:#92400e;">
-      Deadline: ${formatDate(input.rfq.deadline)} · Currency: ${input.rfq.currency}
+      ${t("deadline", { date: formatDate(input.rfq.deadline, locale) })} · ${t("currency", { currency: escapeHtml(input.rfq.currency) })}<br>
+      <span style="font-weight:400;">${t("vatNote")}</span>
     </p>
     <table role="presentation" cellpadding="0" cellspacing="0">
       <tr>
-        <td style="padding-right:10px;">${button(input.formUrl, "Submit via form")}</td>
-        <td>${button(`mailto:${input.replyToAddress}?subject=${encodeURIComponent(`Quote for ${input.rfq.title}`)}`, "Reply with PDF", false)}</td>
+        <td style="padding-${end === "right" ? "right" : "left"}:10px;">${button(input.formUrl, t("submitForm"))}</td>
+        <td>${button(`mailto:${input.replyToAddress}?subject=${encodeURIComponent(t("replySubject", { title: input.rfq.title }))}`, t("replyPdf"), false)}</td>
       </tr>
     </table>
     <p style="margin:20px 0 0;font-size:12px;color:#94a3b8;">
-      Prefer email? Just reply to this message with your quote as a PDF attachment.
+      ${t("replyHint")}
     </p>`;
 
   const { error } = await resend.emails.send({
     from: getFromAddress(),
     to: input.to,
-    subject: `New RFQ from Clarix: ${input.rfq.title}`,
-    html: wrapper(`You're invited to quote on ${input.rfq.title}`, body),
+    subject: t("subject", { title: input.rfq.title }),
+    html: wrapper(t("preheader", { title }), body, locale),
     replyTo: input.replyToAddress,
   });
 
@@ -119,51 +130,70 @@ interface PoConfirmationEmailInput {
   rfqTitle: string;
   currency: string;
   items: { name: string; quantity: number; unit: string }[];
+  /** Excluding VAT, as every quoted price is stored. */
   total: number | null;
   deliveryDays: number | null;
   warranty: string | null;
+  /** The supplier's language. */
+  language?: Locale;
+  /** The buyer's VAT rate (fraction); adds VAT and total-incl.-VAT lines when > 0. */
+  vatRate?: number;
 }
 
-/** Sent automatically to the winning supplier when the auto-approval rules engine clears a quote. */
+/** Sent to the winning supplier when a quote is approved (automatically or by the buyer). */
 export async function sendPoConfirmationEmail(input: PoConfirmationEmailInput) {
   const resend = getResendClient();
+  const locale: Locale = input.language ?? "en";
+  const t = translatorFor(locale, "emails.po");
+  const end = locale === "ar" ? "left" : "right";
+  const money = (n: number) => formatMoney(n, input.currency, locale);
+  const title = escapeHtml(input.rfqTitle);
+  const vatRate = input.vatRate ?? 0;
+  const vat = input.total !== null && vatRate > 0 ? Math.round(input.total * vatRate * 100) / 100 : null;
 
   const itemRows = input.items
     .map(
       (i) => `<tr>
-        <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#0f172a;">${i.name}</td>
-        <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#475569;text-align:right;">${i.quantity} ${i.unit}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#0f172a;">${escapeHtml(i.name)}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#475569;text-align:${end};">${i.quantity} ${escapeHtml(i.unit)}</td>
       </tr>`
     )
     .join("");
 
   const body = `
-    <p style="margin:0 0 16px;font-size:15px;color:#0f172a;">Hi ${input.supplierLabel},</p>
-    <p style="margin:0 0 20px;font-size:15px;line-height:1.5;color:#334155;">
-      Good news — your quote for <strong>${input.rfqTitle}</strong> has been selected. This email confirms the purchase order; formal PO paperwork will follow from the buyer.
+    <p style="margin:0 0 16px;font-size:15px;color:#0f172a;">${t("greeting", { name: escapeHtml(input.supplierLabel) })}</p>
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#334155;">
+      ${t("intro", { title: `<strong>${title}</strong>` })}
     </p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
       <tr>
-        <td style="padding-bottom:6px;font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;">Item</td>
-        <td style="padding-bottom:6px;font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right;">Quantity</td>
+        <td style="padding-bottom:6px;font-size:12px;font-weight:600;color:#94a3b8;">${t("item")}</td>
+        <td style="padding-bottom:6px;font-size:12px;font-weight:600;color:#94a3b8;text-align:${end};">${t("quantity")}</td>
       </tr>
       ${itemRows}
     </table>
-    <p style="margin:0 0 8px;font-size:15px;color:#0f172a;">
-      <strong>Total: ${input.total === null ? "—" : formatMoney(input.total, input.currency)}</strong>
+    <p style="margin:0 0 4px;font-size:15px;color:#0f172a;">
+      <strong>${t("totalExVat", { total: input.total === null ? "—" : money(input.total) })}</strong>
     </p>
+    ${
+      vat !== null && input.total !== null
+        ? `<p style="margin:0 0 4px;font-size:14px;color:#475569;">${t("vat", { rate: vatPercent(vatRate), amount: money(vat) })}</p>
+    <p style="margin:0 0 8px;font-size:14px;color:#0f172a;">${t("totalIncVat", { total: money(input.total + vat) })}</p>`
+        : ""
+    }
     <p style="margin:0 0 24px;font-size:13px;color:#475569;">
-      Delivery: ${input.deliveryDays === null ? "—" : `${input.deliveryDays} days`} · Warranty: ${input.warranty || "—"}
+      ${t("terms", {
+        delivery: input.deliveryDays === null ? "—" : t("days", { count: input.deliveryDays }),
+        warranty: input.warranty ? escapeHtml(input.warranty) : "—",
+      })}
     </p>
-    <p style="margin:0;font-size:12px;color:#94a3b8;">
-      Reply to this email if anything above doesn't match your quote.
-    </p>`;
+    <p style="margin:0;font-size:12px;color:#94a3b8;">${t("replyHint")}</p>`;
 
   const { error } = await resend.emails.send({
     from: getFromAddress(),
     to: input.to,
-    subject: `Purchase order confirmation: ${input.rfqTitle}`,
-    html: wrapper(`Your quote for ${input.rfqTitle} has been selected`, body),
+    subject: t("subject", { title: input.rfqTitle }),
+    html: wrapper(t("preheader", { title }), body, locale),
   });
 
   throwOnError("sendPoConfirmationEmail", error);
@@ -174,24 +204,29 @@ interface AutoApprovalEmailInput {
   rfqTitle: string;
   supplierLabel: string;
   compareUrl: string;
+  /** The buyer's language. */
+  language?: Locale;
 }
 
-/** Buyer notification for Rule 1 — the winning quote was auto-approved and the PO was sent. */
+/** Buyer notification: the recommendation passed the account's approval rules and the PO went out. */
 export async function sendAutoApprovalEmail(input: AutoApprovalEmailInput) {
   const resend = getResendClient();
+  const locale: Locale = input.language ?? "en";
+  const t = translatorFor(locale, "emails.autoApproved");
+  const supplier = escapeHtml(input.supplierLabel);
 
   const body = `
-    <p style="margin:0 0 16px;font-size:15px;color:#0f172a;">Auto-approved.</p>
-    <p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#334155;">
-      <strong>${input.supplierLabel}</strong> was the cheapest complete quote for <strong>${input.rfqTitle}</strong>, met your delivery and warranty requirements, and matched the AI recommendation — so we sent them a PO confirmation automatically.
+    <p style="margin:0 0 16px;font-size:15px;color:#0f172a;">${t("heading")}</p>
+    <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#334155;">
+      ${t("body", { supplier: `<strong>${supplier}</strong>`, title: `<strong>${escapeHtml(input.rfqTitle)}</strong>` })}
     </p>
-    ${button(input.compareUrl, "View comparison")}`;
+    ${button(input.compareUrl, t("cta"))}`;
 
   const { error } = await resend.emails.send({
     from: getFromAddress(),
     to: input.to,
-    subject: `Auto-approved: ${input.supplierLabel} — PO sent for ${input.rfqTitle}`,
-    html: wrapper(`Auto-approved: ${input.supplierLabel} — PO sent`, body),
+    subject: t("subject", { supplier: input.supplierLabel, title: input.rfqTitle }),
+    html: wrapper(t("preheader", { supplier }), body, locale),
   });
 
   throwOnError("sendAutoApprovalEmail", error);
@@ -200,27 +235,32 @@ export async function sendAutoApprovalEmail(input: AutoApprovalEmailInput) {
 interface ReviewNeededEmailInput {
   to: string;
   rfqTitle: string;
+  /** Recorded by the approval engine (English sentence). */
   reason: string;
   compareUrl: string;
+  /** The buyer's language. */
+  language?: Locale;
 }
 
 /** Buyer's one and only notification for an RFQ when auto-approval doesn't clear it — sent by evaluateAutoApproval. */
 export async function sendReviewNeededEmail(input: ReviewNeededEmailInput) {
   const resend = getResendClient();
-  const headline = `Review needed: ${input.reason}`;
+  const locale: Locale = input.language ?? "en";
+  const t = translatorFor(locale, "emails.reviewNeeded");
+  const headline = t("headline", { reason: input.reason });
 
   const body = `
-    <p style="margin:0 0 16px;font-size:15px;color:#0f172a;">${headline}</p>
-    <p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#334155;">
-      <strong>${input.rfqTitle}</strong> wasn't auto-approved. Take a look and decide who to award.
+    <p style="margin:0 0 16px;font-size:15px;color:#0f172a;" dir="auto">${escapeHtml(headline)}</p>
+    <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#334155;">
+      ${t("body", { title: `<strong>${escapeHtml(input.rfqTitle)}</strong>` })}
     </p>
-    ${button(input.compareUrl, "Review comparison")}`;
+    ${button(input.compareUrl, t("cta"))}`;
 
   const { error } = await resend.emails.send({
     from: getFromAddress(),
     to: input.to,
     subject: headline,
-    html: wrapper(headline, body),
+    html: wrapper(escapeHtml(headline), body, locale),
   });
 
   throwOnError("sendReviewNeededEmail", error);
@@ -252,7 +292,7 @@ export async function sendNegotiationEmail(input: NegotiationEmailInput) {
     .split(/\n{2,}/)
     .map((p) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#0f172a;">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
     .join("");
-  const html = wrapper(escapeHtml(input.subject), `<div dir="${dir}" style="text-align:${dir === "rtl" ? "right" : "left"};">${paragraphs}</div>`);
+  const html = wrapper(escapeHtml(input.subject), `<div dir="${dir}" style="text-align:${dir === "rtl" ? "right" : "left"};">${paragraphs}</div>`, input.language);
 
   const { error } = await resend.emails.send({
     from: getFromAddress(),

@@ -1,10 +1,12 @@
 "use client";
 
 import { TrendingDown, TrendingUp } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import type { LineInsight } from "@/lib/pricing/history";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatDate, formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { isLocale } from "@/i18n/config";
 
 const MINUS = "−";
 function signedPct(p: number) {
@@ -25,7 +27,7 @@ function Badge({ pct, alert, label }: { pct: number; alert: boolean; label: stri
       )}
     >
       {alert && <Icon size={11} aria-hidden />}
-      {signedPct(pct)} {label}
+      <bdi dir="ltr">{signedPct(pct)}</bdi> {label}
     </span>
   );
 }
@@ -37,40 +39,44 @@ function Badge({ pct, alert, label }: { pct: number; alert: boolean; label: stri
  * badges are one button, so the details open for keyboard and touch users too.
  */
 export function PriceInsightBadges({ insight, currency }: { insight: LineInsight; currency: string }) {
+  const t = useTranslations("priceInsight");
+  const raw = useLocale();
+  const locale = isLocale(raw) ? raw : "en";
   const { vsSupplierLast, vsMarket } = insight;
   if (!vsSupplierLast && !vsMarket) return null;
   const summary = [
-    vsSupplierLast && `${signedPct(vsSupplierLast.pct)} versus this supplier's last price`,
-    vsMarket && `${signedPct(vsMarket.pct)} versus the market average`,
+    vsSupplierLast && t("vsTheirLastLong", { pct: signedPct(vsSupplierLast.pct) }),
+    vsMarket && t("vsMarketLong", { pct: signedPct(vsMarket.pct) }),
   ]
     .filter(Boolean)
-    .join(", ");
+    .join(locale === "ar" ? "، " : ", ");
   return (
     <Popover>
       <PopoverTrigger
         className="mt-1 inline-flex flex-col items-end gap-0.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0]"
-        aria-label={`Price context: ${summary}. Show details`}
+        aria-label={t("aria", { summary })}
       >
-        {vsSupplierLast && <Badge pct={vsSupplierLast.pct} alert={insight.supplierAlert} label="vs their last" />}
-        {vsMarket && <Badge pct={vsMarket.pct} alert={insight.marketAlert} label="vs market" />}
+        {vsSupplierLast && <Badge pct={vsSupplierLast.pct} alert={insight.supplierAlert} label={t("vsTheirLast")} />}
+        {vsMarket && <Badge pct={vsMarket.pct} alert={insight.marketAlert} label={t("vsMarket")} />}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 border-slate-200 bg-white p-3 text-xs text-slate-700">
         <dl className="space-y-2">
           {vsSupplierLast && (
             <div>
-              <dt className="font-semibold text-slate-900">Their last price</dt>
+              <dt className="font-semibold text-slate-900">{t("theirLast")}</dt>
               <dd>
-                {formatMoney(vsSupplierLast.previous.unitPrice, currency)} on {formatDate(vsSupplierLast.previous.at)} ·{" "}
-                <bdi>{vsSupplierLast.previous.rfqTitle}</bdi>
+                {t("onDate", {
+                  price: formatMoney(vsSupplierLast.previous.unitPrice, currency, locale),
+                  date: formatDate(vsSupplierLast.previous.at, locale),
+                })}{" "}
+                · <bdi>{vsSupplierLast.previous.rfqTitle}</bdi>
               </dd>
             </div>
           )}
           {vsMarket && (
             <div>
-              <dt className="font-semibold text-slate-900">Market average (180 days)</dt>
-              <dd>
-                {formatMoney(vsMarket.average, currency)} across {vsMarket.samples} quotes from all suppliers
-              </dd>
+              <dt className="font-semibold text-slate-900">{t("marketAvg")}</dt>
+              <dd>{t("across", { price: formatMoney(vsMarket.average, currency, locale), count: vsMarket.samples })}</dd>
             </div>
           )}
         </dl>

@@ -5,6 +5,7 @@ let user: { id: string } | null = { id: "buyer-1" };
 const loadMetricsRfqs = vi.fn(async (_s: unknown, _id: string) => [] as unknown[]);
 vi.mock("@/lib/supabase/server", () => ({ createClient: () => ({ auth: { getUser: async () => ({ data: { user } }) } }) }));
 vi.mock("@/lib/metrics/load", () => ({ loadMetricsRfqs: (s: unknown, id: string) => loadMetricsRfqs(s, id) }));
+vi.mock("@/i18n/request", () => ({ resolveLocale: async () => "en" }));
 
 import { GET } from "@/app/api/reports/csv/route";
 

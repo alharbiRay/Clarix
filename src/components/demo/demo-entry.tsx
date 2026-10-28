@@ -1,12 +1,14 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
+import { useTranslations } from "next-intl";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { startDemoSession } from "@/app/demo/actions";
 import { cn } from "@/lib/utils";
 
 function SubmitButton({ prominent }: { prominent: boolean }) {
   const { pending } = useFormStatus();
+  const t = useTranslations("demo");
   return (
     <button
       type="submit"
@@ -21,15 +23,15 @@ function SubmitButton({ prominent }: { prominent: boolean }) {
       {pending ? (
         <>
           <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden />
-          Opening the demo…
+          {t("opening")}
         </>
       ) : (
         <>
-          Explore the live demo
+          {t("explore")}
           <ArrowRight
             size={15}
             aria-hidden
-            className="transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none"
+            className="transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5 motion-reduce:transition-none"
           />
         </>
       )}
@@ -42,12 +44,13 @@ function SubmitButton({ prominent }: { prominent: boolean }) {
  * Used on the login page (quiet variant) and on /demo (prominent).
  */
 export function DemoEntry({ prominent = false }: { prominent?: boolean }) {
+  const t = useTranslations("demo");
   return (
     <div className={cn(!prominent && "space-y-3")}>
       {!prominent && (
         <div className="flex items-center gap-3 text-xs text-slate-400" aria-hidden>
           <span className="h-px flex-1 bg-slate-200" />
-          or look around first
+          {t("orLook")}
           <span className="h-px flex-1 bg-slate-200" />
         </div>
       )}
@@ -56,7 +59,7 @@ export function DemoEntry({ prominent = false }: { prominent?: boolean }) {
       </form>
       {!prominent && (
         <p className="text-center text-xs text-slate-500">
-          A sample contractor&apos;s last six months. Read-only, no signup.
+          {t("entryNote")}
         </p>
       )}
     </div>

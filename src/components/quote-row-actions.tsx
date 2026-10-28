@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { deleteQuote } from "@/app/(dashboard)/rfqs/quote-actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +30,7 @@ export function QuoteRowActions({
   supplierLabel: string;
 }) {
   const router = useRouter();
+  const t = useTranslations("quoteRow");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -38,7 +40,7 @@ export function QuoteRowActions({
       if (result?.error) {
         toast.error(result.error);
       } else {
-        toast.success("Quote deleted.");
+        toast.success(t("deleted"));
         setConfirmOpen(false);
         router.refresh();
       }
@@ -54,8 +56,8 @@ export function QuoteRowActions({
             size="icon"
             className="h-7 w-7 text-slate-400 hover:text-slate-600"
           >
-            <MoreHorizontal size={15} />
-            <span className="sr-only">Quote actions</span>
+            <MoreHorizontal size={15} aria-hidden="true" />
+            <span className="sr-only">{t("actions")}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -66,8 +68,8 @@ export function QuoteRowActions({
               setConfirmOpen(true);
             }}
           >
-            <Trash2 className="h-3.5 w-3.5" />
-            Delete quote
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("delete")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -78,11 +80,9 @@ export function QuoteRowActions({
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete this quote?</DialogTitle>
+            <DialogTitle>{t("confirmTitle")}</DialogTitle>
             <DialogDescription>
-              {supplierLabel}&apos;s quote will be permanently deleted. This
-              can&apos;t be undone — they&apos;ll become available again for
-              a new manual or PDF entry.
+              {t("confirmBody", { supplier: supplierLabel })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -91,7 +91,7 @@ export function QuoteRowActions({
               disabled={isPending}
               onClick={() => setConfirmOpen(false)}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -99,8 +99,8 @@ export function QuoteRowActions({
               onClick={handleDelete}
               className="gap-2"
             >
-              {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Delete quote
+              {isPending && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+              {t("delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

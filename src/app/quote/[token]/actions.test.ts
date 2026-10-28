@@ -8,6 +8,11 @@ vi.mock("@/lib/jobs/schedule", () => ({
   scheduleAutoRecommendation: (rfqId: string, buyerId: string) => scheduleAutoRecommendation(rfqId, buyerId),
 }));
 
+let quoteCookie: string | undefined;
+vi.mock("next/headers", () => ({
+  cookies: () => ({ get: (name: string) => (name === "CLARIX_QUOTE_LOCALE" && quoteCookie ? { value: quoteCookie } : undefined) }),
+}));
+
 import { submitQuote } from "@/app/quote/[token]/actions";
 
 const ITEM_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -51,6 +56,7 @@ const values = {
 describe("submitQuote (supplier form)", () => {
   beforeEach(() => {
     scheduleAutoRecommendation.mockClear();
+    quoteCookie = undefined;
     seed();
   });
 
@@ -107,5 +113,34 @@ describe("submitQuote (supplier form)", () => {
     });
     expect(db.tables.quotes).toHaveLength(0);
     expect(scheduleAutoRecommendation).not.toHaveBeenCalled();
+  });
+
+  describe("supplier language", () => {
+    const savedSupplier = (lang: string | null) => ({
+      id: "sup-1", buyer_id: "buyer-1", email: "s@supplier.example", company_name: "Al Noor", contact_name: null, preferred_language: lang,
+    });
+
+    it("saves the language they quoted in when none is saved", async () => {
+      expect(await submitQuote("tok", values, "ar")).toEqual({ success: true });
+      expect(db.tables.suppliers).toEqual([expect.objectContaining({ preferred_language: "ar" })]);
+    });
+
+    it("keeps a saved preference when the page picked the language for them", async () => {
+      db.tables.suppliers.push(savedSupplier("en"));
+      expect(await submitQuote("tok", values, "ar")).toEqual({ success: true });
+      expect(db.tables.suppliers[0].preferred_language).toBe("en");
+    });
+
+    it("replaces a saved preference when they switched language on the page", async () => {
+      db.tables.suppliers.push(savedSupplier("en"));
+      quoteCookie = "ar";
+      expect(await submitQuote("tok", values, "ar")).toEqual({ success: true });
+      expect(db.tables.suppliers[0].preferred_language).toBe("ar");
+    });
+
+    it("answers in the supplier's language", async () => {
+      seed({ status: "awarded" });
+      expect(await submitQuote("tok", values, "ar")).toEqual({ error: expect.stringMatching(/[؀-ۿ]/) });
+    });
   });
 });

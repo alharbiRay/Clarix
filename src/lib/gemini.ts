@@ -188,7 +188,7 @@ The quote was submitted by supplier "${input.supplier.company_name ?? input.supp
 
 Extract the quote into the structured format:
 - "items": include EVERY rfq_item_id from the list above, in the same order. Match each RFQ item to the corresponding line in the PDF by name/description — supplier wording often differs slightly. For each item:
-  - "unit_price": the per-unit price in ${input.currency}. If the PDF only shows a line total, divide by the RFQ quantity. Use null if the item is not quoted at all.
+  - "unit_price": the per-unit price in ${input.currency}, EXCLUDING VAT (Clarix stores every price before VAT). If the document shows prices that include VAT (e.g. "شامل الضريبة", "incl. VAT"), remove the VAT at the rate stated on the document (15% in Saudi Arabia if none is stated) and add a warning saying you did. If the PDF only shows a line total, divide by the RFQ quantity. Use null if the item is not quoted at all.
   - "total_price": the extended line total. If only a unit price is shown, multiply by the RFQ quantity. Null if not quoted.
   - "notes": alternatives offered, brand/model quoted, lead time for that item, or null.
 - "supplier_name": the company name as written in the PDF, or null.
@@ -384,6 +384,8 @@ export interface RecommendationInput {
   };
   weights: RecommendationWeights;
   preferences?: RecommendationPreferences;
+  /** The buyer's language for the written parts (supplier names stay exact). */
+  language?: "ar" | "en";
   items: { name: string; quantity: number; unit: string }[];
   quotes: {
     supplier: string;
@@ -445,7 +447,11 @@ Produce:
 - "ranking": every supplier, best first (rank 1 = best) according to the weighted priorities, each with specific strengths and weaknesses (e.g. "cheapest total at X", "missing a price for item Y", "longest warranty").
 - "risks": things the buyer should verify before awarding — missing prices, currency mismatches, unusually low prices, vague terms, quotes still pending review, and any violation of the hard constraints above. Empty array only if there are genuinely none.
 
-Be direct and specific. Do not pad with generic procurement advice.`;
+Be direct and specific. Do not pad with generic procurement advice.${
+    input.language === "ar"
+      ? "\n\nWrite \"recommendation\", \"reasoning\", every \"strengths\"/\"weaknesses\" entry and \"risks\" in Modern Standard Arabic. Keep each ranking \"supplier\" exactly as written in the quotes (it is matched by the system), and keep numbers and currency codes in Latin digits."
+      : ""
+  }`;
 
   const content = await generateStructured(
     client,

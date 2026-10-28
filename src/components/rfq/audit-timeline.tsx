@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { describeAuditEvent, type AuditTone } from "@/lib/audit";
 import { cn } from "@/lib/utils";
+import { useLocale, useTranslations } from "next-intl";
+import { intlLocale, isLocale, type Locale } from "@/i18n/config";
 
 export interface TimelineEvent {
   id: string;
@@ -48,19 +50,13 @@ const TONE: Record<AuditTone, string> = {
   negative: "bg-red-50 text-red-700",
 };
 
-const ACTOR: Record<TimelineEvent["actor_type"], string> = {
-  buyer: "You",
-  supplier: "Supplier",
-  system: "Clarix",
-};
-
 const ZONE = "Asia/Riyadh";
 const yearOf = (d: Date) => new Intl.DateTimeFormat("en-US", { year: "numeric", timeZone: ZONE }).format(d);
 
 /** "Oct 14, 9:05 AM GMT+3" — the year only when it isn't this year. */
-function formatWhen(iso: string) {
+function formatWhen(iso: string, locale: Locale) {
   const d = new Date(iso);
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
     month: "short",
     day: "numeric",
     ...(yearOf(d) !== yearOf(new Date()) ? { year: "numeric" } : {}),
@@ -73,19 +69,17 @@ function formatWhen(iso: string) {
 
 /** The RFQ's decision history, oldest first — the story of how it was decided. */
 export function AuditTimeline({ events }: { events: TimelineEvent[] }) {
+  const t = useTranslations("audit");
+  const raw = useLocale();
+  const locale: Locale = isLocale(raw) ? raw : "en";
   if (events.length === 0) {
-    return (
-      <p className="text-sm text-slate-500">
-        No history recorded yet. Every step — invitations, quotes, AI decisions, approvals — will appear here
-        as this RFQ moves along.
-      </p>
-    );
+    return <p className="text-sm text-slate-500">{t("empty")}</p>;
   }
 
   return (
-    <ol className="relative space-y-5 before:absolute before:bottom-2 before:left-[15px] before:top-2 before:w-px before:bg-slate-200">
+    <ol className="relative space-y-5 before:absolute before:bottom-2 before:start-[15px] before:top-2 before:w-px before:bg-slate-200">
       {events.map((e) => {
-        const d = describeAuditEvent(e);
+        const d = describeAuditEvent(e, locale);
         // A hold-for-review is an auto_approval_decided event too, but reads as a warning.
         const IconToUse =
           e.event_type === "auto_approval_decided" && d.tone === "warning"
@@ -112,7 +106,7 @@ export function AuditTimeline({ events }: { events: TimelineEvent[] }) {
                 </p>
               )}
               <p className="mt-1 text-xs text-slate-500">
-                {ACTOR[e.actor_type]} · <time dateTime={e.created_at}>{formatWhen(e.created_at)}</time>
+                {t(`actor.${e.actor_type}`)} · <time dateTime={e.created_at}>{formatWhen(e.created_at, locale)}</time>
               </p>
             </div>
           </li>

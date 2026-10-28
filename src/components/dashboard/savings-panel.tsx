@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { animate, useReducedMotion } from "framer-motion";
+import { useLocale, useTranslations } from "next-intl";
+import { isLocale, type Locale } from "@/i18n/config";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import {
   Bar,
@@ -69,18 +71,18 @@ interface ChartTooltipProps {
   currency: string;
 }
 
-function ChartTooltip({ active, payload, currency }: ChartTooltipProps) {
+function ChartTooltip({ active, payload, currency, locale, t }: ChartTooltipProps & { locale: Locale; t: (k: string, v?: Record<string, unknown>) => string }) {
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-[0_4px_16px_-4px_rgb(15_23_42/0.12)]">
-      <p className="font-semibold text-slate-900">{formatMonthLabel(p.month, true)}</p>
+      <p className="font-semibold text-slate-900">{formatMonthLabel(p.month, true, locale)}</p>
       <p className="mt-1 flex items-center gap-1.5 text-slate-700">
         <span className="h-2 w-2 rounded-full" style={{ background: ACCENT }} aria-hidden />
-        {p.savings < 0 ? "Premium paid" : "Saved"} {formatMoneyWhole(Math.abs(p.savings), currency)}
+        {t(p.savings < 0 ? "tooltipPremium" : "tooltipSaved", { amount: formatMoneyWhole(Math.abs(p.savings), currency) })}
       </p>
       <p className="mt-0.5 text-slate-500">
-        {p.awarded} PO{p.awarded === 1 ? "" : "s"} · {formatMoneyWhole(p.spend, currency)} spend
+        {t("tooltipPos", { count: p.awarded, amount: formatMoneyWhole(p.spend, currency) })}
       </p>
     </div>
   );
@@ -88,22 +90,25 @@ function ChartTooltip({ active, payload, currency }: ChartTooltipProps) {
 
 export function SavingsPanel(props: SavingsPanelProps) {
   const reduceMotion = useReducedMotion();
+  const t = useTranslations("dashboard.savings");
+  const rawLocale = useLocale();
+  const locale: Locale = isLocale(rawLocale) ? rawLocale : "en";
   const { currency, savingsThisMonth, savingsChange, savingsPctThisMonth, series, hasAwards } = props;
   const change = formatChange(savingsChange);
   const up = (savingsChange ?? 0) > 0;
   const down = (savingsChange ?? 0) < 0;
-  const lastMonthLabel = formatMonthLabel(series[series.length - 2]?.month ?? "2000-01", false);
-  const chartData = series.map((p) => ({ ...p, label: formatMonthLabel(p.month) }));
+  const lastMonthLabel = formatMonthLabel(series[series.length - 2]?.month ?? "2000-01", false, locale);
+  const chartData = series.map((p) => ({ ...p, label: formatMonthLabel(p.month, false, locale) }));
 
   return (
     <section
       aria-labelledby="savings-heading"
       className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,5fr)_minmax(0,8fr)]"
     >
-      <div className="flex flex-col justify-between gap-6 p-6 lg:border-r lg:border-slate-100 lg:p-8">
+      <div className="flex flex-col justify-between gap-6 p-6 lg:border-e lg:border-slate-100 lg:p-8">
         <div>
           <h2 id="savings-heading" className="text-sm font-medium text-slate-500">
-            Saved this month
+            {t("heading")}
           </h2>
           <p className="mt-2 text-[2.75rem] font-semibold leading-none tracking-tight text-slate-900 sm:text-5xl">
             <CountUp value={savingsThisMonth} currency={currency} />
@@ -120,36 +125,28 @@ export function SavingsPanel(props: SavingsPanelProps) {
               >
                 {up ? <ArrowUpRight size={14} aria-hidden /> : down ? <ArrowDownRight size={14} aria-hidden /> : <Minus size={14} aria-hidden />}
                 {change}
-                <span className="sr-only">{up ? "increase" : down ? "decrease" : "no change"}</span>
+                <span className="sr-only">{t(up ? "increase" : down ? "decrease" : "noChange")}</span>
               </span>
             ) : hasAwards ? (
-              <span className="text-slate-500">No savings recorded in {lastMonthLabel} to compare with</span>
+              <span className="text-slate-500">{t("noCompare", { month: lastMonthLabel })}</span>
             ) : null}
-            {change && <span className="text-slate-500">vs {lastMonthLabel}</span>}
+            {change && <span className="text-slate-500">{t("vs", { month: lastMonthLabel })}</span>}
           </div>
         </div>
 
         <div className="space-y-1.5 text-sm text-slate-600">
           {savingsPctThisMonth !== null && savingsPctThisMonth >= 0 && (
-            <p>
-              <span className="font-semibold text-slate-900">{formatPct(savingsPctThisMonth)}</span> below the
-              average competing quote on this month&apos;s purchase orders.
-            </p>
+            <p>{t("belowAvg", { pct: formatPct(savingsPctThisMonth) })}</p>
           )}
           {savingsPctThisMonth !== null && savingsPctThisMonth < 0 && (
-            <p>
-              This month&apos;s purchase orders cost{" "}
-              <span className="font-semibold text-slate-900">{formatPct(-savingsPctThisMonth)}</span> more than the
-              average alternative — a premium paid for better delivery or warranty.
-            </p>
+            <p>{t("premium", { pct: formatPct(-savingsPctThisMonth) })}</p>
           )}
           <p className="text-xs text-slate-500">
-            Savings = average of the other complete quotes − the awarded total.
+            {t("formula")}
           </p>
           {props.excludedOtherCurrency > 0 && (
             <p className="text-xs text-amber-700">
-              {props.excludedOtherCurrency} awarded RFQ{props.excludedOtherCurrency === 1 ? "" : "s"} (all time) in
-              other currencies {props.excludedOtherCurrency === 1 ? "is" : "are"} left out of these figures.
+              {t("excluded", { count: props.excludedOtherCurrency })}
             </p>
           )}
         </div>
@@ -157,15 +154,15 @@ export function SavingsPanel(props: SavingsPanelProps) {
 
       <div className="p-6 lg:p-8">
         <div className="flex items-baseline justify-between gap-4">
-          <h3 className="text-sm font-semibold text-slate-900">Savings by month</h3>
-          <p className="text-xs text-slate-500">{currency} · purchase orders sent</p>
+          <h3 className="text-sm font-semibold text-slate-900">{t("byMonth")}</h3>
+          <p className="text-xs text-slate-500">{t("byMonthNote", { currency })}</p>
         </div>
 
         {hasAwards ? (
           <>
-            <div className="mt-4 h-56" aria-hidden>
+            <div className="mt-4 h-56" aria-hidden dir="ltr">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 8, right: 4, bottom: 0, left: -8 }}>
+                <BarChart accessibilityLayer={false} data={chartData} margin={{ top: 8, right: 4, bottom: 0, left: -8 }}>
                   <CartesianGrid stroke={GRID} vertical={false} />
                   <XAxis
                     dataKey="label"
@@ -184,26 +181,26 @@ export function SavingsPanel(props: SavingsPanelProps) {
                   <ReferenceLine y={0} stroke="#CBD5E1" />
                   <Tooltip
                     cursor={{ fill: "rgb(109 95 214 / 0.06)" }}
-                    content={<ChartTooltip currency={currency} />}
+                    content={<ChartTooltip currency={currency} locale={locale} t={t as never} />}
                   />
                   <Bar dataKey="savings" fill={ACCENT} radius={[4, 4, 0, 0]} maxBarSize={24} isAnimationActive={!reduceMotion} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
             <table className="sr-only">
-              <caption>Savings by month ({currency})</caption>
+              <caption>{t("tableCaption", { currency })}</caption>
               <thead>
                 <tr>
-                  <th scope="col">Month</th>
-                  <th scope="col">Savings</th>
-                  <th scope="col">Spend</th>
-                  <th scope="col">Purchase orders</th>
+                  <th scope="col">{t("month")}</th>
+                  <th scope="col">{t("savingsCol")}</th>
+                  <th scope="col">{t("spend")}</th>
+                  <th scope="col">{t("pos")}</th>
                 </tr>
               </thead>
               <tbody>
                 {series.map((p) => (
                   <tr key={p.month}>
-                    <th scope="row">{formatMonthLabel(p.month, true)}</th>
+                    <th scope="row">{formatMonthLabel(p.month, true, locale)}</th>
                     <td>{formatMoneyWhole(p.savings, currency)}</td>
                     <td>{formatMoneyWhole(p.spend, currency)}</td>
                     <td>{p.awarded}</td>
@@ -214,16 +211,15 @@ export function SavingsPanel(props: SavingsPanelProps) {
           </>
         ) : (
           <div className="mt-4 flex h-56 flex-col items-start justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-6">
-            <p className="text-sm font-semibold text-slate-900">No purchase orders yet</p>
+            <p className="text-sm font-semibold text-slate-900">{t("emptyTitle")}</p>
             <p className="mt-1 max-w-sm text-sm text-slate-600">
-              Savings start counting when you award your first RFQ — automatically or by approving a
-              recommendation.
+              {t("emptyBody")}
             </p>
             <Link
               href="/rfqs/new"
               className="mt-4 text-sm font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
             >
-              Create an RFQ
+              {t("emptyCta")}
             </Link>
           </div>
         )}

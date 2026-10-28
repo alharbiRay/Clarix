@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { createSupplier } from "@/app/(dashboard)/suppliers/actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 export function AddSupplierDialog() {
   const router = useRouter();
+  const t = useTranslations("addSupplier");
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -44,7 +46,7 @@ export function AddSupplierDialog() {
       if (result?.error) {
         toast.error(result.error);
       } else {
-        toast.success("Supplier added.");
+        toast.success(t("added"));
         setOpen(false);
         reset();
         router.refresh();
@@ -64,21 +66,21 @@ export function AddSupplierDialog() {
     >
       <DialogTrigger asChild>
         <Button className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add supplier
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          {t("trigger")}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add a trusted supplier</DialogTitle>
+          <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>
-            Pre-add a supplier before inviting them to any RFQ.
+            {t("description")}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="supplier-email">Email *</Label>
+            <Label htmlFor="supplier-email">{t("email")}</Label>
             <Input
               id="supplier-email"
               type="email"
@@ -86,11 +88,12 @@ export function AddSupplierDialog() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="supplier@company.com"
+              dir="ltr"
             />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="supplier-company">Company name</Label>
+              <Label htmlFor="supplier-company">{t("company")}</Label>
               <Input
                 id="supplier-company"
                 value={companyName}
@@ -98,7 +101,7 @@ export function AddSupplierDialog() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="supplier-contact">Contact name</Label>
+              <Label htmlFor="supplier-contact">{t("contact")}</Label>
               <Input
                 id="supplier-contact"
                 value={contactName}
@@ -107,29 +110,30 @@ export function AddSupplierDialog() {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="supplier-phone">Phone</Label>
+            <Label htmlFor="supplier-phone">{t("phone")}</Label>
             <Input
               id="supplier-phone"
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="Optional"
+              placeholder={t("optional")}
+              dir="ltr"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="supplier-notes">Notes</Label>
+            <Label htmlFor="supplier-notes">{t("notes")}</Label>
             <Textarea
               id="supplier-notes"
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Private — only you can see this"
+              placeholder={t("notesPlaceholder")}
             />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={isPending || !email} className="gap-2">
-              {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Add supplier
+              {isPending && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+              {t("trigger")}
             </Button>
           </DialogFooter>
         </form>

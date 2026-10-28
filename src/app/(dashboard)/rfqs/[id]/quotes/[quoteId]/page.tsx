@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -61,6 +62,7 @@ export default async function QuoteReviewPage({
       };
     });
 
+    const t = await getTranslations("review");
   const parsedExtraction = extractionSchema.safeParse(quote.extraction_raw);
   const warnings = parsedExtraction.success ? parsedExtraction.data.warnings : [];
   const confidence = parsedExtraction.success
@@ -80,17 +82,16 @@ export default async function QuoteReviewPage({
       <FadeIn className="space-y-1.5">
         <Link
           href={`/rfqs/${params.id}`}
-          className="-ml-1 inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
+          className="-ms-1 inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
         >
-          <ArrowLeft size={13} />
-          {rfq.title}
+          <ArrowLeft size={13} className="rtl:rotate-180" aria-hidden="true" />
+          <bdi>{rfq.title}</bdi>
         </Link>
         <h1 className="text-2xl font-bold tracking-tight">
-          Review extracted quote
+          {t("title")}
         </h1>
         <p className="text-sm text-slate-500">
-          PDF quote from {supplierLabel} · extracted by Gemini — confirm to
-          include it in the comparison.
+          {t("subtitle", { supplier: supplierLabel })}
         </p>
       </FadeIn>
 

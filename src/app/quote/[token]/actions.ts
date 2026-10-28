@@ -5,16 +5,21 @@ import { scheduleAutoRecommendation } from "@/lib/jobs/schedule";
 import { ensureSupplierProfile } from "@/lib/supplier-profile";
 import { quoteSchema, type QuoteFormValues } from "@/lib/validations/quote";
 import { recordAuditEvent } from "@/lib/audit";
+import { cookies } from "next/headers";
+import { isLocale, QUOTE_LOCALE_COOKIE } from "@/i18n/config";
+import { translatorFor } from "@/i18n/translator";
 
 /**
  * Supplier submits a quote via their unique token link. No login — the token
  * is the credential, so everything runs through the service-role client with
  * explicit checks.
  */
-export async function submitQuote(token: string, values: QuoteFormValues) {
+export async function submitQuote(token: string, values: QuoteFormValues, language?: string) {
+  const locale = isLocale(language) ? language : "en";
+  const te = translatorFor(locale, "supplierForm.errors");
   const parsed = quoteSchema.safeParse(values);
   if (!parsed.success) {
-    return { error: parsed.error.errors[0]?.message ?? "Invalid input" };
+    return { error: locale === "en" ? (parsed.error.errors[0]?.message ?? te("invalid")) : te("invalid") };
   }
 
   const supabase = createAdminClient();
@@ -27,7 +32,7 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
     .eq("token", token)
     .single();
 
-  if (!supplier) return { error: "This quote link is invalid." };
+  if (!supplier) return { error: te("invalidLink") };
 
   const rfq = supplier.rfqs as unknown as {
     id: string;
@@ -41,14 +46,14 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
   // The demo workspace is shared and read-only — nobody gets to post quotes
   // into it, even with a (seed-derived) token.
   if (rfq.is_demo) {
-    return { error: "This is a demo RFQ and doesn't accept quotes." };
+    return { error: te("demo") };
   }
 
   if (rfq.status !== "sent" && rfq.status !== "draft") {
-    return { error: "This RFQ is no longer accepting quotes." };
+    return { error: te("closed") };
   }
   if (rfq.deadline && new Date(rfq.deadline).getTime() < Date.now()) {
-    return { error: "The deadline for this RFQ has passed." };
+    return { error: te("deadline") };
   }
 
   const { data: existing } = await supabase
@@ -58,7 +63,7 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
     .maybeSingle();
 
   if (existing) {
-    return { error: "A quote has already been submitted for this invitation." };
+    return { error: te("duplicate") };
   }
 
   // Validate the item ids belong to this RFQ
@@ -70,7 +75,7 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
   const validItems = new Map((rfqItems ?? []).map((i) => [i.id, i]));
   for (const item of parsed.data.items) {
     if (!validItems.has(item.rfq_item_id)) {
-      return { error: "Invalid line item in submission." };
+      return { error: te("badItem") };
     }
   }
 
@@ -92,7 +97,8 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
     .single();
 
   if (quoteError || !quote) {
-    return { error: quoteError?.message ?? "Failed to submit quote" };
+    console.error("[submitQuote] quote insert failed:", quoteError);
+    return { error: te("failed") };
   }
 
   const { error: itemsError } = await supabase.from("quote_items").insert(
@@ -114,7 +120,8 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
 
   if (itemsError) {
     await supabase.from("quotes").delete().eq("id", quote.id);
-    return { error: itemsError.message };
+    console.error("[submitQuote] quote_items insert failed:", itemsError);
+    return { error: te("failed") };
   }
 
   await supabase
@@ -122,7 +129,7 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
     .update({ status: "submitted" })
     .eq("id", supplier.id);
 
-  await ensureSupplierProfile({
+  const profileId = await ensureSupplierProfile({
     supabase,
     buyerId: rfq.buyer_id,
     rfqSupplierId: supplier.id,
@@ -130,6 +137,15 @@ export async function submitQuote(token: string, values: QuoteFormValues) {
     companyName: supplier.company_name,
     contactName: supplier.contact_name,
   });
+  // The language they quoted in becomes the default for future emails. One
+  // they picked with the page's switcher replaces a saved preference; one we
+  // picked for them only fills a gap.
+  if (profileId && isLocale(language)) {
+    const explicit = cookies().get(QUOTE_LOCALE_COOKIE)?.value === language;
+    const update = supabase.from("suppliers").update({ preferred_language: language }).eq("id", profileId);
+    const { error: langError } = await (explicit ? update : update.is("preferred_language", null));
+    if (langError) console.error("[submitQuote] preferred_language update failed:", langError.message);
+  }
 
   // Recorded as a durable job and run in the background — the supplier no
   // longer waits on a Gemini call (or loses it to a timeout).

@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FileUp, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { uploadQuotePdf } from "@/app/(dashboard)/rfqs/quote-actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +38,7 @@ export function QuoteUploadDialog({
   /** Suppliers that don't have a quote yet */
   suppliers: UploadSupplierOption[];
 }) {
+  const t = useTranslations("upload");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [supplierId, setSupplierId] = useState<string>("");
@@ -47,11 +49,11 @@ export function QuoteUploadDialog({
     e.preventDefault();
     const file = fileRef.current?.files?.[0];
     if (!supplierId) {
-      toast.error("Choose which supplier sent this quote");
+      toast.error(t("chooseSupplier"));
       return;
     }
     if (!file) {
-      toast.error("Choose a PDF file");
+      toast.error(t("chooseFile"));
       return;
     }
 
@@ -65,7 +67,7 @@ export function QuoteUploadDialog({
       if (result.error) {
         toast.error(result.error);
       } else if (result.quoteId) {
-        toast.success("Quote extracted and confirmed automatically.");
+        toast.success(t("done"));
         setOpen(false);
         router.push(`/rfqs/${rfqId}`);
       }
@@ -76,62 +78,51 @@ export function QuoteUploadDialog({
     <Dialog open={open} onOpenChange={(v) => !isPending && setOpen(v)}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2">
-          <FileUp size={14} />
-          Upload PDF quote
+          <FileUp size={14} aria-hidden="true" />
+          {t("trigger")}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Upload a PDF quote</DialogTitle>
-          <DialogDescription>
-            For suppliers who replied with a PDF instead of the form. Gemini
-            extracts the prices and confirms the quote automatically — no
-            review needed.
-          </DialogDescription>
+          <DialogTitle>{t("title")}</DialogTitle>
+          <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label>Supplier</Label>
+            <Label htmlFor="upload-supplier">{t("supplier")}</Label>
             <Select value={supplierId} onValueChange={setSupplierId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Who sent this quote?" />
+              <SelectTrigger id="upload-supplier">
+                <SelectValue placeholder={t("supplierPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 {suppliers.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
-                    {s.label}
+                    <bdi>{s.label}</bdi>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {suppliers.length === 0 && (
-              <p className="text-xs text-slate-400">
-                Every supplier on this RFQ already has a quote.
-              </p>
-            )}
+            {suppliers.length === 0 && <p className="text-xs text-slate-500">{t("allQuoted")}</p>}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="quote-pdf">Quote PDF (max 10 MB)</Label>
+            <Label htmlFor="quote-pdf">{t("file")}</Label>
             <Input id="quote-pdf" ref={fileRef} type="file" accept="application/pdf" />
+            <p className="text-xs text-slate-500">{t("vatHint")}</p>
           </div>
 
           <div className="flex justify-end">
-            <Button
-              type="submit"
-              disabled={isPending || suppliers.length === 0}
-              className="gap-2"
-            >
+            <Button type="submit" disabled={isPending || suppliers.length === 0} className="gap-2">
               {isPending ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Extracting…
+                  <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                  {t("extracting")}
                 </>
               ) : (
                 <>
-                  <Sparkles className="h-4 w-4" />
-                  Extract with AI
+                  <Sparkles className="h-4 w-4" aria-hidden="true" />
+                  {t("extract")}
                 </>
               )}
             </Button>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Clock, Sparkles, PackageCheck, PenLine } from "lucide-react";
 import { FadeIn } from "@/components/motion";
+import { useTranslations } from "next-intl";
 
 export interface ActivityRow {
   id: string;
@@ -19,28 +20,28 @@ export interface ActivityRow {
 
 const STATUS_STYLES: Record<
   ActivityRow["status"],
-  { label: string; bg: string; text: string; dot: string }
+  { label: "statusReady" | "statusWaiting" | "statusDraft" | "statusClosed"; bg: string; text: string; dot: string }
 > = {
   ready: {
-    label: "Ready to compare",
+    label: "statusReady",
     bg: "bg-emerald-50",
     text: "text-emerald-700",
     dot: "bg-emerald-500",
   },
   waiting: {
-    label: "Awaiting quotes",
+    label: "statusWaiting",
     bg: "bg-amber-50",
     text: "text-amber-700",
     dot: "bg-amber-500",
   },
   draft: {
-    label: "Draft",
+    label: "statusDraft",
     bg: "bg-slate-100",
     text: "text-slate-600",
     dot: "bg-slate-400",
   },
   closed: {
-    label: "Closed",
+    label: "statusClosed",
     bg: "bg-slate-100",
     text: "text-slate-600",
     dot: "bg-slate-400",
@@ -48,13 +49,14 @@ const STATUS_STYLES: Record<
 };
 
 const TABS = [
-  { id: "all", label: "All" },
-  { id: "ready", label: "Ready" },
-  { id: "waiting", label: "Waiting" },
+  { id: "all", label: "all" },
+  { id: "ready", label: "ready" },
+  { id: "waiting", label: "waiting" },
 ] as const;
 
 export function RfqActivity({ rows }: { rows: ActivityRow[] }) {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("all");
+  const tr = useTranslations("dashboard.activity");
 
   const filtered = tab === "all" ? rows : rows.filter((r) => r.status === tab);
 
@@ -64,19 +66,20 @@ export function RfqActivity({ rows }: { rows: ActivityRow[] }) {
       className="rounded-2xl border border-slate-200 bg-white shadow-sm"
     >
       <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-        <h3 className="text-sm font-semibold">Active RFQs</h3>
+        <h3 className="text-sm font-semibold">{tr("heading")}</h3>
         <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
+              aria-pressed={tab === t.id}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                 tab === t.id
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              {t.label}
+              {tr(t.label)}
             </button>
           ))}
         </div>
@@ -87,17 +90,17 @@ export function RfqActivity({ rows }: { rows: ActivityRow[] }) {
           <div className="px-6 py-12 text-center text-sm text-slate-400">
             {rows.length === 0 ? (
               <>
-                No RFQs yet.{" "}
+                {tr("noRfqs")}{" "}
                 <Link
                   href="/rfqs/new"
                   className="font-semibold text-slate-900 underline-offset-4 hover:underline"
                 >
-                  Create your first RFQ
+                  {tr("createFirst")}
                 </Link>{" "}
-                to start collecting quotes.
+                {tr("toStart")}
               </>
             ) : (
-              "Nothing in this view."
+              tr("nothingHere")
             )}
           </div>
         ) : (
@@ -123,17 +126,17 @@ export function RfqActivity({ rows }: { rows: ActivityRow[] }) {
                       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${st.bg} ${st.text}`}
                     >
                       <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />
-                      {st.label}
+                      {tr(st.label)}
                     </span>
                   </div>
                   <Link
                     href={`/rfqs/${rfq.id}`}
                     className="mt-1 block truncate font-semibold hover:underline underline-offset-4"
                   >
-                    {rfq.title}
+                    <bdi>{rfq.title}</bdi>
                   </Link>
                   <p className="text-xs text-slate-400">
-                    {rfq.project || "No project"}
+                    {rfq.project ? <bdi>{rfq.project}</bdi> : tr("noProject")}
                   </p>
                 </div>
 
@@ -141,7 +144,7 @@ export function RfqActivity({ rows }: { rows: ActivityRow[] }) {
                 <div className="w-full lg:w-48">
                   <div className="mb-1.5 flex justify-between text-xs">
                     <span className="text-slate-500">
-                      {rfq.repliedCount}/{rfq.supplierCount} suppliers replied
+                      {tr("replied", { replied: rfq.repliedCount, total: rfq.supplierCount })}
                     </span>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
@@ -157,7 +160,7 @@ export function RfqActivity({ rows }: { rows: ActivityRow[] }) {
                 {/* Deadline */}
                 <div className="flex items-center gap-1.5 text-xs text-slate-500 lg:w-32">
                   {rfq.daysLeft === null ? (
-                    <span className="text-slate-400">No deadline</span>
+                    <span className="text-slate-500">{tr("noDeadline")}</span>
                   ) : (
                     <>
                       <Clock
@@ -171,9 +174,7 @@ export function RfqActivity({ rows }: { rows: ActivityRow[] }) {
                           rfq.daysLeft <= 8 ? "font-semibold text-red-500" : ""
                         }
                       >
-                        {rfq.daysLeft < 0
-                          ? "Overdue"
-                          : `${rfq.daysLeft} days left`}
+                        {rfq.daysLeft < 0 ? tr("overdue") : tr("daysLeft", { count: rfq.daysLeft })}
                       </span>
                     </>
                   )}
@@ -185,18 +186,18 @@ export function RfqActivity({ rows }: { rows: ActivityRow[] }) {
                     href={`/rfqs/${rfq.id}`}
                     className="flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 lg:w-44"
                   >
-                    <Sparkles size={14} /> Compare quotes
+                    <Sparkles size={14} aria-hidden="true" /> {tr("compare")}
                   </Link>
                 ) : rfq.status === "draft" ? (
                   <Link
                     href={`/rfqs/${rfq.id}`}
                     className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 lg:w-44"
                   >
-                    <PenLine size={14} /> Finish draft
+                    <PenLine size={14} aria-hidden="true" /> {tr("finishDraft")}
                   </Link>
                 ) : (
                   <span className="flex cursor-default items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-400 lg:w-44">
-                    <PackageCheck size={14} /> Awaiting quotes
+                    <PackageCheck size={14} aria-hidden="true" /> {tr("awaiting")}
                   </span>
                 )}
               </div>

@@ -3,8 +3,10 @@
 import { useMemo, useState, useTransition } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useLocale, useTranslations } from "next-intl";
 import { submitQuote } from "@/app/quote/[token]/actions";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, vatOn, vatPercent } from "@/lib/format";
+import { isLocale } from "@/i18n/config";
 import { sanitizeDecimalInput, sanitizeIntegerInput } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,12 +31,20 @@ export interface QuoteFormItem {
 export function SupplierQuoteForm({
   token,
   currency,
+  vatRate = 0.15,
   items,
 }: {
   token: string;
   currency: string;
+  /** The buyer's VAT rate (fraction). Prices are entered excluding VAT. */
+  vatRate?: number;
   items: QuoteFormItem[];
 }) {
+  const t = useTranslations("supplierForm");
+  const tv = useTranslations("vat");
+  const raw = useLocale();
+  const locale = isLocale(raw) ? raw : "en";
+  const money = (n: number) => formatMoney(n, currency, locale);
   const [isPending, startTransition] = useTransition();
   const [submitted, setSubmitted] = useState(false);
   const [prices, setPrices] = useState<Record<string, string>>({});
@@ -61,12 +71,14 @@ export function SupplierQuoteForm({
       return isNaN(v) || v < 0;
     });
     if (missingPrices.length > 0) {
-      toast.error(`Enter a price for "${missingPrices[0].name}"`);
+      toast.error(t("missingPrice", { item: missingPrices[0].name }));
       return;
     }
 
     startTransition(async () => {
-      const result = await submitQuote(token, {
+      const result = await submitQuote(
+        token,
+        {
         items: items.map((item) => ({
           rfq_item_id: item.id,
           unit_price: parseFloat(prices[item.id]),
@@ -76,7 +88,9 @@ export function SupplierQuoteForm({
         payment_terms: paymentTerms,
         warranty,
         notes,
-      });
+        },
+        locale
+      );
       if (result?.error) {
         toast.error(result.error);
       } else {
@@ -89,12 +103,10 @@ export function SupplierQuoteForm({
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50">
-          <CheckCircle2 size={22} className="text-emerald-600" />
+          <CheckCircle2 size={22} className="text-emerald-600" aria-hidden="true" />
         </div>
-        <h2 className="text-lg font-bold tracking-tight">Quote submitted</h2>
-        <p className="mt-2 text-sm text-slate-500">
-          Thank you — the buyer has received your quote and will be in touch.
-        </p>
+        <h2 className="text-lg font-bold tracking-tight">{t("doneTitle")}</h2>
+        <p className="mt-2 text-sm text-slate-500">{t("doneBody")}</p>
       </div>
     );
   }
@@ -104,11 +116,9 @@ export function SupplierQuoteForm({
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold">
-            Your prices ({currency})
+            {t("pricesTitle", { currency })}
           </CardTitle>
-          <CardDescription className="text-xs text-slate-400">
-            Enter a unit price for each line item.
-          </CardDescription>
+          <CardDescription className="text-xs text-slate-500">{t("pricesHint")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {items.map((item, i) => {
@@ -122,10 +132,10 @@ export function SupplierQuoteForm({
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <p className="font-medium">
-                      <span className="mr-2 text-xs text-slate-400">
+                      <span className="me-2 text-xs text-slate-400">
                         {i + 1}.
                       </span>
-                      {item.name}
+                      <bdi>{item.name}</bdi>
                     </p>
                     {item.description && (
                       <p className="mt-0.5 text-xs text-slate-400">
@@ -133,7 +143,7 @@ export function SupplierQuoteForm({
                       </p>
                     )}
                     <p className="mt-1 text-xs text-slate-500">
-                      Quantity: {item.quantity} {item.unit}
+                      {t("quantity", { quantity: item.quantity, unit: item.unit })}
                     </p>
                   </div>
                   <div className="flex items-end gap-3">
@@ -142,7 +152,7 @@ export function SupplierQuoteForm({
                         htmlFor={`price-${item.id}`}
                         className="text-xs text-slate-500"
                       >
-                        Unit price *
+                        {t("unitPrice")}
                       </Label>
                       <Input
                         id={`price-${item.id}`}
@@ -159,18 +169,19 @@ export function SupplierQuoteForm({
                         }
                       />
                     </div>
-                    <div className="pb-2 text-right">
-                      <p className="text-xs text-slate-400">Line total</p>
+                    <div className="pb-2 text-end">
+                      <p className="text-xs text-slate-500">{t("lineTotal")}</p>
                       <p className="w-24 text-sm font-semibold">
                         {lineTotal === null
                           ? "—"
-                          : formatMoney(lineTotal, currency)}
+                          : money(lineTotal)}
                       </p>
                     </div>
                   </div>
                 </div>
                 <Input
-                  placeholder="Optional note for this item (alternatives, lead time, etc.)"
+                  placeholder={t("itemNote")}
+                  aria-label={t("itemNote")}
                   className="mt-3"
                   value={itemNotes[item.id] ?? ""}
                   onChange={(e) =>
@@ -181,57 +192,67 @@ export function SupplierQuoteForm({
             );
           })}
 
-          <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-            <span className="text-sm font-medium text-slate-600">
-              Quote total
-            </span>
-            <span className="text-lg font-bold tracking-tight">
-              {formatMoney(total, currency)}
-            </span>
-          </div>
+          <dl className="space-y-1.5 rounded-xl bg-slate-50 px-4 py-3 text-sm">
+            <div className="flex items-center justify-between">
+              <dt className="font-medium text-slate-600">{tv("subtotal")}</dt>
+              <dd className="text-lg font-bold tabular-nums tracking-tight">{money(total)}</dd>
+            </div>
+            {vatRate > 0 && (
+              <>
+                <div className="flex items-center justify-between text-slate-600">
+                  <dt>{tv("line", { rate: vatPercent(vatRate) })}</dt>
+                  <dd className="tabular-nums">{money(vatOn(total, vatRate))}</dd>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-200 pt-1.5 text-slate-700">
+                  <dt>{tv("total")}</dt>
+                  <dd className="font-semibold tabular-nums">{money(total + vatOn(total, vatRate))}</dd>
+                </div>
+              </>
+            )}
+          </dl>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold">Terms</CardTitle>
+          <CardTitle className="text-sm font-semibold">{t("termsTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="delivery">Delivery time (days)</Label>
+            <Label htmlFor="delivery">{t("delivery")}</Label>
             <Input
               id="delivery"
               type="text"
               inputMode="numeric"
-              placeholder="e.g. 14"
+              placeholder={t("deliveryPlaceholder")}
               value={deliveryDays}
               onChange={(e) => setDeliveryDays(sanitizeIntegerInput(e.target.value))}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="payment">Payment terms</Label>
+            <Label htmlFor="payment">{t("payment")}</Label>
             <Input
               id="payment"
-              placeholder="e.g. Net 30, 50% advance"
+              placeholder={t("paymentPlaceholder")}
               value={paymentTerms}
               onChange={(e) => setPaymentTerms(e.target.value)}
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="warranty">Warranty</Label>
+            <Label htmlFor="warranty">{t("warranty")}</Label>
             <Input
               id="warranty"
-              placeholder="e.g. 2 years parts and labor"
+              placeholder={t("warrantyPlaceholder")}
               value={warranty}
               onChange={(e) => setWarranty(e.target.value)}
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="notes">Notes</Label>
+            <Label htmlFor="notes">{t("notes")}</Label>
             <Textarea
               id="notes"
               rows={3}
-              placeholder="Anything else the buyer should know."
+              placeholder={t("notesPlaceholder")}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
@@ -241,8 +262,8 @@ export function SupplierQuoteForm({
 
       <div className="flex justify-end">
         <Button type="submit" disabled={isPending} className="gap-2">
-          {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          Submit quote
+          {isPending && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+          {t("submit")}
         </Button>
       </div>
     </form>
