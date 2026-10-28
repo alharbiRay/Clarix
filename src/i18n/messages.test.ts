@@ -9,7 +9,9 @@ function keys(obj: Record<string, unknown>, prefix = ""): string[] {
 }
 
 function placeholders(s: string) {
-  return Array.from(s.matchAll(/\{(\w+)/g), (m) => m[1]).sort();
+  // Real placeholders only: {name} or {name, plural|select …} — not the text
+  // that starts a plural branch ("one {to confirm it…}").
+  return Array.from(new Set(Array.from(s.matchAll(/\{(\w+)(?=[},])/g), (m) => m[1]))).sort();
 }
 
 describe("translations", () => {
