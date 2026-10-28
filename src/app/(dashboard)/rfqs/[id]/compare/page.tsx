@@ -28,10 +28,11 @@ import { ApproveAwardButton } from "@/components/approve-award-button";
 import { NegotiateDialog } from "@/components/compare/negotiate-dialog";
 import { buyerHint, detectLanguage } from "@/lib/negotiation";
 import { snapshotFromRows } from "@/lib/negotiation/snapshot";
-import { formatDate, formatMoney } from "@/lib/format";
+import { getLocale, getTranslations } from "next-intl/server";
+import { intlLocale, isLocale } from "@/i18n/config";
+import { formatDate, formatMoney, vatOn } from "@/lib/format";
 import {
   DEFAULT_RECOMMENDATION_WEIGHTS,
-  describeWeights,
   recommendationContentSchema,
 } from "@/lib/gemini";
 import { computeQuoteTotal, findCheapestQuote } from "@/lib/quote-comparison";
@@ -60,7 +61,11 @@ export default async function ComparePage({
 }: {
   params: { id: string };
 }) {
-  const supabase = createClient();
+    const supabase = createClient();
+  const t = await getTranslations("compare");
+  const tr = await getTranslations("recommend");
+  const rawLocale = await getLocale();
+  const locale = isLocale(rawLocale) ? rawLocale : "en";
 
   // Every query keys off params.id alone — none depends on another's
   // result — so fire them concurrently instead of one after another.
@@ -100,6 +105,7 @@ export default async function ComparePage({
   };
 
   const items = [...rfq.rfq_items].sort((a, b) => a.position - b.position);
+  const money = (n: number) => formatMoney(n, rfq.currency, locale);
   const suppliersById = new Map(rfq.rfq_suppliers.map((s) => [s.id, s]));
 
   const pendingReview = rfq.quotes.filter((q) => q.status === "needs_review");
@@ -171,7 +177,7 @@ export default async function ComparePage({
       console.error(JSON.stringify({ event: "compare.price_history_unavailable", error: String(e) }));
       return [];
     }),
-    supabase.from("profiles").select("price_alert_threshold, is_demo").eq("id", rfq.buyer_id).maybeSingle(),
+    supabase.from("profiles").select("price_alert_threshold, is_demo, vat_rate").eq("id", rfq.buyer_id).maybeSingle(),
   ]);
   const supplierScores = scoreSuppliers(historyRfqs, scoreRefs);
 
@@ -244,12 +250,10 @@ export default async function ComparePage({
     : undefined;
   const preferencesLineParts: string[] = [];
   if (usedPreferences?.hasDeadline && usedPreferences.deadlineDate) {
-    preferencesLineParts.push(`Delivery needed by ${formatDate(usedPreferences.deadlineDate)}`);
+    preferencesLineParts.push(t("deliveryBy", { date: formatDate(usedPreferences.deadlineDate, locale) }));
   }
   if (usedPreferences?.maxBudget !== undefined && usedPreferences?.maxBudget !== null) {
-    preferencesLineParts.push(
-      `Max budget ${formatMoney(usedPreferences.maxBudget, rfq.currency)}`
-    );
+    preferencesLineParts.push(t("maxBudget", { amount: money(usedPreferences.maxBudget) }));
   }
   const preferencesLine = preferencesLineParts.join(" · ");
 
@@ -269,6 +273,8 @@ export default async function ComparePage({
   // Negotiation defaults per supplier: language (saved preference, else a
   // guess from the name) and how far above the best other offer they are.
   const isDemo = Boolean(thresholdResult.data?.is_demo);
+  const vatRate = Number(thresholdResult.data?.vat_rate ?? 0.15);
+  const vatPct = Math.round(vatRate * 1000) / 10;
   const linkedSupplierIds = rfq.rfq_suppliers.map((s) => s.supplier_id).filter((id): id is string => Boolean(id));
   const { data: languageRows } = linkedSupplierIds.length
     ? await supabase.from("suppliers").select("id, preferred_language").in("id", linkedSupplierIds)
@@ -324,13 +330,12 @@ export default async function ComparePage({
             href={`/rfqs/${params.id}`}
             className="-ms-1 inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
           >
-            <ArrowLeft size={13} className="rtl:rotate-180" />
-            {rfq.title}
+            <ArrowLeft size={13} className="rtl:rotate-180" aria-hidden="true" />
+            <bdi>{rfq.title}</bdi>
           </Link>
-          <h1 className="text-2xl font-bold tracking-tight">Compare quotes</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t("title")}</h1>
           <p className="text-sm text-slate-500">
-            {columns.length} quote{columns.length === 1 ? "" : "s"} ·{" "}
-            {rfq.currency} · deadline {formatDate(rfq.deadline)}
+            {t("meta", { count: columns.length, currency: rfq.currency, date: formatDate(rfq.deadline, locale) })}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -369,14 +374,12 @@ export default async function ComparePage({
             <span>
               {retryAt ? (
                 <>
-                  <strong>AI recommendation delayed</strong> — the last
-                  attempt didn&apos;t finish. Clarix retries automatically (next
-                  attempt around {new Date(retryAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}).
+                  <strong>{t("delayedStrong")}</strong>{" "}
+                  {t("delayedBody", { time: new Date(retryAt).toLocaleTimeString(intlLocale(locale), { hour: "numeric", minute: "2-digit", timeZone: "Asia/Riyadh" }) })}
                 </>
               ) : (
                 <>
-                  <strong>Preparing the AI recommendation…</strong> Refresh in
-                  a moment to see it.
+                  <strong>{t("preparingStrong")}</strong> {t("preparingBody")}
                 </>
               )}
             </span>
@@ -389,9 +392,8 @@ export default async function ComparePage({
           <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
             <span>
-              <strong>Auto-approved:</strong> {awardRecommended.label} — PO sent{" "}
-              {formatDate(award.po_sent_at)}. Cheapest complete quote, delivery
-              within 14 days, and a warranty on file.
+              <strong>{t("autoApproved")}</strong>{" "}
+              {t("autoApprovedBody", { supplier: awardRecommended.label, date: formatDate(award.po_sent_at, locale) })}
             </span>
           </div>
         </FadeIn>
@@ -405,8 +407,8 @@ export default async function ComparePage({
             <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
               <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
               <span>
-                <strong>Approved:</strong> {awardRecommended.label} — PO sent{" "}
-                {formatDate(award.po_sent_at)}.
+                <strong>{t("approved")}</strong>{" "}
+                {t("approvedBody", { supplier: awardRecommended.label, date: formatDate(award.po_sent_at, locale) })}
               </span>
             </div>
           </FadeIn>
@@ -418,8 +420,7 @@ export default async function ComparePage({
             <span className="flex items-center gap-2">
               <AlertTriangle size={15} className="shrink-0 text-amber-600" />
               <span>
-                <strong>Review needed:</strong> {award.reason}. Approval
-                required before awarding.
+                <strong>{t("reviewNeeded")}</strong> <span dir="auto">{award.reason}</span>. {t("approvalRequired")}
               </span>
             </span>
             {awardRecommended && (
@@ -445,31 +446,26 @@ export default async function ComparePage({
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm font-semibold text-amber-800">
                   <AlertTriangle size={15} className="text-amber-600" />
-                  Recommendation differs from cheapest — approval required
+                  {t("differsTitle")}
                 </CardTitle>
-                <CardDescription className="text-xs text-slate-400">
+                <CardDescription className="text-xs text-slate-500" dir="auto">
                   {award.reason}
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">
-                    Recommended
+                    {t("recommended")}
                   </p>
                   <p className="mt-1 text-base font-bold text-slate-900">
-                    {awardRecommended.label}
+                    <bdi>{awardRecommended.label}</bdi>
                   </p>
-                  <p className="mt-2 text-sm font-semibold">
-                    {awardRecommended.total === null
-                      ? "—"
-                      : formatMoney(awardRecommended.total, rfq.currency)}
-                  </p>
+                  <p className="mt-2 text-sm font-semibold">{awardRecommended.total === null ? "—" : money(awardRecommended.total)}</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    Delivery:{" "}
-                    {awardRecommended.deliveryDays === null
-                      ? "—"
-                      : `${awardRecommended.deliveryDays} days`}{" "}
-                    · Warranty: {awardRecommended.warranty || "—"}
+                    {t("sideTerms", {
+                      delivery: awardRecommended.deliveryDays === null ? "—" : t("days", { count: awardRecommended.deliveryDays }),
+                      warranty: awardRecommended.warranty || "—",
+                    })}
                   </p>
                   <ApproveAwardButton
                 recommendedQuoteId={award?.recommended_quote_id ?? null}
@@ -482,22 +478,17 @@ export default async function ComparePage({
                 </div>
                 <div className="rounded-xl border border-slate-100 p-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Cheapest
+                    {t("cheapest")}
                   </p>
                   <p className="mt-1 text-base font-bold text-slate-900">
-                    {awardCheapest.label}
+                    <bdi>{awardCheapest.label}</bdi>
                   </p>
-                  <p className="mt-2 text-sm font-semibold">
-                    {awardCheapest.total === null
-                      ? "—"
-                      : formatMoney(awardCheapest.total, rfq.currency)}
-                  </p>
+                  <p className="mt-2 text-sm font-semibold">{awardCheapest.total === null ? "—" : money(awardCheapest.total)}</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    Delivery:{" "}
-                    {awardCheapest.deliveryDays === null
-                      ? "—"
-                      : `${awardCheapest.deliveryDays} days`}{" "}
-                    · Warranty: {awardCheapest.warranty || "—"}
+                    {t("sideTerms", {
+                      delivery: awardCheapest.deliveryDays === null ? "—" : t("days", { count: awardCheapest.deliveryDays }),
+                      warranty: awardCheapest.warranty || "—",
+                    })}
                   </p>
                 </div>
               </CardContent>
@@ -510,18 +501,14 @@ export default async function ComparePage({
           <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             <AlertTriangle size={15} className="shrink-0 text-amber-600" />
             <span>
-              {pendingReview.length} PDF quote
-              {pendingReview.length === 1 ? "" : "s"} extracted and shown below,
-              awaiting your review —{" "}
+              {t("pendingBanner", { count: pendingReview.length })}{" "}
               <Link
                 href={`/rfqs/${params.id}/quotes/${pendingReview[0].id}`}
                 className="font-medium underline underline-offset-2"
               >
-                review now
+                {t("reviewNow")}
               </Link>{" "}
-              to confirm {pendingReview.length === 1 ? "it" : "them"} and count{" "}
-              {pendingReview.length === 1 ? "it" : "them"} toward the best-price
-              ranking.
+              {t("pendingTail", { count: pendingReview.length })}
             </span>
           </div>
         </FadeIn>
@@ -531,8 +518,7 @@ export default async function ComparePage({
         <FadeIn>
           <Card>
             <CardContent className="py-12 text-center text-sm text-slate-500">
-              No quotes yet. Quotes appear here as soon as a supplier submits
-              the form, you upload a PDF, or you add one manually.
+              {t("noQuotes")}
             </CardContent>
           </Card>
         </FadeIn>
@@ -541,11 +527,10 @@ export default async function ComparePage({
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-semibold">
-                Side-by-side comparison
+                {t("sideBySide")}
               </CardTitle>
               <CardDescription className="text-xs text-slate-400">
-                Line totals per supplier. Green marks the lowest price for each
-                row; the trophy marks the lowest complete quote.
+                {t("sideBySideHint")}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -553,9 +538,7 @@ export default async function ComparePage({
                 <table className="w-full min-w-[640px] text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50 text-start">
-                      <th className="px-4 py-3 text-xs font-semibold text-slate-500">
-                        Item
-                      </th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-500">{t("item")}</th>
                       {columns.map((col) => (
                         <th
                           key={col.quote.id}
@@ -584,14 +567,14 @@ export default async function ComparePage({
                                   className="inline-flex items-center gap-1 font-medium text-amber-600 underline underline-offset-2"
                                 >
                                   <Clock size={11} />
-                                  Pending review
+                                  {t("pendingReview")}
                                 </Link>
                               ) : col.quote.source === "pdf" ? (
-                                "PDF (confirmed)"
+                                t("sourcePdf")
                               ) : col.quote.source === "manual" ? (
-                                "Manual entry"
+                                t("sourceManual")
                               ) : (
-                                "Form"
+                                t("sourceForm")
                               )}
                             </span>
                           </div>
@@ -659,13 +642,12 @@ export default async function ComparePage({
                                       isBest ? "text-emerald-700" : ""
                                     }`}
                                   >
-                                    {formatMoney(lineTotal, rfq.currency)}
+                                    {money(lineTotal)}
                                   </p>
                                   {cell?.unit !== null &&
                                     cell?.unit !== undefined && (
                                       <p className="text-xs text-slate-400">
-                                        {formatMoney(cell.unit, rfq.currency)} /{" "}
-                                        {item.unit}
+                                        {t("perUnit", { price: money(cell.unit), unit: item.unit })}
                                       </p>
                                     )}
                                   {(() => {
@@ -688,7 +670,7 @@ export default async function ComparePage({
                     ))}
 
                     <tr className="border-b border-slate-100 bg-slate-50/60">
-                      <td className="px-4 py-3 text-sm font-semibold">Total</td>
+                      <th scope="row" className="px-4 py-3 text-start text-sm font-semibold">{t("totalExVat")}</th>
                       {columns.map((col) => {
                         const isBest =
                           !col.pending &&
@@ -711,15 +693,12 @@ export default async function ComparePage({
                                 isBest ? "text-emerald-700" : ""
                               }`}
                             >
-                              {isBest && <Trophy size={14} />}
-                              {col.total === null
-                                ? "—"
-                                : formatMoney(col.total, rfq.currency)}
+                              {isBest && <Trophy size={14} aria-hidden="true" />}
+                              {col.total === null ? "—" : money(col.total)}
                             </p>
                             {col.missingCount > 0 && (
                               <p className="text-xs font-normal text-amber-600">
-                                {col.missingCount} item
-                                {col.missingCount === 1 ? "" : "s"} unpriced
+                                {t("unpriced", { count: col.missingCount })}
                               </p>
                             )}
                           </td>
@@ -727,25 +706,44 @@ export default async function ComparePage({
                       })}
                     </tr>
 
+                    {vatRate > 0 && (
+                      <>
+                        <tr className="border-b border-slate-100">
+                          <th scope="row" className="px-4 py-2 text-start text-xs font-medium text-slate-500">{t("vatLine", { rate: vatPct })}</th>
+                          {columns.map((col) => (
+                            <td key={col.quote.id} className="px-4 py-2 text-end text-xs text-slate-600">
+                              {col.total === null || col.missingCount > 0 ? "—" : money(vatOn(col.total, vatRate))}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr className="border-b border-slate-100">
+                          <th scope="row" className="px-4 py-2 text-start text-xs font-semibold text-slate-600">{t("totalIncVat")}</th>
+                          {columns.map((col) => (
+                            <td key={col.quote.id} className="px-4 py-2 text-end text-sm font-semibold text-slate-700">
+                              {col.total === null || col.missingCount > 0 ? "—" : money(col.total + vatOn(col.total, vatRate))}
+                            </td>
+                          ))}
+                        </tr>
+                      </>
+                    )}
+
                     {(
                       [
                         {
-                          label: "Delivery",
+                          label: "delivery",
                           render: (c: QuoteColumn) =>
-                            c.quote.delivery_days === null
-                              ? null
-                              : `${c.quote.delivery_days} days`,
+                            c.quote.delivery_days === null ? null : t("days", { count: c.quote.delivery_days }),
                         },
                         {
-                          label: "Payment terms",
+                          label: "paymentTerms",
                           render: (c: QuoteColumn) => c.quote.payment_terms,
                         },
                         {
-                          label: "Warranty",
+                          label: "warranty",
                           render: (c: QuoteColumn) => c.quote.warranty,
                         },
                         {
-                          label: "Notes",
+                          label: "notes",
                           render: (c: QuoteColumn) => c.quote.notes,
                         },
                       ] as const
@@ -755,7 +753,7 @@ export default async function ComparePage({
                         className="border-b border-slate-100 last:border-0"
                       >
                         <td className="px-4 py-3 text-xs font-semibold text-slate-500">
-                          {row.label}
+                          {t(row.label)}
                         </td>
                         {columns.map((col) => (
                           <td
@@ -771,7 +769,7 @@ export default async function ComparePage({
                     ))}
                     {canNegotiate && (
                       <tr>
-                        <td className="px-4 py-3 text-xs font-semibold text-slate-500">Negotiate</td>
+                        <td className="px-4 py-3 text-xs font-semibold text-slate-500">{t("negotiate")}</td>
                         {columns.map((col) => {
                           const n = negotiation.get(col.quote.id);
                           return (
@@ -809,17 +807,24 @@ export default async function ComparePage({
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-sm font-semibold">
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600">
-                  <Sparkles size={13} className="text-white" />
+                  <Sparkles size={13} className="text-white" aria-hidden="true" />
                 </span>
-                AI recommendation
+                {t("aiTitle")}
               </CardTitle>
               <CardDescription className="text-xs text-slate-400">
-                Generated {formatDate(latestRec!.created_at)} ·{" "}
-                {latestRec!.model} · advisory only — verify before awarding.
+                {t("aiMeta", { date: formatDate(latestRec!.created_at, locale), model: latestRec!.model })}
               </CardDescription>
               {recommendation.data.weights && (
                 <p className="text-xs text-slate-400">
-                  Priorities used: {describeWeights(recommendation.data.weights)}
+                  {t("prioritiesUsed", {
+                    list: (() => {
+                      const w = recommendation.data.weights!;
+                      const total = w.price + w.delivery + w.warranty + w.paymentTerms;
+                      return (["price", "delivery", "warranty", "paymentTerms"] as const)
+                        .map((k) => `${tr(`priority.${k}.label`)}: ${total > 0 ? Math.round((w[k] / total) * 100) : 25}%`)
+                        .join(locale === "ar" ? "، " : ", ");
+                    })(),
+                  })}
                 </p>
               )}
               {preferencesLine && (
@@ -827,11 +832,11 @@ export default async function ComparePage({
               )}
             </CardHeader>
             <CardContent className="space-y-5">
-              <p className="rounded-xl bg-indigo-50/60 p-4 text-sm font-medium leading-relaxed text-indigo-950">
+              <p className="rounded-xl bg-indigo-50/60 p-4 text-sm font-medium leading-relaxed text-indigo-950" dir="auto">
                 {recommendation.data.recommendation}
               </p>
 
-              <p className="text-sm leading-relaxed text-slate-600">
+              <p className="text-sm leading-relaxed text-slate-600" dir="auto">
                 {recommendation.data.reasoning}
               </p>
 
@@ -853,19 +858,19 @@ export default async function ComparePage({
                         >
                           {entry.rank}
                         </span>
-                        {entry.supplier}
+                        <bdi>{entry.supplier}</bdi>
                       </p>
                       {entry.strengths.length > 0 && (
                         <ul className="mt-2 space-y-1 text-xs text-emerald-700">
                           {entry.strengths.map((s, i) => (
-                            <li key={i}>+ {s}</li>
+                            <li key={i} dir="auto">+ {s}</li>
                           ))}
                         </ul>
                       )}
                       {entry.weaknesses.length > 0 && (
                         <ul className="mt-1.5 space-y-1 text-xs text-red-500">
                           {entry.weaknesses.map((w, i) => (
-                            <li key={i}>− {w}</li>
+                            <li key={i} dir="auto">− {w}</li>
                           ))}
                         </ul>
                       )}
@@ -876,12 +881,12 @@ export default async function ComparePage({
               {recommendation.data.risks.length > 0 && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                   <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800">
-                    <AlertTriangle size={13} />
-                    Verify before awarding
+                    <AlertTriangle size={13} aria-hidden="true" />
+                    {t("verify")}
                   </p>
                   <ul className="mt-2 list-disc space-y-1 ps-4 text-xs text-amber-800">
                     {recommendation.data.risks.map((r, i) => (
-                      <li key={i}>{r}</li>
+                      <li key={i} dir="auto">{r}</li>
                     ))}
                   </ul>
                 </div>
