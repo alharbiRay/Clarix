@@ -25,6 +25,8 @@ import { AuditTimeline, type TimelineEvent } from "@/components/rfq/audit-timeli
 import { FadeIn } from "@/components/motion";
 import { formatDate, formatMoney } from "@/lib/format";
 import type { Quote, QuoteItem, Rfq, RfqAward, RfqItem, RfqSupplier } from "@/lib/types";
+import { getLocale, getTranslations } from "next-intl/server";
+import { isLocale } from "@/i18n/config";
 
 // Quote saves record a durable recommendation job and start it in the
 // background with waitUntil (src/lib/jobs/schedule.ts), which runs within
@@ -33,34 +35,29 @@ export const maxDuration = 60;
 
 const SUPPLIER_STATUS: Record<
   RfqSupplier["status"],
-  { label: string; bg: string; text: string; dot: string }
+  { bg: string; text: string; dot: string }
 > = {
   pending: {
-    label: "Not invited",
     bg: "bg-slate-100",
     text: "text-slate-600",
     dot: "bg-slate-400",
   },
   sent: {
-    label: "Invited",
     bg: "bg-indigo-50",
     text: "text-indigo-700",
     dot: "bg-indigo-500",
   },
   viewed: {
-    label: "Viewed",
     bg: "bg-amber-50",
     text: "text-amber-700",
     dot: "bg-amber-500",
   },
   submitted: {
-    label: "Quote received",
     bg: "bg-emerald-50",
     text: "text-emerald-700",
     dot: "bg-emerald-500",
   },
   declined: {
-    label: "Declined",
     bg: "bg-red-50",
     text: "text-red-600",
     dot: "bg-red-500",
@@ -73,7 +70,9 @@ export default async function RfqDetailPage({
   params: { id: string };
 }) {
   const supabase = createClient();
-
+  const t = await getTranslations("rfqDetail");
+  const rawLocale = await getLocale();
+  const locale = isLocale(rawLocale) ? rawLocale : "en";
   const [{ data }, { data: awardData }, { data: auditData }] = await Promise.all([
     supabase
       .from("rfqs")
@@ -139,7 +138,7 @@ export default async function RfqDetailPage({
       const supplier = suppliersById.get(q.supplier_id);
       return {
         quoteId: q.id,
-        label: supplier?.company_name || supplier?.email || "Unknown supplier",
+        label: supplier?.company_name || supplier?.email || t("unknownSupplier"),
         total: quoteTotal(q),
         deliveryDays: q.delivery_days,
       };
@@ -153,8 +152,8 @@ export default async function RfqDetailPage({
             href="/rfqs"
             className="-ms-1 inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
           >
-            <ArrowLeft size={13} className="rtl:rotate-180" />
-            All RFQs
+            <ArrowLeft size={13} className="rtl:rotate-180" aria-hidden="true" />
+            {t("back")}
           </Link>
           <div className="flex items-center gap-3">
             <span className="text-xs font-medium text-slate-400">
@@ -162,18 +161,20 @@ export default async function RfqDetailPage({
             </span>
             <RfqStatusBadge status={rfq.status} />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">{rfq.title}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            <bdi>{rfq.title}</bdi>
+          </h1>
           <p className="text-sm text-slate-500">
-            {rfq.project ? `${rfq.project} · ` : ""}
-            Deadline {formatDate(rfq.deadline)} · {rfq.currency}
+            {rfq.project ? <><bdi>{rfq.project}</bdi>{" · "}</> : null}
+            {t("meta", { date: formatDate(rfq.deadline, locale), currency: rfq.currency })}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {comparableCount > 0 && (
             <Button asChild variant="outline" className="gap-2">
               <Link href={`/rfqs/${rfq.id}/compare`}>
-                <Scale size={15} />
-                Compare quotes
+                <Scale size={15} aria-hidden="true" />
+                {t("compare")}
               </Link>
             </Button>
           )}
@@ -186,8 +187,7 @@ export default async function RfqDetailPage({
           <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
             <span>
-              <strong>Auto-approved:</strong> {awardRecommendedLabel} — PO sent{" "}
-              {formatDate(award.po_sent_at)}.
+              <strong>{t("autoApproved")}</strong> {t("poSent", { supplier: awardRecommendedLabel, date: formatDate(award.po_sent_at, locale) })}
             </span>
           </div>
         </FadeIn>
@@ -201,8 +201,7 @@ export default async function RfqDetailPage({
             <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
               <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
               <span>
-                <strong>Approved:</strong> {awardRecommendedLabel} — PO sent{" "}
-                {formatDate(award.po_sent_at)}.
+                <strong>{t("approved")}</strong> {t("poSent", { supplier: awardRecommendedLabel, date: formatDate(award.po_sent_at, locale) })}
               </span>
             </div>
           </FadeIn>
@@ -214,12 +213,12 @@ export default async function RfqDetailPage({
             <span className="flex items-center gap-2">
               <AlertTriangle size={15} className="shrink-0 text-amber-600" />
               <span>
-                <strong>Review needed:</strong> {award.reason}.{" "}
+                <strong>{t("reviewNeeded")}</strong> <span dir="auto">{award.reason}</span>.{" "}
                 <Link
                   href={`/rfqs/${rfq.id}/compare`}
                   className="underline underline-offset-2"
                 >
-                  View comparison
+                  {t("viewComparison")}
                 </Link>
               </span>
             </span>
@@ -239,7 +238,7 @@ export default async function RfqDetailPage({
       {rfq.description && (
         <FadeIn delay={0.02}>
           <Card>
-            <CardContent className="pt-6 text-sm leading-relaxed text-slate-600">
+            <CardContent className="pt-6 text-sm leading-relaxed text-slate-600" dir="auto">
               {rfq.description}
             </CardContent>
           </Card>
@@ -250,7 +249,7 @@ export default async function RfqDetailPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-semibold">
-              Line items ({items.length})
+              {t("lineItems", { count: items.length })}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -261,15 +260,9 @@ export default async function RfqDetailPage({
                     <TableHead className="w-12 text-xs font-semibold text-slate-500">
                       #
                     </TableHead>
-                    <TableHead className="text-xs font-semibold text-slate-500">
-                      Item
-                    </TableHead>
-                    <TableHead className="text-end text-xs font-semibold text-slate-500">
-                      Quantity
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold text-slate-500">
-                      Unit
-                    </TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">{t("item")}</TableHead>
+                    <TableHead className="text-end text-xs font-semibold text-slate-500">{t("quantity")}</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">{t("unit")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -277,7 +270,9 @@ export default async function RfqDetailPage({
                     <TableRow key={item.id} className="border-slate-100">
                       <TableCell className="text-slate-400">{i + 1}</TableCell>
                       <TableCell>
-                        <p className="font-medium">{item.name}</p>
+                        <p className="font-medium">
+                          <bdi>{item.name}</bdi>
+                        </p>
                         {item.description && (
                           <p className="text-xs text-slate-400">
                             {item.description}
@@ -303,12 +298,10 @@ export default async function RfqDetailPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-semibold">
-              Suppliers ({suppliers.length})
+              {t("suppliers", { count: suppliers.length })}
             </CardTitle>
             <CardDescription className="text-xs text-slate-400">
-              Each supplier has a unique quote-form link. Invitations are
-              emailed automatically when the RFQ is sent — copy a link below
-              if you need to share one manually.
+              {t("suppliersHint")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -316,18 +309,10 @@ export default async function RfqDetailPage({
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
-                    <TableHead className="text-xs font-semibold text-slate-500">
-                      Email
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold text-slate-500">
-                      Status
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold text-slate-500">
-                      Invited
-                    </TableHead>
-                    <TableHead className="text-end text-xs font-semibold text-slate-500">
-                      Quote link
-                    </TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">{t("email")}</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">{t("status")}</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">{t("invited")}</TableHead>
+                    <TableHead className="text-end text-xs font-semibold text-slate-500">{t("quoteLink")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -345,11 +330,11 @@ export default async function RfqDetailPage({
                             <span
                               className={`h-1.5 w-1.5 rounded-full ${st.dot}`}
                             />
-                            {st.label}
+                            {t(`inviteStatus.${supplier.status}`)}
                           </span>
                         </TableCell>
                         <TableCell className="text-slate-500">
-                          {formatDate(supplier.invited_at)}
+                          {formatDate(supplier.invited_at, locale)}
                         </TableCell>
                         <TableCell className="text-end">
                           <CopyLinkButton
@@ -371,12 +356,10 @@ export default async function RfqDetailPage({
           <CardHeader className="flex-row items-start justify-between space-y-0">
             <div className="space-y-1.5">
               <CardTitle className="text-sm font-semibold">
-                Quotes ({quotes.length})
+                {t("quotes", { count: quotes.length })}
               </CardTitle>
               <CardDescription className="text-xs text-slate-400">
-                Form submissions arrive automatically. PDF quotes are
-                extracted and confirmed by AI automatically — no review
-                needed.
+                {t("quotesHint")}
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -397,29 +380,18 @@ export default async function RfqDetailPage({
           <CardContent>
             {quotes.length === 0 ? (
               <p className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400">
-                No quotes yet. Share the quote links above, or upload a PDF a
-                supplier emailed you.
+                {t("noQuotes")}
               </p>
             ) : (
               <div className="overflow-hidden rounded-xl border border-slate-100">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50 hover:bg-slate-50">
-                      <TableHead className="text-xs font-semibold text-slate-500">
-                        Supplier
-                      </TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-500">
-                        Source
-                      </TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-500">
-                        Received
-                      </TableHead>
-                      <TableHead className="text-end text-xs font-semibold text-slate-500">
-                        Total
-                      </TableHead>
-                      <TableHead className="text-end text-xs font-semibold text-slate-500">
-                        Status
-                      </TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-500">{t("supplier")}</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-500">{t("source")}</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-500">{t("received")}</TableHead>
+                      <TableHead className="text-end text-xs font-semibold text-slate-500">{t("totalExVat")}</TableHead>
+                      <TableHead className="text-end text-xs font-semibold text-slate-500">{t("status")}</TableHead>
                       <TableHead className="w-10" />
                     </TableRow>
                   </TableHeader>
@@ -427,30 +399,26 @@ export default async function RfqDetailPage({
                     {quotes.map((quote) => {
                       const supplier = suppliersById.get(quote.supplier_id);
                       const supplierLabel =
-                        supplier?.company_name || supplier?.email || "This supplier";
+                        supplier?.company_name || supplier?.email || t("thisSupplier");
                       const total = quoteTotal(quote);
                       return (
                         <TableRow key={quote.id} className="border-slate-100">
                           <TableCell className="font-medium">
-                            {supplier?.company_name || supplier?.email || "—"}
+                            <bdi>{supplier?.company_name || supplier?.email || "—"}</bdi>
                           </TableCell>
                           <TableCell>
                             <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
                               {quote.source === "pdf" && <FileText size={12} />}
-                              {quote.source === "pdf"
-                                ? "PDF upload"
-                                : quote.source === "manual"
-                                  ? "Manual entry"
-                                  : "Form"}
+                              {quote.source === "pdf" ? t("sourcePdf") : quote.source === "manual" ? t("sourceManual") : t("sourceForm")}
                             </span>
                           </TableCell>
                           <TableCell className="text-slate-500">
-                            {formatDate(quote.submitted_at)}
+                            {formatDate(quote.submitted_at, locale)}
                           </TableCell>
                           <TableCell className="text-end font-semibold">
                             {total === null
                               ? "—"
-                              : formatMoney(total, rfq.currency)}
+                              : formatMoney(total, rfq.currency, locale)}
                           </TableCell>
                           <TableCell className="text-end">
                             {quote.status === "needs_review" ? (
@@ -461,15 +429,13 @@ export default async function RfqDetailPage({
                                 className="h-7 gap-1.5 border-amber-200 bg-amber-50 text-xs text-amber-700 hover:bg-amber-100 hover:text-amber-800"
                               >
                                 <Link href={`/rfqs/${rfq.id}/quotes/${quote.id}`}>
-                                  Review extraction
+                                  {t("reviewExtraction")}
                                 </Link>
                               </Button>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
                                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                {quote.status === "confirmed"
-                                  ? "Confirmed"
-                                  : "Submitted"}
+                                {quote.status === "confirmed" ? t("confirmed") : t("submitted")}
                               </span>
                             )}
                           </TableCell>
@@ -493,9 +459,9 @@ export default async function RfqDetailPage({
       <FadeIn delay={0.1}>
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-semibold">Decision history</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t("history")}</CardTitle>
             <CardDescription className="text-xs text-slate-500">
-              Every step and why it happened — recorded automatically and never edited.
+              {t("historyHint")}
             </CardDescription>
           </CardHeader>
           <CardContent>

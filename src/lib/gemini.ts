@@ -188,7 +188,7 @@ The quote was submitted by supplier "${input.supplier.company_name ?? input.supp
 
 Extract the quote into the structured format:
 - "items": include EVERY rfq_item_id from the list above, in the same order. Match each RFQ item to the corresponding line in the PDF by name/description — supplier wording often differs slightly. For each item:
-  - "unit_price": the per-unit price in ${input.currency}. If the PDF only shows a line total, divide by the RFQ quantity. Use null if the item is not quoted at all.
+  - "unit_price": the per-unit price in ${input.currency}, EXCLUDING VAT (Clarix stores every price before VAT). If the document shows prices that include VAT (e.g. "شامل الضريبة", "incl. VAT"), remove the VAT at the rate stated on the document (15% in Saudi Arabia if none is stated) and add a warning saying you did. If the PDF only shows a line total, divide by the RFQ quantity. Use null if the item is not quoted at all.
   - "total_price": the extended line total. If only a unit price is shown, multiply by the RFQ quantity. Null if not quoted.
   - "notes": alternatives offered, brand/model quoted, lead time for that item, or null.
 - "supplier_name": the company name as written in the PDF, or null.
