@@ -671,3 +671,11 @@ Arabic glyphs and Arial does, so since Phase 10 every Arabic word had rendered i
 IBM Plex Sans Arabic. `adjustFontFallback: false` on Geist removes that fallback. The cost is a
 little more layout shift for Latin text while Geist loads, which is small because the font is
 self-hosted and preloaded.
+
+## D-075: `rounded-lg` restored
+The documenter found that `borderRadius.lg` in `tailwind.config.ts` was a `color-mix(…<alpha-value>…)`
+expression, which is not a valid length. Every `rounded-lg` therefore rendered square. It is back
+to `var(--radius)` (8px), as shadcn intends. Two other pieces of drift stay as they are and are
+left to the owner:
+- the sidebar avatar's indigo-to-violet gradient;
+- a third chart violet, `#6D5FD6`.
