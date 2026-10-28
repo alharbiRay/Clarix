@@ -126,6 +126,26 @@ export function DecisionSheet() {
   const outcomeKey = `${decision.status}-${decision.quote.id}-${decision.status === "held" ? decision.reason : ""}`;
   const today = formatDate(new Date().toISOString(), locale);
 
+  const priorityControl = (name: string, className?: string) => (
+    <fieldset className={className}>
+      <legend className="text-[0.8rem] font-medium text-slate-600">{t("priority")}</legend>
+      <div className="mt-1.5 grid grid-cols-3 rounded-md border border-slate-300 bg-white p-0.5">
+        {PRIORITIES.map((p) => (
+          <label
+            key={p}
+            className={cn(
+              "cursor-pointer rounded-[5px] px-1 py-1.5 text-center text-[0.8rem] font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#7C6FE0]",
+              priority === p ? "bg-slate-950 text-white" : "text-slate-600 hover:text-slate-950"
+            )}
+          >
+            <input type="radio" name={name} value={p} checked={priority === p} onChange={() => setPriority(p)} className="sr-only" />
+            {t(`priorities.${p}`)}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+
   return (
     <section
       aria-label={t("label")}
@@ -144,25 +164,9 @@ export function DecisionSheet() {
         <div className="order-2 border-t border-slate-200 bg-slate-50/70 px-5 py-5 sm:px-7 lg:order-none lg:border-e lg:border-t-0">
           <h3 className="text-xs font-semibold text-slate-950">{t("rules")}</h3>
 
-          <fieldset className="mt-4">
-            <legend className="text-[0.8rem] font-medium text-slate-600">{t("priority")}</legend>
-            <div className="mt-1.5 grid grid-cols-3 rounded-md border border-slate-300 bg-white p-0.5">
-              {PRIORITIES.map((p) => (
-                <label
-                  key={p}
-                  className={cn(
-                    "cursor-pointer rounded-[5px] px-1 py-1.5 text-center text-[0.8rem] font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#7C6FE0]",
-                    priority === p ? "bg-slate-950 text-white" : "text-slate-600 hover:text-slate-950"
-                  )}
-                >
-                  <input type="radio" name="priority" value={p} checked={priority === p} onChange={() => setPriority(p)} className="sr-only" />
-                  {t(`priorities.${p}`)}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          {priorityControl("priority", "mt-4 hidden lg:block")}
 
-          <div className="mt-5 grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="mt-4 grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2 lg:mt-5 lg:grid-cols-1">
             <Stepper
               label={t("delivery")}
               value={t("days", { count: rules.maxDeliveryDays })}
@@ -212,6 +216,8 @@ export function DecisionSheet() {
 
         {/* The ranked quotes */}
         <div className="order-1 min-w-0 lg:order-none">
+          {/* Phones: the control that re-ranks sits right above the rows it moves. */}
+          {priorityControl("priority-phone", "border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:px-7 lg:hidden")}
           <div
             aria-hidden
             className="hidden grid-cols-[3rem_minmax(0,1fr)_8.5rem_6rem_6.5rem_4rem] gap-3 border-b border-slate-200 px-7 py-2.5 text-[0.7rem] font-medium text-slate-500 md:grid"
