@@ -42,6 +42,7 @@ export function SupplierPerformanceChart({
           <h3 className="text-sm font-semibold">{t("valueTitle")}</h3>
           <p className="text-xs text-slate-500">{t("valueHint")}</p>
         </div>
+        <div dir="ltr">
         <ResponsiveContainer width="100%" height={220}>
           <AreaChart data={data}>
             <defs>
@@ -77,6 +78,7 @@ export function SupplierPerformanceChart({
             />
           </AreaChart>
         </ResponsiveContainer>
+        </div>
       </FadeIn>
 
       <FadeIn delay={0.08} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -84,6 +86,7 @@ export function SupplierPerformanceChart({
           <h3 className="text-sm font-semibold">{t("countTitle")}</h3>
           <p className="text-xs text-slate-500">{t("perMonth")}</p>
         </div>
+        <div dir="ltr">
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
@@ -100,6 +103,7 @@ export function SupplierPerformanceChart({
             <Bar dataKey="quotes" fill="#10B981" radius={[6, 6, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
+        </div>
       </FadeIn>
     </div>
   );

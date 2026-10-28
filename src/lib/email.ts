@@ -1,5 +1,5 @@
 import { getFromAddress, getResendClient } from "@/lib/resend";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDate, formatMoney, vatPercent } from "@/lib/format";
 import { translatorFor } from "@/i18n/translator";
 import type { Locale } from "@/i18n/config";
 
@@ -177,7 +177,7 @@ export async function sendPoConfirmationEmail(input: PoConfirmationEmailInput) {
     </p>
     ${
       vat !== null && input.total !== null
-        ? `<p style="margin:0 0 4px;font-size:14px;color:#475569;">${t("vat", { rate: Math.round(vatRate * 1000) / 10, amount: money(vat) })}</p>
+        ? `<p style="margin:0 0 4px;font-size:14px;color:#475569;">${t("vat", { rate: vatPercent(vatRate), amount: money(vat) })}</p>
     <p style="margin:0 0 8px;font-size:14px;color:#0f172a;">${t("totalIncVat", { total: money(input.total + vat) })}</p>`
         : ""
     }

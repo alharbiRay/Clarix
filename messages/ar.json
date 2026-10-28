@@ -144,7 +144,7 @@
       "vat": "ضريبة القيمة المضافة ({rate}٪): {amount}",
       "totalIncVat": "الإجمالي شامل الضريبة: {total}",
       "terms": "التوريد: {delivery} · الضمان: {warranty}",
-      "days": "{count, plural, zero {لا أيام} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
+      "days": "{count, plural, zero {في اليوم نفسه} one {يوم واحد} two {يومان} few {# أيام} many {# يومًا} other {# يوم}}",
       "replyHint": "ردّوا على هذه الرسالة إن كان أي مما سبق لا يطابق عرضكم."
     },
     "autoApproved": {

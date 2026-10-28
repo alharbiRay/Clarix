@@ -46,7 +46,11 @@ export function LoginForm({ reason, next, tab }: { reason?: string; next?: strin
       toast.error(error.message);
       return;
     }
-    await syncLocaleAfterSignIn();
+    try {
+      await syncLocaleAfterSignIn();
+    } catch (e) {
+      console.error("[login] language sync failed:", e);
+    }
     router.push(safeNextPath(next));
     router.refresh();
   }

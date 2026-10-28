@@ -30,7 +30,7 @@ import { buyerHint, detectLanguage } from "@/lib/negotiation";
 import { snapshotFromRows } from "@/lib/negotiation/snapshot";
 import { getLocale, getTranslations } from "next-intl/server";
 import { intlLocale, isLocale } from "@/i18n/config";
-import { formatDate, formatMoney, vatOn } from "@/lib/format";
+import { formatDate, formatMoney, vatOn, vatPercent } from "@/lib/format";
 import {
   DEFAULT_RECOMMENDATION_WEIGHTS,
   recommendationContentSchema,
@@ -274,7 +274,7 @@ export default async function ComparePage({
   // guess from the name) and how far above the best other offer they are.
   const isDemo = Boolean(thresholdResult.data?.is_demo);
   const vatRate = Number(thresholdResult.data?.vat_rate ?? 0.15);
-  const vatPct = Math.round(vatRate * 1000) / 10;
+  const vatPct = vatPercent(vatRate);
   const linkedSupplierIds = rfq.rfq_suppliers.map((s) => s.supplier_id).filter((id): id is string => Boolean(id));
   const { data: languageRows } = linkedSupplierIds.length
     ? await supabase.from("suppliers").select("id, preferred_language").in("id", linkedSupplierIds)

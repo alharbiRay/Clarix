@@ -5,7 +5,8 @@ import { scheduleAutoRecommendation } from "@/lib/jobs/schedule";
 import { ensureSupplierProfile } from "@/lib/supplier-profile";
 import { quoteSchema, type QuoteFormValues } from "@/lib/validations/quote";
 import { recordAuditEvent } from "@/lib/audit";
-import { isLocale } from "@/i18n/config";
+import { cookies } from "next/headers";
+import { isLocale, QUOTE_LOCALE_COOKIE } from "@/i18n/config";
 import { translatorFor } from "@/i18n/translator";
 
 /**
@@ -136,10 +137,14 @@ export async function submitQuote(token: string, values: QuoteFormValues, langua
     companyName: supplier.company_name,
     contactName: supplier.contact_name,
   });
-  // The language they quoted in is a good default for future emails to them
-  // (never overrides one already saved).
+  // The language they quoted in becomes the default for future emails. One
+  // they picked with the page's switcher replaces a saved preference; one we
+  // picked for them only fills a gap.
   if (profileId && isLocale(language)) {
-    await supabase.from("suppliers").update({ preferred_language: language }).eq("id", profileId).is("preferred_language", null);
+    const explicit = cookies().get(QUOTE_LOCALE_COOKIE)?.value === language;
+    const update = supabase.from("suppliers").update({ preferred_language: language }).eq("id", profileId);
+    const { error: langError } = await (explicit ? update : update.is("preferred_language", null));
+    if (langError) console.error("[submitQuote] preferred_language update failed:", langError.message);
   }
 
   // Recorded as a durable job and run in the background — the supplier no

@@ -1,5 +1,6 @@
 "use server";
 
+import { isValidVatPercent } from "@/lib/format";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireWritableUser } from "@/lib/auth/session";
@@ -75,7 +76,7 @@ export async function updatePriceAlertThreshold(percent: number) {
  * percentage (0–50, up to 2 decimals); stored as a fraction. 0 hides VAT.
  */
 export async function updateVatRate(percent: number) {
-  if (typeof percent !== "number" || !Number.isFinite(percent) || percent < 0 || percent > 50 || Math.round(percent * 100) !== percent * 100) {
+  if (!isValidVatPercent(percent)) {
     return { error: "Enter a percentage from 0 to 50." };
   }
   const supabase = createClient();

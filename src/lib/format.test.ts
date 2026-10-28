@@ -31,3 +31,17 @@ describe("Arabic plurals in counted phrases", () => {
     expect(s("quotesOn", { quoted: 15, invited: 15 })).toBe("قدّم عروضًا في 15 من 15 دعوة");
   });
 });
+
+describe("VAT percent", () => {
+  it("accepts every two-decimal rate, despite float noise", async () => {
+    const { isValidVatPercent } = await import("@/lib/format");
+    for (const p of [0, 0.07, 1.15, 5, 7.25, 15, 50]) expect(isValidVatPercent(p)).toBe(true);
+    for (const p of [-1, 50.01, 1.155, Number.NaN, Infinity]) expect(isValidVatPercent(p)).toBe(false);
+  });
+
+  it("displays the rate with up to two decimals", async () => {
+    const { vatPercent } = await import("@/lib/format");
+    expect(vatPercent(0.15)).toBe(15);
+    expect(vatPercent(0.0725)).toBe(7.25);
+  });
+});

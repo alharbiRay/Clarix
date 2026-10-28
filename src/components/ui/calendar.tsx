@@ -40,7 +40,7 @@ function Calendar({
       captionLayout={captionLayout}
       formatters={{
         formatMonthDropdown: (date) =>
-          date.toLocaleString("en-US", { month: "short" }),
+          date.toLocaleString(locale.code?.startsWith("ar") ? "ar-SA-u-nu-latn-ca-gregory" : "en-US", { month: "short" }),
         ...formatters,
       }}
       classNames={{

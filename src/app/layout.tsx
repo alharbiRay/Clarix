@@ -5,6 +5,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import { Toaster } from "@/components/ui/sonner";
 import { MotionProvider } from "@/components/motion-provider";
+import { DirectionProvider } from "@/components/direction-provider";
 import { dirOf, isLocale, DEFAULT_LOCALE } from "@/i18n/config";
 import "./globals.css";
 
@@ -45,8 +46,10 @@ export default async function RootLayout({
     <html lang={locale} dir={dirOf(locale)}>
       <body className={`${geistSans.variable} ${geistMono.variable} ${plexArabic.variable} font-sans antialiased`}>
         <NextIntlClientProvider locale={locale} messages={messages} timeZone="Asia/Riyadh">
-          <MotionProvider>{children}</MotionProvider>
-          <Toaster richColors position={locale === "ar" ? "top-left" : "top-right"} dir={dirOf(locale)} />
+          <DirectionProvider dir={dirOf(locale)}>
+            <MotionProvider>{children}</MotionProvider>
+            <Toaster richColors position={locale === "ar" ? "top-left" : "top-right"} dir={dirOf(locale)} />
+          </DirectionProvider>
         </NextIntlClientProvider>
       </body>
     </html>

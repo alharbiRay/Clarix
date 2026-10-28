@@ -540,9 +540,17 @@ browser's Accept-Language, then English. It is mirrored to `profiles.locale`, so
 the buyer across devices and is available to emails and background jobs.
 - Every existing link (emails, bookmarks, the Resend webhook, the jobs API) keeps working.
 - Server-rendered pages already depend on the session cookie, so nothing that could be cached is lost.
-- The supplier form doesn't use the cookie for its first render. It picks the supplier's language
-  (saved preference, then Arabic script in their name, then the buyer's language), and the supplier
-  can switch.
+- A buyer who never touches the switcher gets the language they're using (from the browser) saved
+  on first sign-in or dashboard visit, so emails and background recommendations match the screen.
+- The supplier form has its own cookie (`CLARIX_QUOTE_LOCALE`, path `/quote`) and never reads or
+  writes the buyer's. It picks the supplier's language: their switch on the page, then their saved
+  preference, then Arabic script in their name, then the buyer's language.
+  - A buyer previewing their own link can't change their own language, or have it saved as the
+    supplier's.
+  - A language the supplier switched to replaces their saved preference. One picked for them only
+    fills a gap.
+- Radix widgets (Select, menus, tabs) get the direction from a `DirectionProvider`, because they
+  don't read `<html dir>`.
 
 ## D-063: Prices are stored excluding VAT; VAT is a display line
 Every quoted price, total, saving and report figure stays excluding VAT, so quotes compare on one
@@ -565,4 +573,8 @@ Text that is stored rather than rendered stays in the language it was written in
 - the review-needed email's reason (an English sentence from the approval engine).
 
 Error toasts from server actions are still English, except on the supplier form, which is fully
-translated. Project names and supplier notes are the buyer's own text and are not translated.
+translated.
+
+On the supplier page, the outer `<html lang dir>` and the toast position follow the visitor's
+browser, not the supplier's language. The page itself, its widgets and its portals use the
+supplier's language. Project names and supplier notes are the buyer's own text and are not translated.

@@ -7,7 +7,8 @@ import { SupplierQuoteForm } from "@/components/supplier-quote-form";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { Logo } from "@/components/logo";
 import { formatDate } from "@/lib/format";
-import { dirOf, isLocale, LOCALE_COOKIE, type Locale } from "@/i18n/config";
+import { dirOf, isLocale, QUOTE_LOCALE_COOKIE, type Locale } from "@/i18n/config";
+import { DirectionProvider } from "@/components/direction-provider";
 import { messagesFor, supplierLanguage, translatorFor } from "@/i18n/translator";
 import type { Rfq, RfqItem, RfqSupplier } from "@/lib/types";
 
@@ -19,24 +20,27 @@ export const maxDuration = 60;
 
 /**
  * The supplier's page is in the SUPPLIER's language, not the buyer's: their
- * own choice on this page (cookie) → their saved preference → Arabic if
- * their name is in Arabic → the buyer's language.
+ * own choice on this page (its own cookie, never the buyer's NEXT_LOCALE) →
+ * their saved preference → Arabic if their name is in Arabic → the buyer's
+ * language.
  */
 function PublicShell({ locale, children }: { locale: Locale; children: React.ReactNode }) {
   const t = translatorFor(locale, "supplierPortal");
   return (
     <NextIntlClientProvider locale={locale} messages={messagesFor(locale)} timeZone="Asia/Riyadh">
+      <DirectionProvider dir={dirOf(locale)}>
       <div lang={locale} dir={dirOf(locale)} className="min-h-screen bg-slate-50 text-slate-900">
         <header className="border-b border-slate-200 bg-white">
           <div className="mx-auto flex max-w-3xl items-center gap-2.5 px-6 py-4">
             <Logo className="h-8 w-8" />
             <span className="text-lg font-bold tracking-tight">Clarix</span>
             <span className="ms-auto hidden text-xs text-slate-500 sm:inline">{t("portal")}</span>
-            <LanguageSwitcher className="ms-2" />
+            <LanguageSwitcher className="ms-2" scope="quote" />
           </div>
         </header>
         <main className="mx-auto max-w-3xl px-6 py-10">{children}</main>
       </div>
+      </DirectionProvider>
     </NextIntlClientProvider>
   );
 }
@@ -55,7 +59,7 @@ function StatusCard({ icon: Icon, title, body }: { icon: typeof FileQuestion; ti
 
 export default async function SupplierQuotePage({ params }: { params: { token: string } }) {
   const supabase = createAdminClient();
-  const chosen = cookies().get(LOCALE_COOKIE)?.value;
+  const chosen = cookies().get(QUOTE_LOCALE_COOKIE)?.value;
 
   const { data } = await supabase
     .from("rfq_suppliers")

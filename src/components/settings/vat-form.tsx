@@ -1,5 +1,6 @@
 "use client";
 
+import { isValidVatPercent } from "@/lib/format";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
@@ -15,7 +16,7 @@ export function VatForm({ initialPercent }: { initialPercent: number }) {
   const [touched, setTouched] = useState(false);
   const [isPending, startTransition] = useTransition();
   const parsed = parseNumberInput(value);
-  const valid = parsed !== null && !Number.isNaN(parsed) && parsed >= 0 && parsed <= 50 && Math.round(parsed * 100) === parsed * 100;
+  const valid = parsed !== null && isValidVatPercent(parsed);
 
   return (
     <form

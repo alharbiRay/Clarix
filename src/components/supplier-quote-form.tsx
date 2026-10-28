@@ -5,7 +5,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocale, useTranslations } from "next-intl";
 import { submitQuote } from "@/app/quote/[token]/actions";
-import { formatMoney, vatOn } from "@/lib/format";
+import { formatMoney, vatOn, vatPercent } from "@/lib/format";
 import { isLocale } from "@/i18n/config";
 import { sanitizeDecimalInput, sanitizeIntegerInput } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -200,7 +200,7 @@ export function SupplierQuoteForm({
             {vatRate > 0 && (
               <>
                 <div className="flex items-center justify-between text-slate-600">
-                  <dt>{tv("line", { rate: Math.round(vatRate * 1000) / 10 })}</dt>
+                  <dt>{tv("line", { rate: vatPercent(vatRate) })}</dt>
                   <dd className="tabular-nums">{money(vatOn(total, vatRate))}</dd>
                 </div>
                 <div className="flex items-center justify-between border-t border-slate-200 pt-1.5 text-slate-700">

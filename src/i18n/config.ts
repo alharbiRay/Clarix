@@ -7,6 +7,8 @@ export const LOCALES = ["en", "ar"] as const;
 export type Locale = (typeof LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = "en";
 export const LOCALE_COOKIE = "NEXT_LOCALE";
+/** The supplier quote page's own language choice, kept apart from the buyer's (D-062). */
+export const QUOTE_LOCALE_COOKIE = "CLARIX_QUOTE_LOCALE";
 
 export function isLocale(v: unknown): v is Locale {
   return v === "en" || v === "ar";

@@ -4,11 +4,11 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { Languages } from "lucide-react";
-import { setLocale } from "@/app/locale-actions";
+import { setLocale, setQuoteLocale } from "@/app/locale-actions";
 import { cn } from "@/lib/utils";
 
 /** Toggles Arabic / English. Shows the language you'd switch TO, written in that language. */
-export function LanguageSwitcher({ className }: { className?: string }) {
+export function LanguageSwitcher({ className, scope = "app" }: { className?: string; scope?: "app" | "quote" }) {
   const locale = useLocale();
   const t = useTranslations("language");
   const router = useRouter();
@@ -22,7 +22,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
       lang={next}
       onClick={() =>
         start(async () => {
-          await setLocale(next);
+          await (scope === "quote" ? setQuoteLocale(next) : setLocale(next));
           router.refresh();
         })
       }

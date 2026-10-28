@@ -26,6 +26,17 @@ export function formatDate(iso: string | null, locale: Locale = "en") {
   }).format(new Date(iso));
 }
 
+/** A VAT rate (fraction) as a percentage for display, up to 2 decimals: 0.0725 → 7.25. */
+export function vatPercent(rate: number) {
+  return Math.round(rate * 10000) / 100;
+}
+
+/** 0–50 with at most two decimals. Tolerates float noise (1.15 * 100 = 114.99999999999999). */
+export function isValidVatPercent(percent: number) {
+  if (typeof percent !== "number" || !Number.isFinite(percent) || percent < 0 || percent > 50) return false;
+  return Math.abs(percent * 100 - Math.round(percent * 100)) < 1e-6;
+}
+
 /** VAT on a total, rounded to halalas. rate is a fraction (0.15 = 15%). */
 export function vatOn(total: number, rate: number) {
   return Math.round(total * rate * 100) / 100;
