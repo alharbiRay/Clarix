@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Copy, Loader2, MessageSquareText, RotateCcw, Send, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { draftNegotiationReply, sendNegotiationMessage, type DraftSource } from "@/app/(dashboard)/rfqs/negotiation-actions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -57,6 +58,7 @@ export function NegotiateDialog({
   isDemo: boolean;
 }) {
   const uid = useId();
+  const t = useTranslations("negotiate");
   const router = useRouter();
   const subjectRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
@@ -71,7 +73,7 @@ export function NegotiateDialog({
   const [isSending, startSending] = useTransition();
 
   const parsedTarget = parseTarget(target);
-  const targetError = parsedTarget === "invalid" ? "Whole number from 1 to 50, or leave it empty to ask for their best price." : null;
+  const targetError = parsedTarget === "invalid" ? t("targetError") : null;
   const targetNumber = parsedTarget === "invalid" ? null : parsedTarget;
   const revealing = targetRevealsGap(targetNumber, gapPercent);
   const stale = Boolean(draft && (draft.language !== language || draft.targetPercent !== targetNumber));
@@ -83,7 +85,7 @@ export function NegotiateDialog({
 
   function requestDraft() {
     if (targetError) return;
-    if (draft && edited && !window.confirm("Replace your edited message with a new draft?")) return;
+    if (draft && edited && !window.confirm(t("confirmReplace"))) return;
     setError(null);
     startDrafting(async () => {
       const r = await draftNegotiationReply({ rfqId, quoteId, language, targetPercent: targetNumber });
@@ -120,7 +122,7 @@ export function NegotiateDialog({
         setError(r.error);
         return;
       }
-      toast.success(`Sent to ${supplierLabel}. Their reply will come to your email.`);
+      toast.success(t("sent", { supplier: supplierLabel }));
       setOpen(false);
       setDraft(null);
       router.refresh();
@@ -131,26 +133,26 @@ export function NegotiateDialog({
     if (!draft) return;
     try {
       await navigator.clipboard.writeText(`${draft.subject}\n\n${draft.body}`);
-      toast.success("Message copied");
+      toast.success(t("copied"));
     } catch {
-      toast.error("Couldn't copy. Select the text and copy it instead.");
+      toast.error(t("copyFailed"));
     }
   }
 
   const dir = (draft?.language ?? language) === "ar" ? "rtl" : "ltr";
   const description = {
-    higher: "Clarix drafts a polite counter-offer from this supplier's own quote. You can edit it before sending.",
-    lowest: "This supplier's offer is the most competitive so far. The draft asks whether they can improve their terms.",
-    unknown: "This quote leaves some lines unpriced. The draft asks the supplier to complete it and share their best price.",
+    higher: t("descHigher"),
+    lowest: t("descLowest"),
+    unknown: t("descUnknown"),
   }[position];
   const hint =
     hintPercent === null
-      ? "Leave empty to ask for their best price."
+      ? t("hintEmpty")
       : gapPercent !== null && gapPercent >= 30
-        ? "The best other offer is 30% or more lower. Only the percentage you enter is mentioned."
+        ? t("hint30")
         : hintPercent < 5
-          ? "The best other offer is less than 5% lower. Only the percentage you enter is mentioned."
-          : `The best other offer is about ${hintPercent}% lower. Only the percentage you enter is mentioned.`;
+          ? t("hintUnder5")
+          : t("hintAbout", { pct: hintPercent });
 
   return (
     <Dialog
@@ -163,25 +165,25 @@ export function NegotiateDialog({
       <DialogTrigger asChild>
         <Button type="button" size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs">
           <MessageSquareText size={13} aria-hidden="true" />
-          Negotiate
+          {t("trigger")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>
-            Negotiate with <bdi>{supplierLabel}</bdi>
+            {t("title")} <bdi>{supplierLabel}</bdi>
           </DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <p className="flex items-start gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
           <ShieldCheck size={14} className="mt-0.5 shrink-0 text-emerald-600" aria-hidden="true" />
-          Other suppliers&apos; names and prices are never shared, and every message is checked before it goes out.
+          {t("privacy")}
         </p>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <fieldset>
-            <legend className="text-sm font-medium text-slate-800">Language</legend>
+            <legend className="text-sm font-medium text-slate-800">{t("language")}</legend>
             <div className="mt-1 inline-flex rounded-md border border-slate-200 p-0.5">
               {(
                 [
@@ -209,7 +211,7 @@ export function NegotiateDialog({
           {position !== "unknown" && (
             <div>
               <label htmlFor={`${uid}-target`} className="text-sm font-medium text-slate-800">
-                Ask for a reduction of <span className="font-normal text-slate-500">(optional)</span>
+                {t("reduction")} <span className="font-normal text-slate-500">{t("optional")}</span>
               </label>
               <div className="mt-1 flex items-center gap-2">
                 <input
@@ -217,7 +219,7 @@ export function NegotiateDialog({
                   type="text"
                   inputMode="numeric"
                   autoComplete="off"
-                  placeholder="Best price"
+                  placeholder={t("bestPrice")}
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
                   aria-invalid={Boolean(targetError)}
@@ -232,7 +234,7 @@ export function NegotiateDialog({
               {revealing && !targetError && (
                 <p className="mt-1 flex items-start gap-1.5 text-xs text-amber-800">
                   <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
-                  This is close to the real gap, so the supplier could work out the competing price. A rounder number is safer.
+                  {t("revealing")}
                 </p>
               )}
             </div>
@@ -248,14 +250,14 @@ export function NegotiateDialog({
           <div className="flex justify-end">
             <Button type="button" onClick={requestDraft} disabled={isDrafting || Boolean(targetError)} className="gap-2">
               {isDrafting && <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-              {isDrafting ? "Drafting…" : "Draft message"}
+              {isDrafting ? t("drafting") : t("draft")}
             </Button>
           </div>
         ) : (
           <div className="space-y-3">
             <div>
               <label htmlFor={`${uid}-subject`} className="text-sm font-medium text-slate-800">
-                Subject
+                {t("subject")}
               </label>
               <input
                 ref={subjectRef}
@@ -269,7 +271,7 @@ export function NegotiateDialog({
             </div>
             <div>
               <label htmlFor={`${uid}-body`} className="text-sm font-medium text-slate-800">
-                Message
+                {t("message")}
               </label>
               <textarea
                 id={`${uid}-body`}
@@ -286,7 +288,7 @@ export function NegotiateDialog({
               </p>
             </div>
             {stale && (
-              <p className="text-xs text-amber-800">You changed the language or target. Redraft to apply it before sending.</p>
+              <p className="text-xs text-amber-800">{t("stale")}</p>
             )}
           </div>
         )}
@@ -299,17 +301,17 @@ export function NegotiateDialog({
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-4">
             <Button type="button" variant="ghost" size="sm" onClick={requestDraft} disabled={isDrafting || isSending} className="gap-1.5">
               <RotateCcw size={14} aria-hidden="true" />
-              {isDrafting ? "Drafting…" : "Redraft"}
+              {isDrafting ? t("drafting") : t("redraft")}
             </Button>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {isDemo && <span className="text-xs text-slate-500">Sending is turned off in the demo.</span>}
+              {isDemo && <span className="text-xs text-slate-500">{t("demoOff")}</span>}
               <Button type="button" variant="outline" size="sm" onClick={copy} className="gap-1.5">
                 <Copy size={14} aria-hidden="true" />
-                Copy
+                {t("copy")}
               </Button>
               <Button type="button" size="sm" onClick={send} disabled={isSending || isDrafting || isDemo || stale} className="gap-1.5">
                 {isSending ? <Loader2 size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Send size={14} aria-hidden="true" />}
-                {isSending ? "Sending…" : "Send"}
+                {isSending ? t("sending") : t("send")}
               </Button>
             </div>
           </div>
