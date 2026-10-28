@@ -15,7 +15,7 @@ One branch and PR per phase, merged into `master` in order (merge commits, no sq
 | 7. Configurable approval rules | merged (reviewed, fixes applied) | `feat/phase-07-approval-rules` | [#11](https://github.com/alharbiRay/Clarix/pull/11) | tsc, lint, tests, build, settings form and live preview checked in the browser (demo) |
 | 8. Negotiation assistant | merged (reviewed, fixes applied) | `feat/phase-08-negotiation` | [#12](https://github.com/alharbiRay/Clarix/pull/12) | tsc, lint, 531 tests, build, dialog checked in the browser (English + Arabic, demo) |
 | 9. Reports | merged (reviewed, fixes applied) | `feat/phase-09-reports` | [#13](https://github.com/alharbiRay/Clarix/pull/13) | tsc, lint, 609 tests, build, page + CSV checked in the browser (demo) |
-| 10. Arabic/English + RTL + VAT | in review | `feat/phase-10-i18n` | | tsc, lint, 642 tests, build, Arabic pages checked in the browser (settings, reports, supplier, compare, new RFQ; demo) |
+| 10. Arabic/English + RTL + VAT | merged (reviewed, fixes applied) | `feat/phase-10-i18n` | [#14](https://github.com/alharbiRay/Clarix/pull/14) | tsc, lint, 659 tests, build, Arabic pages checked in the browser (settings, reports, supplier, compare, new RFQ; demo) |
 | 11. Engineering hardening | pending | | | |
 | 12. Landing + pricing | pending | | | |
 
