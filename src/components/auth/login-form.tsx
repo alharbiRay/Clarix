@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
+import { syncLocaleAfterSignIn } from "@/app/locale-actions";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,17 +24,16 @@ import { safeNextPath } from "@/lib/auth/safe-redirect";
 import { DemoEntry } from "@/components/demo/demo-entry";
 
 /** Message for /login?reason=… — set by src/middleware.ts when the session check fails. */
-const REASONS: Record<string, string> = {
-  session_unavailable:
-    "We couldn't confirm your session just now — our sign-in service was slow to respond. Please sign in again.",
-  demo_unavailable:
-    "The demo workspace isn't available right now. You can still create a free account below.",
+const REASONS: Record<string, "reasonSessionUnavailable" | "reasonDemoUnavailable"> = {
+  session_unavailable: "reasonSessionUnavailable",
+  demo_unavailable: "reasonDemoUnavailable",
 };
 
 export function LoginForm({ reason, next, tab }: { reason?: string; next?: string; tab?: string }) {
   const router = useRouter();
   const supabase = createClient();
   const [loading, setLoading] = useState(false);
+  const t = useTranslations("auth");
 
   async function handleSignIn(formData: FormData) {
     setLoading(true);
@@ -44,6 +46,7 @@ export function LoginForm({ reason, next, tab }: { reason?: string; next?: strin
       toast.error(error.message);
       return;
     }
+    await syncLocaleAfterSignIn();
     router.push(safeNextPath(next));
     router.refresh();
   }
@@ -72,19 +75,20 @@ export function LoginForm({ reason, next, tab }: { reason?: string; next?: strin
       router.push("/dashboard");
       router.refresh();
     } else {
-      toast.success("Check your email to confirm your account.");
+      toast.success(t("checkEmail"));
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <LanguageSwitcher className="absolute end-4 top-4" />
       <FadeIn className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center gap-2 text-center">
           <div className="flex items-center justify-center gap-2.5">
             <Logo className="h-9 w-9" />
             <span className="text-2xl font-bold tracking-tight">Clarix</span>
           </div>
-          <p className="text-sm text-slate-400">Procurement, simplified.</p>
+          <p className="text-sm text-slate-500">{t("tagline")}</p>
         </div>
 
         {reason && REASONS[reason] && (
@@ -92,32 +96,32 @@ export function LoginForm({ reason, next, tab }: { reason?: string; next?: strin
             role="status"
             className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
           >
-            {REASONS[reason]}
+            {t(REASONS[reason])}
           </p>
         )}
 
         <Tabs defaultValue={tab === "signup" ? "signup" : "signin"}>
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="signin">Sign in</TabsTrigger>
-            <TabsTrigger value="signup">Create account</TabsTrigger>
+            <TabsTrigger value="signin">{t("signIn")}</TabsTrigger>
+            <TabsTrigger value="signup">{t("createAccount")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="signin">
             <Card>
               <CardHeader>
-                <CardTitle>Welcome back</CardTitle>
+                <CardTitle>{t("welcomeBack")}</CardTitle>
                 <CardDescription>
-                  Sign in to manage your RFQs and quotes.
+                  {t("signInHint")}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <form action={handleSignIn} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="email">{t("email")}</Label>
                     <Input id="email" name="email" type="email" required />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
+                    <Label htmlFor="password">{t("password")}</Label>
                     <Input
                       id="password"
                       name="password"
@@ -126,7 +130,7 @@ export function LoginForm({ reason, next, tab }: { reason?: string; next?: strin
                     />
                   </div>
                   <Button className="w-full" disabled={loading}>
-                    {loading ? "Signing in…" : "Sign in"}
+                    {loading ? t("signingIn") : t("signIn")}
                   </Button>
                 </form>
               </CardContent>
@@ -136,19 +140,19 @@ export function LoginForm({ reason, next, tab }: { reason?: string; next?: strin
           <TabsContent value="signup">
             <Card>
               <CardHeader>
-                <CardTitle>Create your account</CardTitle>
+                <CardTitle>{t("createTitle")}</CardTitle>
                 <CardDescription>
-                  Start comparing supplier quotes in minutes.
+                  {t("createHint")}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <form action={handleSignUp} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="full_name">Full name</Label>
+                    <Label htmlFor="full_name">{t("fullName")}</Label>
                     <Input id="full_name" name="full_name" required />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
+                    <Label htmlFor="signup-email">{t("email")}</Label>
                     <Input
                       id="signup-email"
                       name="email"
@@ -157,7 +161,7 @@ export function LoginForm({ reason, next, tab }: { reason?: string; next?: strin
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
+                    <Label htmlFor="signup-password">{t("password")}</Label>
                     <Input
                       id="signup-password"
                       name="password"
@@ -167,7 +171,7 @@ export function LoginForm({ reason, next, tab }: { reason?: string; next?: strin
                     />
                   </div>
                   <Button className="w-full" disabled={loading}>
-                    {loading ? "Creating account…" : "Create account"}
+                    {loading ? t("creatingAccount") : t("createAccount")}
                   </Button>
                 </form>
               </CardContent>

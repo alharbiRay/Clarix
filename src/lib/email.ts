@@ -1,5 +1,7 @@
 import { getFromAddress, getResendClient } from "@/lib/resend";
 import { formatDate, formatMoney } from "@/lib/format";
+import { translatorFor } from "@/i18n/translator";
+import type { Locale } from "@/i18n/config";
 
 /** Logs the full Resend error (name/statusCode/message) before throwing — nothing else in this pipeline does. */
 function throwOnError(
@@ -15,9 +17,11 @@ function throwOnError(
   throw new Error(`${error.name}: ${error.message}`);
 }
 
-function wrapper(preheader: string, bodyHtml: string) {
+function wrapper(preheader: string, bodyHtml: string, locale: Locale = "en") {
+  const dir = locale === "ar" ? "rtl" : "ltr";
+  const footer = translatorFor(locale, "emails")("footer");
   return `<!doctype html>
-<html>
+<html lang="${locale}" dir="${dir}">
   <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
     <span style="display:none;font-size:1px;color:#f1f5f9;">${preheader}</span>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px;">
@@ -30,13 +34,13 @@ function wrapper(preheader: string, bodyHtml: string) {
               </td>
             </tr>
             <tr>
-              <td style="padding:28px;">
+              <td style="padding:28px;text-align:${dir === "rtl" ? "right" : "left"};" dir="${dir}">
                 ${bodyHtml}
               </td>
             </tr>
             <tr>
               <td style="padding:16px 28px;border-top:1px solid #e2e8f0;">
-                <p style="margin:0;font-size:12px;color:#94a3b8;">Sent by Clarix — an RFQ &amp; quote comparison tool.</p>
+                <p style="margin:0;font-size:12px;color:#94a3b8;">${escapeHtml(footer)}</p>
               </td>
             </tr>
           </table>
@@ -62,51 +66,58 @@ interface RfqInvitationEmailInput {
   items: { name: string; quantity: number; unit: string }[];
   formUrl: string;
   replyToAddress: string;
+  /** The supplier's language (see supplierLanguage in src/i18n/translator.ts). */
+  language?: Locale;
 }
 
 export async function sendRfqInvitationEmail(input: RfqInvitationEmailInput) {
   const resend = getResendClient();
-  const greetingName = input.contactName || input.companyName || "there";
+  const locale: Locale = input.language ?? "en";
+  const t = translatorFor(locale, "emails.invitation");
+  const end = locale === "ar" ? "left" : "right";
+  const title = escapeHtml(input.rfq.title);
+  const greetingName = escapeHtml(input.contactName || input.companyName || t("greetingFallback"));
 
   const itemRows = input.items
     .map(
       (i) => `<tr>
-        <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#0f172a;">${i.name}</td>
-        <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#475569;text-align:right;">${i.quantity} ${i.unit}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#0f172a;">${escapeHtml(i.name)}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;color:#475569;text-align:${end};">${i.quantity} ${escapeHtml(i.unit)}</td>
       </tr>`
     )
     .join("");
 
   const body = `
-    <p style="margin:0 0 16px;font-size:15px;color:#0f172a;">Hi ${greetingName},</p>
-    <p style="margin:0 0 20px;font-size:15px;line-height:1.5;color:#334155;">
-      You've been invited to quote on <strong>${input.rfq.title}</strong>. Please review the items below and submit your pricing.
+    <p style="margin:0 0 16px;font-size:15px;color:#0f172a;">${t("greeting", { name: greetingName })}</p>
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#334155;">
+      ${t("intro", { title: `<strong>${title}</strong>` })}
     </p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
       <tr>
-        <td style="padding-bottom:6px;font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;">Item</td>
-        <td style="padding-bottom:6px;font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right;">Quantity</td>
+        <td style="padding-bottom:6px;font-size:12px;font-weight:600;color:#94a3b8;">${t("item")}</td>
+        <td style="padding-bottom:6px;font-size:12px;font-weight:600;color:#94a3b8;text-align:${end};">${t("quantity")}</td>
       </tr>
       ${itemRows}
     </table>
     <p style="margin:0 0 24px;padding:12px 16px;background:#fef3c7;border-radius:8px;font-size:14px;font-weight:600;color:#92400e;">
-      Deadline: ${formatDate(input.rfq.deadline)} · Currency: ${input.rfq.currency}
+      ${t("deadline", { date: formatDate(input.rfq.deadline, locale) })} · ${t("currency", { currency: escapeHtml(input.rfq.currency) })}<br>
+      <span style="font-weight:400;">${t("vatNote")}</span>
     </p>
     <table role="presentation" cellpadding="0" cellspacing="0">
       <tr>
-        <td style="padding-right:10px;">${button(input.formUrl, "Submit via form")}</td>
-        <td>${button(`mailto:${input.replyToAddress}?subject=${encodeURIComponent(`Quote for ${input.rfq.title}`)}`, "Reply with PDF", false)}</td>
+        <td style="padding-${end === "right" ? "right" : "left"}:10px;">${button(input.formUrl, t("submitForm"))}</td>
+        <td>${button(`mailto:${input.replyToAddress}?subject=${encodeURIComponent(t("replySubject", { title: input.rfq.title }))}`, t("replyPdf"), false)}</td>
       </tr>
     </table>
     <p style="margin:20px 0 0;font-size:12px;color:#94a3b8;">
-      Prefer email? Just reply to this message with your quote as a PDF attachment.
+      ${t("replyHint")}
     </p>`;
 
   const { error } = await resend.emails.send({
     from: getFromAddress(),
     to: input.to,
-    subject: `New RFQ from Clarix: ${input.rfq.title}`,
-    html: wrapper(`You're invited to quote on ${input.rfq.title}`, body),
+    subject: t("subject", { title: input.rfq.title }),
+    html: wrapper(t("preheader", { title }), body, locale),
     replyTo: input.replyToAddress,
   });
 
@@ -252,7 +263,7 @@ export async function sendNegotiationEmail(input: NegotiationEmailInput) {
     .split(/\n{2,}/)
     .map((p) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#0f172a;">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
     .join("");
-  const html = wrapper(escapeHtml(input.subject), `<div dir="${dir}" style="text-align:${dir === "rtl" ? "right" : "left"};">${paragraphs}</div>`);
+  const html = wrapper(escapeHtml(input.subject), `<div dir="${dir}" style="text-align:${dir === "rtl" ? "right" : "left"};">${paragraphs}</div>`, input.language);
 
   const { error } = await resend.emails.send({
     from: getFromAddress(),

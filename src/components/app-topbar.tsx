@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Search, Bell, Plus } from "lucide-react";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 export function AppTopbar({ unreadCount = 0 }: { unreadCount?: number }) {
   const router = useRouter();
+  const t = useTranslations("topbar");
 
   return (
     <header className="sticky top-0 z-30 flex print:hidden items-center justify-between border-b border-slate-200 bg-white/80 px-8 py-4 backdrop-blur">
@@ -23,16 +26,18 @@ export function AppTopbar({ unreadCount = 0 }: { unreadCount?: number }) {
         />
         <input
           name="q"
-          placeholder="Search RFQs, suppliers..."
+          placeholder={t("search")}
+          aria-label={t("searchLabel")}
           className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 ps-9 pe-4 text-sm outline-none transition-colors focus:border-slate-400 focus:bg-white"
         />
       </form>
       <div className="flex items-center gap-3">
+        <LanguageSwitcher />
         <Link
           href="/dashboard"
           className="relative rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6FE0]"
-          title="Notifications"
-          aria-label={unreadCount > 0 ? `Notifications: ${unreadCount} unread` : "Notifications: none unread"}
+          title={t("notifications")}
+          aria-label={unreadCount > 0 ? t("notificationsUnread", { count: unreadCount }) : t("notificationsNone")}
         >
           <Bell size={18} aria-hidden />
           {unreadCount > 0 && (
@@ -43,7 +48,7 @@ export function AppTopbar({ unreadCount = 0 }: { unreadCount?: number }) {
           href="/rfqs/new"
           className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
         >
-          <Plus size={16} /> New RFQ
+          <Plus size={16} aria-hidden="true" /> {t("newRfq")}
         </Link>
       </div>
     </header>

@@ -1,30 +1,18 @@
+import { getTranslations } from "next-intl/server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Logo } from "@/components/logo";
 import { DemoEntry } from "@/components/demo/demo-entry";
 
-export const metadata: Metadata = {
-  title: "Live demo — Clarix",
-  description:
-    "Walk through six months of RFQs, supplier quotes, AI recommendations and auto-approved purchase orders. No signup.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("demo");
+  return { title: t("pageTitle"), description: t("pageDescription") };
+}
 
-const TOUR = [
-  {
-    title: "25 RFQs, in Arabic and English",
-    body: "Construction supplies, office equipment, packaging and spare parts — drafts, open requests, and decisions already made.",
-  },
-  {
-    title: "Seven suppliers with real habits",
-    body: "The fast, cheap one. The reliable one that always quotes a long warranty. The one that never quotes a warranty at all.",
-  },
-  {
-    title: "Decisions with reasons",
-    body: "Purchase orders that went out automatically, and the ones Clarix held back for a human — with the AI's reasoning in numbers.",
-  },
-];
+const TOUR = [1, 2, 3] as const;
 
-export default function DemoPage() {
+export default async function DemoPage() {
+  const t = await getTranslations("demo");
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-16">
       <div className="w-full max-w-md">
@@ -34,22 +22,21 @@ export default function DemoPage() {
         </Link>
 
         <h1 className="mt-10 text-balance text-3xl font-bold tracking-tight text-slate-900">
-          Walk through six months of procurement at Al&nbsp;Waha Contracting.
+          {t("heading")}
         </h1>
         <p className="mt-3 text-[15px] leading-relaxed text-slate-600">
-          A complete sample workspace: every quote compared, every purchase order
-          explained. Click anything — nothing you do here is saved.
+          {t("intro")}
         </p>
 
         <ol className="mt-8 space-y-5 border-s border-slate-200 ps-5">
-          {TOUR.map((stop) => (
-            <li key={stop.title} className="relative">
+          {TOUR.map((n) => (
+            <li key={n} className="relative">
               <span
                 aria-hidden
                 className="absolute -start-[25px] top-1.5 h-2 w-2 rounded-full bg-[#7C6FE0] ring-4 ring-slate-50"
               />
-              <p className="text-sm font-semibold text-slate-900">{stop.title}</p>
-              <p className="mt-1 text-sm leading-relaxed text-slate-600">{stop.body}</p>
+              <p className="text-sm font-semibold text-slate-900">{t(`tour${n}Title`)}</p>
+              <p className="mt-1 text-sm leading-relaxed text-slate-600">{t(`tour${n}Body`)}</p>
             </li>
           ))}
         </ol>
@@ -57,12 +44,12 @@ export default function DemoPage() {
         <div className="mt-10">
           <DemoEntry prominent />
           <p className="mt-4 text-center text-sm text-slate-500">
-            Ready for your own?{" "}
+            {t("readyForOwn")}{" "}
             <Link
               href="/login?tab=signup"
               className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900"
             >
-              Create a free account
+              {t("createFree")}
             </Link>
           </p>
         </div>

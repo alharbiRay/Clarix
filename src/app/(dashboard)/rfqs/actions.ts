@@ -9,6 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { rfqSchema, type RfqFormValues } from "@/lib/validations/rfq";
 import { sendPoConfirmationEmail, sendRfqInvitationEmail } from "@/lib/email";
 import { inboundAddressForToken } from "@/lib/resend";
+import { supplierLanguage } from "@/i18n/translator";
 import { extractRfqFromText } from "@/lib/gemini";
 import { computeQuoteTotal } from "@/lib/quote-comparison";
 import { loadApprovalPolicy } from "@/lib/approval/policy";
@@ -166,6 +167,14 @@ export async function sendRfq(rfqId: string) {
         .sort((a, b) => a.position - b.position)
         .map((i) => ({ name: i.name, quantity: Number(i.quantity), unit: i.unit }));
 
+      // Each supplier is written to in their own language (saved preference,
+      // else Arabic for an Arabic name, else the buyer's language).
+      const [{ data: buyer }, { data: profiles }] = await Promise.all([
+        supabase.from("profiles").select("locale").eq("id", auth.user.id).maybeSingle(),
+        supabase.from("suppliers").select("email, preferred_language").in("email", suppliers.map((s) => s.email)),
+      ]);
+      const preferredByEmail = new Map((profiles ?? []).map((p) => [String(p.email).toLowerCase(), p.preferred_language as string | null]));
+
       // Wrapped in an async callback so a synchronous throw (e.g. a missing
       // env var read inside inboundAddressForToken) becomes a per-supplier
       // rejection instead of crashing sendRfq() entirely before any emails
@@ -181,6 +190,12 @@ export async function sendRfq(rfqId: string) {
             items,
             formUrl: `${appUrl}/quote/${supplier.token}`,
             replyToAddress: inboundAddressForToken(supplier.token),
+            language: supplierLanguage({
+              preferred: preferredByEmail.get(supplier.email.toLowerCase()),
+              companyName: supplier.company_name,
+              contactName: supplier.contact_name,
+              buyerLocale: buyer?.locale,
+            }),
           });
         })
       );

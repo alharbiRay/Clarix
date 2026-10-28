@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireWritableUser } from "@/lib/auth/session";
 import { sendRfqInvitationEmail } from "@/lib/email";
 import { inboundAddressForToken } from "@/lib/resend";
+import { supplierLanguage } from "@/i18n/translator";
 import type { RfqItem } from "@/lib/types";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -78,10 +79,11 @@ export async function inviteSupplierToRfq(rfqId: string, supplierId: string) {
 
   const { data: supplier } = await supabase
     .from("suppliers")
-    .select("id, email, company_name, contact_name")
+    .select("id, email, company_name, contact_name, preferred_language")
     .eq("id", supplierId)
     .single();
   if (!supplier) return { error: "Supplier not found" };
+  const { data: buyer } = await supabase.from("profiles").select("locale").eq("id", auth.user.id).maybeSingle();
 
   const { data: rfq } = await supabase
     .from("rfqs")
@@ -137,6 +139,12 @@ export async function inviteSupplierToRfq(rfqId: string, supplierId: string) {
         items,
         formUrl: `${appUrl}/quote/${invite.token}`,
         replyToAddress: inboundAddressForToken(invite.token),
+        language: supplierLanguage({
+          preferred: supplier.preferred_language,
+          companyName: supplier.company_name,
+          contactName: supplier.contact_name,
+          buyerLocale: buyer?.locale,
+        }),
       });
     } catch (e) {
       revalidatePath(`/rfqs/${rfqId}`);

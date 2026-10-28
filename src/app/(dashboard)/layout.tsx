@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppTopbar } from "@/components/app-topbar";
 import { DemoBanner } from "@/components/demo/demo-banner";
+import { getTranslations } from "next-intl/server";
 
 export default async function DashboardLayout({
   children,
@@ -15,6 +16,7 @@ export default async function DashboardLayout({
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
+  const t = await getTranslations("demo");
 
   const [{ data: profile }, { count: unreadCount }] = await Promise.all([
     supabase.from("profiles").select("full_name, is_demo").eq("id", user.id).single(),
@@ -31,7 +33,7 @@ export default async function DashboardLayout({
       <div className="ms-60 print:ms-0">
         {profile?.is_demo && <DemoBanner />}
         {profile?.is_demo && (
-          <p className="mb-3 hidden text-xs font-medium text-slate-600 print:block">Demo data: a sample workspace, not a real company.</p>
+          <p className="mb-3 hidden text-xs font-medium text-slate-600 print:block">{t("printNote")}</p>
         )}
         <AppTopbar unreadCount={unreadCount ?? 0} />
         <main className="p-8 print:p-0">{children}</main>

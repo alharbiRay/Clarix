@@ -1,1 +1,137 @@
-{}
+{
+  "meta": {
+    "title": "Clarix — RFQ Comparison for Procurement Teams",
+    "description": "Create RFQs, collect supplier quotes via form or PDF, and compare them with AI-powered recommendations."
+  },
+  "language": {
+    "switchTo": "Switch to Arabic"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "rfqs": "RFQs",
+    "suppliers": "Suppliers",
+    "reports": "Reports",
+    "settings": "Settings",
+    "buyer": "Buyer",
+    "signOut": "Sign out",
+    "mainNav": "Main navigation"
+  },
+  "topbar": {
+    "search": "Search RFQs, suppliers…",
+    "searchLabel": "Search",
+    "notifications": "Notifications",
+    "notificationsUnread": "Notifications: {count} unread",
+    "notificationsNone": "Notifications: none unread",
+    "newRfq": "New RFQ"
+  },
+  "demo": {
+    "bannerStrong": "Demo workspace.",
+    "bannerText": "Sample data, read-only — explore freely, nothing is saved.",
+    "createOwn": "Create your own workspace",
+    "printNote": "Demo data: a sample workspace, not a real company.",
+    "explore": "Explore the live demo",
+    "opening": "Opening the demo…",
+    "orLook": "or look around first",
+    "entryNote": "A sample contractor's last six months. Read-only, no signup.",
+    "pageTitle": "Live demo — Clarix",
+    "pageDescription": "Walk through six months of RFQs, supplier quotes, AI recommendations and auto-approved purchase orders. No signup.",
+    "heading": "Walk through six months of procurement at Al Waha Contracting.",
+    "intro": "A complete sample workspace: every quote compared, every purchase order explained. Click anything — nothing you do here is saved.",
+    "tour1Title": "25 RFQs, in Arabic and English",
+    "tour1Body": "Construction supplies, office equipment, packaging and spare parts — drafts, open requests, and decisions already made.",
+    "tour2Title": "Seven suppliers with real habits",
+    "tour2Body": "The fast, cheap one. The reliable one that always quotes a long warranty. The one that never quotes a warranty at all.",
+    "tour3Title": "Decisions with reasons",
+    "tour3Body": "Purchase orders that went out automatically, and the ones Clarix held back for a human — with the AI's reasoning in numbers.",
+    "readyForOwn": "Ready for your own?",
+    "createFree": "Create a free account"
+  },
+  "auth": {
+    "tagline": "Procurement, simplified.",
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "createAccount": "Create account",
+    "creatingAccount": "Creating account…",
+    "welcomeBack": "Welcome back",
+    "signInHint": "Sign in to manage your RFQs and quotes.",
+    "createTitle": "Create your account",
+    "createHint": "Start comparing supplier quotes in minutes.",
+    "email": "Email",
+    "password": "Password",
+    "fullName": "Full name",
+    "checkEmail": "Check your email to confirm your account.",
+    "reasonSessionUnavailable": "We couldn't confirm your session just now — our sign-in service was slow to respond. Please sign in again.",
+    "reasonDemoUnavailable": "The demo workspace isn't available right now. You can still create a free account below."
+  },
+  "vat": {
+    "exclNote": "All prices exclude VAT.",
+    "subtotal": "Total excl. VAT",
+    "line": "VAT ({rate}%)",
+    "total": "Total incl. VAT"
+  },
+  "supplierPortal": {
+    "portal": "Supplier quote portal",
+    "invalidTitle": "Invalid link",
+    "invalidBody": "This quote link doesn't exist or has been revoked. Please check the link in your invitation email.",
+    "demoTitle": "This is a demo RFQ",
+    "demoBody": "“{title}” belongs to the Clarix demo workspace. In a real workspace, the invited supplier fills in their prices here — no account needed.",
+    "submittedTitle": "Quote already submitted",
+    "submittedBody": "Thank you — your quote for “{title}” has been received. The buyer will be in touch.",
+    "closedTitle": "This RFQ is closed",
+    "deadlinePassed": "The deadline ({date}) for this request has passed.",
+    "notAccepting": "This request is no longer accepting quotes.",
+    "eyebrow": "Request for quotation",
+    "deadline": "Deadline {date}",
+    "currency": "Currency {currency}"
+  },
+  "supplierForm": {
+    "pricesTitle": "Your prices ({currency})",
+    "pricesHint": "Enter a unit price for each line item, excluding VAT.",
+    "quantity": "Quantity: {quantity} {unit}",
+    "unitPrice": "Unit price *",
+    "lineTotal": "Line total",
+    "itemNote": "Optional note for this item (alternatives, lead time, etc.)",
+    "termsTitle": "Terms",
+    "delivery": "Delivery time (days)",
+    "deliveryPlaceholder": "e.g. 14",
+    "payment": "Payment terms",
+    "paymentPlaceholder": "e.g. Net 30, 50% advance",
+    "warranty": "Warranty",
+    "warrantyPlaceholder": "e.g. 2 years parts and labor",
+    "notes": "Notes",
+    "notesPlaceholder": "Anything else the buyer should know.",
+    "submit": "Submit quote",
+    "missingPrice": "Enter a price for “{item}”",
+    "doneTitle": "Quote submitted",
+    "doneBody": "Thank you — the buyer has received your quote and will be in touch.",
+    "errors": {
+      "invalid": "Some of the entries aren't valid. Check the prices and try again.",
+      "invalidLink": "This quote link is invalid.",
+      "demo": "This is a demo RFQ and doesn't accept quotes.",
+      "closed": "This RFQ is no longer accepting quotes.",
+      "deadline": "The deadline for this RFQ has passed.",
+      "duplicate": "A quote has already been submitted for this invitation.",
+      "badItem": "Invalid line item in submission.",
+      "failed": "Your quote couldn't be saved. Please try again in a moment."
+    }
+  },
+  "emails": {
+    "footer": "Sent by Clarix — an RFQ & quote comparison tool.",
+    "invitation": {
+      "subject": "New RFQ from Clarix: {title}",
+      "preheader": "You're invited to quote on {title}",
+      "greeting": "Hi {name},",
+      "greetingFallback": "there",
+      "intro": "You've been invited to quote on {title}. Please review the items below and submit your pricing.",
+      "item": "Item",
+      "quantity": "Quantity",
+      "deadline": "Deadline: {date}",
+      "currency": "Currency: {currency}",
+      "vatNote": "Please quote prices excluding VAT.",
+      "submitForm": "Submit via form",
+      "replyPdf": "Reply with PDF",
+      "replySubject": "Quote for {title}",
+      "replyHint": "Prefer email? Just reply to this message with your quote as a PDF attachment."
+    }
+  }
+}
