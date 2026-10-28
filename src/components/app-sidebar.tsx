@@ -25,7 +25,7 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/rfqs", label: "RFQs", icon: FileText },
   { href: "/suppliers", label: "Suppliers", icon: Users },
-  { href: null, label: "Reports", icon: BarChart3 },
+  { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
@@ -51,7 +51,7 @@ export function AppSidebar({
   const initial = (fullName || email)[0]?.toUpperCase() ?? "?";
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-slate-200 bg-white">
+    <aside className="fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-slate-200 bg-white print:hidden">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-6 py-5">
         <Logo className="h-8 w-8" />
@@ -62,30 +62,15 @@ export function AppSidebar({
       <nav className="flex-1 space-y-1 px-3 pt-2">
         {NAV.map((item) => {
           const active =
-            item.href !== null &&
-            (pathname === item.href ||
-              (item.href !== "/dashboard" && pathname.startsWith(item.href)));
+            pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
           const classes = cn(
             "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-            active
-              ? "bg-slate-900 text-white"
-              : item.href
-                ? "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                : "cursor-default text-slate-300"
+            active ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
           );
 
-          if (!item.href) {
-            return (
-              <span key={item.label} className={classes} title="Coming soon">
-                <item.icon size={17} />
-                {item.label}
-              </span>
-            );
-          }
-
           return (
-            <Link key={item.label} href={item.href} className={classes}>
+            <Link key={item.label} href={item.href} className={classes} aria-current={active ? "page" : undefined}>
               <item.icon size={17} />
               {item.label}
             </Link>

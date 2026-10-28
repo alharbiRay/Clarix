@@ -26,12 +26,15 @@ export default async function DashboardLayout({
   ]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen bg-slate-50 text-slate-900 print:bg-white">
       <AppSidebar email={user.email!} fullName={profile?.full_name ?? null} />
-      <div className="ml-60">
+      <div className="ml-60 print:ml-0">
         {profile?.is_demo && <DemoBanner />}
+        {profile?.is_demo && (
+          <p className="mb-3 hidden text-xs font-medium text-slate-600 print:block">Demo data: a sample workspace, not a real company.</p>
+        )}
         <AppTopbar unreadCount={unreadCount ?? 0} />
-        <main className="p-8">{children}</main>
+        <main className="p-8 print:p-0">{children}</main>
       </div>
     </div>
   );

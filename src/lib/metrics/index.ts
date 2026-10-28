@@ -68,6 +68,23 @@ export function monthKey(iso: string | Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+/** "YYYY-MM-DD" in Saudi time. */
+export function dayKey(iso: string | Date): string {
+  const t = (typeof iso === "string" ? new Date(iso) : iso).getTime() + RIYADH_OFFSET_MS;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+/** Every "YYYY-MM" from `from` to `to`, inclusive (empty if from > to). */
+export function monthKeysBetween(from: string, to: string): string[] {
+  const [fy, fm] = from.split("-").map(Number);
+  const [ty, tm] = to.split("-").map(Number);
+  const out: string[] = [];
+  for (let y = fy, m = fm; y < ty || (y === ty && m <= tm); m === 12 ? ((y += 1), (m = 1)) : (m += 1)) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+  }
+  return out;
+}
+
 /** The `back`-th month before the one containing `now` (0 = this month). */
 export function monthBefore(now: Date, back: number): string {
   const shifted = new Date(now.getTime() + RIYADH_OFFSET_MS);
@@ -202,7 +219,8 @@ export function primaryCurrency(rfqs: MetricsRfq[]): string {
   return best;
 }
 
-function measuredSavings(rfqs: MetricsRfq[], currency: string) {
+/** Savings records for awarded RFQs in one currency (other currencies can't be summed). */
+export function measuredSavings(rfqs: MetricsRfq[], currency: string) {
   return rfqs
     .map(computeRfqSavings)
     .filter((s): s is RfqSavings => s !== null && s.currency === currency);
@@ -290,6 +308,11 @@ export interface SeriesPoint {
 /** Monthly savings and spend (primary currency), oldest first, empty months included. */
 export function savingsSeries(rfqs: MetricsRfq[], now: Date, months = 6, currency = primaryCurrency(rfqs)): SeriesPoint[] {
   const keys = Array.from({ length: months }, (_, i) => monthBefore(now, months - 1 - i));
+  return savingsSeriesForMonths(rfqs, keys, currency);
+}
+
+/** Monthly savings and spend for the given "YYYY-MM" keys (in order), empty months included. */
+export function savingsSeriesForMonths(rfqs: MetricsRfq[], keys: string[], currency = primaryCurrency(rfqs)): SeriesPoint[] {
   const points = new Map(keys.map((k) => [k, { month: k, savings: 0, spend: 0, awarded: 0 }]));
   for (const s of measuredSavings(rfqs, currency)) {
     const p = points.get(monthKey(s.awardedAt));

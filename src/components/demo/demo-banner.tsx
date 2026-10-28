@@ -6,7 +6,7 @@ export function DemoBanner() {
   return (
     <div
       role="status"
-      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-indigo-100 bg-[#7C6FE0]/[0.08] px-8 py-2.5 text-sm text-indigo-950"
+      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-indigo-100 bg-[#7C6FE0]/[0.08] px-8 py-2.5 text-sm text-indigo-950 print:hidden"
     >
       <p className="flex items-center gap-2">
         <Eye size={15} aria-hidden className="shrink-0 text-[#5B4FC4]" />

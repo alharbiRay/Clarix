@@ -96,3 +96,16 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* Reports print view: Recharts sizes its SVG in pixels for the screen width;
+   let it scale to the printed column instead (the SVG has a viewBox). */
+@media print {
+  .report-chart .recharts-wrapper,
+  .report-chart .recharts-surface {
+    width: 100% !important;
+    height: auto !important;
+  }
+  @page {
+    margin: 14mm;
+  }
+}
