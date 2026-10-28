@@ -19,24 +19,57 @@ One branch and PR per phase, merged into `master` in order (merge commits, no sq
 | 11. Engineering hardening | merged (reviewed, fixes applied) | `feat/phase-11-hardening` | [#15](https://github.com/alharbiRay/Clarix/pull/15) | tsc, lint, 687 tests, build, CI green, live evals, 375px layout checked on every signed-in page |
 | 12. Landing + pricing | merged (finish-reviewed, fixes applied) | `feat/phase-12-landing` | [#16](https://github.com/alharbiRay/Clarix/pull/16) | tsc, lint, 701 tests, build, finish review (impeccable), desktop and phone captures in both languages |
 
+| Final. README case study + docs | merged | `docs/final-readme` | see below | README, ARCHITECTURE refresh, this file |
+
+All twelve phases are merged. Each PR's description lists its verification, and each phase has a
+plan in `docs/plans/`. Every phase from 6 on went through an independent code review, and the
+review fixes are recorded in `docs/DECISIONS.md`.
+
 ## Production state
-- Supabase project restored and active. Migrations 0007 to 0020 are applied, in order.
-- The demo is seeded (25 RFQs and a full decision trail). "Explore the live demo" works on production.
-- Vercel production tracks `master`.
+- **Supabase:** the project is active, and migrations 0007 to 0020 are applied in order (0001 to
+  0006 were there before this build).
+- **Vercel:** production tracks `master`. `/` is now the public landing page; signed-in buyers
+  go straight to `/dashboard`.
+- **Demo:** seeded with 25 RFQs and a full decision trail. "Explore the live demo" works on
+  production.
+- **CI:** `.github/workflows/ci.yml` runs typecheck, lint, 701 tests, the offline evals and the
+  build on every PR.
 
 ## Manual steps left for the owner
-1. ~~Vercel env: `CRON_SECRET`~~ done by the owner (optionally `DEMO_ACCOUNT_EMAIL`).
-2. GitHub Actions: variable `APP_URL` and secret `CRON_SECRET` (for the 15-minute job sweep).
-   GitHub pauses scheduled workflows after 60 days with no repo activity; the daily Vercel cron stays as the backstop.
-3. Recommended: enable Gemini billing. The free tier allows only a small daily quota; the live extraction evals alone used it up on 2026-10-28. When it runs out, jobs retry later and buyers are told. The model defaults to `gemini-3.5-flash`; set `GEMINI_MODEL` in Vercel to change it (D-067). Rotate the Gemini key only if it was ever exposed.
-4. Supabase Auth: turn on leaked-password protection.
-5. Re-run the demo seed about monthly so "this month" stays populated:
+1. **Gemini:**
+   - Enable billing. The free tier's daily quota ran out during the live evals on 2026-10-28.
+     Jobs retry later and buyers are told, but a real buyer would wait.
+   - The model defaults to `gemini-3.5-flash` because `gemini-2.5-flash` now returns 404 for
+     this key. Set `GEMINI_MODEL` in Vercel to change it (D-067).
+   - Rotate the Gemini API key if it was ever shared outside Vercel and `.env.local`.
+2. **Vercel:** confirm that `NEXT_PUBLIC_APP_URL` is the production address. It is set, but its
+   value was not read. It now also drives canonical URLs, Open Graph, the sitemap and robots, and
+   `NEXT_PUBLIC_*` values are fixed at build time, so redeploy after changing it.
+3. **GitHub Actions:** add the variable `APP_URL` and the secret `CRON_SECRET` for the
+   15-minute job sweep. Until then only the daily Vercel cron sweeps. GitHub pauses schedules
+   after 60 days with no repo activity.
+4. **Supabase Auth:** turn on leaked-password protection, the only open security advisor notice.
+5. **Demo:** re-run the seed about monthly so "this month" stays populated:
    `ALLOW_SEED=true DEMO_SEED_PROJECT_REF=<ref> npx tsx --env-file=.env.local scripts/seed-demo.ts`.
+6. **Waitlist:** sign-ups land in the `leads` table, readable in the Supabase dashboard only.
+   Nothing emails them yet (D-073).
+7. **Prices:** decide real prices. The pricing page shows illustrative tiers.
+8. **Optional (D-075):** the sidebar avatar's violet gradient and a third chart violet
+   (`#6D5FD6`) are pre-existing drift from `DESIGN.md`.
+
+Out of scope for this build: the WhatsApp Business API, ERP integrations and billing.
 
 ## Older branches
-- `feat/respect-reduced-motion` and `feat/new-logo-login-tagline` were merged before Phase 0 (PRs #2 and #3), with no commits left. They can be deleted.
+- `feat/respect-reduced-motion` and `feat/new-logo-login-tagline` were merged before Phase 0
+  (PRs #2 and #3). Every phase branch is merged; merged branches are deleted from GitHub at the
+  end of the build.
 
 ## Known gaps
-- No end-to-end browser tests (Playwright skipped; see D-003). Authenticated pages were verified by unit and wiring tests and by preview checks.
-- Stored text (notifications, approval reasons, older AI reasons) and most server error toasts stay in English; see D-065.
-- Form and manual quote totals in the audit trail add up only the priced lines; PDF quotes use "no total" when a line is unpriced.
+- **No end-to-end browser tests** (Playwright skipped; see D-003). Pages were verified by unit and
+  wiring tests, in-browser measurement, and headless captures at 1440 and 375 in both languages.
+- **Stored text stays in English:** notifications, approval reasons, older AI reasons, and most
+  server error toasts (D-065).
+- **Audit-trail totals:** for form and manual quotes they add up only the priced lines. PDF quotes
+  show "no total" when a line is unpriced.
+- **Eval coverage:** the live evals covered 17 of 22 cases before the quota ran out. Re-run them
+  with billing on.
