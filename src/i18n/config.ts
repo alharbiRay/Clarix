@@ -1,7 +1,7 @@
 /**
  * Clarix is bilingual (Arabic / English). The language is a preference, not
  * part of the URL: it lives in the NEXT_LOCALE cookie (and, for signed-in
- * buyers, profiles.locale), so every existing link keeps working. See D-061.
+ * buyers, profiles.locale), so every existing link keeps working. See D-062.
  */
 export const LOCALES = ["en", "ar"] as const;
 export type Locale = (typeof LOCALES)[number];

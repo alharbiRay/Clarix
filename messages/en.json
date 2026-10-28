@@ -132,6 +132,32 @@
       "replyPdf": "Reply with PDF",
       "replySubject": "Quote for {title}",
       "replyHint": "Prefer email? Just reply to this message with your quote as a PDF attachment."
+    },
+    "po": {
+      "subject": "Purchase order confirmation: {title}",
+      "preheader": "Your quote for {title} has been selected",
+      "greeting": "Hi {name},",
+      "intro": "Good news — your quote for {title} has been selected. This email confirms the purchase order; formal PO paperwork will follow from the buyer.",
+      "item": "Item",
+      "quantity": "Quantity",
+      "totalExVat": "Total (excl. VAT): {total}",
+      "vat": "VAT ({rate}%): {amount}",
+      "totalIncVat": "Total incl. VAT: {total}",
+      "terms": "Delivery: {delivery} · Warranty: {warranty}",
+      "days": "{count, plural, one {# day} other {# days}}",
+      "replyHint": "Reply to this email if anything above doesn't match your quote."
+    },
+    "autoApproved": {
+      "subject": "Auto-approved: {supplier} — PO sent for {title}",
+      "preheader": "Auto-approved: {supplier} — PO sent",
+      "heading": "Auto-approved.",
+      "body": "{supplier}'s quote for {title} passed every one of your approval rules, so we sent them a PO confirmation automatically. The decision history shows exactly which rules it met.",
+      "cta": "View comparison"
+    },
+    "reviewNeeded": {
+      "headline": "Review needed: {reason}",
+      "body": "{title} wasn't auto-approved. Take a look and decide who to award.",
+      "cta": "Review comparison"
     }
   },
   "dashboard": {

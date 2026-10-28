@@ -34,4 +34,10 @@ describe("translations", () => {
     const empty = arKeys.filter((k) => !get(ar, k).trim());
     expect(empty).toEqual([]);
   });
+
+  it("Arabic messages use Western digits, like every formatted number (nu-latn)", () => {
+    const get = (o: Record<string, unknown>, k: string) => k.split(".").reduce<unknown>((a, p) => (a as Record<string, unknown>)[p], o) as string;
+    const mixed = arKeys.filter((k) => /[٠-٩]/.test(get(ar, k)));
+    expect(mixed).toEqual([]);
+  });
 });

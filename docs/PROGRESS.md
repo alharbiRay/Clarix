@@ -15,12 +15,12 @@ One branch and PR per phase, merged into `master` in order (merge commits, no sq
 | 7. Configurable approval rules | merged (reviewed, fixes applied) | `feat/phase-07-approval-rules` | [#11](https://github.com/alharbiRay/Clarix/pull/11) | tsc, lint, tests, build, settings form and live preview checked in the browser (demo) |
 | 8. Negotiation assistant | merged (reviewed, fixes applied) | `feat/phase-08-negotiation` | [#12](https://github.com/alharbiRay/Clarix/pull/12) | tsc, lint, 531 tests, build, dialog checked in the browser (English + Arabic, demo) |
 | 9. Reports | merged (reviewed, fixes applied) | `feat/phase-09-reports` | [#13](https://github.com/alharbiRay/Clarix/pull/13) | tsc, lint, 609 tests, build, page + CSV checked in the browser (demo) |
-| 10. Arabic/English + RTL + VAT | pending | | | |
+| 10. Arabic/English + RTL + VAT | in review | `feat/phase-10-i18n` | | tsc, lint, 642 tests, build, Arabic pages checked in the browser (settings, reports, supplier, compare, new RFQ; demo) |
 | 11. Engineering hardening | pending | | | |
 | 12. Landing + pricing | pending | | | |
 
 ## Production state
-- Supabase project restored and active. Migrations 0007 to 0016 are applied, in order.
+- Supabase project restored and active. Migrations 0007 to 0017 are applied, in order.
 - The demo is seeded (25 RFQs and a full decision trail). "Explore the live demo" works on production.
 - Vercel production tracks `master`.
 
@@ -36,5 +36,6 @@ One branch and PR per phase, merged into `master` in order (merge commits, no sq
 ## Known gaps
 - No end-to-end browser tests (Playwright skipped; see D-003). Authenticated pages were verified by unit and wiring tests and by preview checks.
 - On phones the app sidebar stays 240px wide and squeezes the page. This affects every signed-in page (scheduled for Phase 11).
+- Stored text (notifications, approval reasons, older AI reasons) and most server error toasts stay in English; see D-065.
 - Form and manual quote totals in the audit trail add up only the priced lines; PDF quotes use "no total" when a line is unpriced.
 - On Windows the full test run can crash a worker while opening files under heavy parallelism; `--maxWorkers=4` runs clean (to be set in config in Phase 11).

@@ -6,7 +6,7 @@
 --   cookie so the choice follows the buyer across devices.
 -- * profiles.vat_rate: VAT applied on top of quoted prices, as a fraction.
 --   Saudi Arabia's standard rate is 15%; 0 turns the VAT line off. Quote
---   prices are always stored EXCLUDING VAT (D-062), so comparison and reports
+--   prices are always stored EXCLUDING VAT (D-063), so comparison and reports
 --   rank on the same basis and show VAT as its own line.
 --
 -- Both are added to the profile UPDATE column grant (0008), so buyers can

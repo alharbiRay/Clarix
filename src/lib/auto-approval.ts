@@ -9,6 +9,7 @@ import {
 import type { RfqWithComparisonData } from "@/lib/recommendation-input";
 import type { Quote, QuoteItem, RfqSupplier } from "@/lib/types";
 import { recordAuditEvent } from "@/lib/audit";
+import { poEmailContext } from "@/lib/po-email-context";
 import { decideApproval, type ApprovalPolicy, type DecisionQuote } from "@/lib/approval/rules";
 import { loadApprovalPolicy } from "@/lib/approval/policy";
 import { loadMetricsRfqs, rfqIdsForSuppliers } from "@/lib/metrics/load";
@@ -90,7 +91,7 @@ export async function evaluateAutoApproval(
   try {
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("auto_approval_enabled, email")
+      .select("auto_approval_enabled, email, locale")
       .eq("id", rfq.buyer_id)
       .single();
     if (profileError || !profile) {
@@ -206,6 +207,7 @@ export async function evaluateAutoApproval(
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     const compareUrl = `${appUrl}/rfqs/${rfq.id}/compare`;
     const buyerEmail = profile.email as string | undefined;
+    const buyerLanguage = (profile as { locale?: string | null }).locale === "ar" ? ("ar" as const) : ("en" as const);
 
     if (auto && recommendedQuote && recommendedInvite && label) {
       const { error: rfqUpdateError } = await supabase.from("rfqs").update({ status: "awarded" }).eq("id", rfq.id);
@@ -230,6 +232,7 @@ export async function evaluateAutoApproval(
           total,
           deliveryDays: recommendedQuote.delivery_days,
           warranty: recommendedQuote.warranty,
+          ...(await poEmailContext(supabase, rfq.buyer_id, recommendedInvite)),
         });
         emailDelivered = true;
       } catch (e) {
@@ -251,7 +254,7 @@ export async function evaluateAutoApproval(
 
       if (buyerEmail) {
         try {
-          await sendAutoApprovalEmail({ to: buyerEmail, rfqTitle: rfq.title, supplierLabel: label, compareUrl });
+          await sendAutoApprovalEmail({ to: buyerEmail, rfqTitle: rfq.title, supplierLabel: label, compareUrl, language: buyerLanguage });
         } catch (e) {
           console.error("Failed to send auto-approval buyer email:", e);
         }
@@ -269,7 +272,7 @@ export async function evaluateAutoApproval(
 
     if (buyerEmail) {
       try {
-        await sendReviewNeededEmail({ to: buyerEmail, rfqTitle: rfq.title, reason: result.reason ?? "approval required", compareUrl });
+        await sendReviewNeededEmail({ to: buyerEmail, rfqTitle: rfq.title, reason: result.reason ?? "approval required", compareUrl, language: buyerLanguage });
       } catch (e) {
         console.error("Failed to send review-needed buyer email:", e);
       }

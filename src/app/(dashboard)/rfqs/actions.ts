@@ -10,6 +10,7 @@ import { rfqSchema, type RfqFormValues } from "@/lib/validations/rfq";
 import { sendPoConfirmationEmail, sendRfqInvitationEmail } from "@/lib/email";
 import { inboundAddressForToken } from "@/lib/resend";
 import { supplierLanguage } from "@/i18n/translator";
+import { poEmailContext } from "@/lib/po-email-context";
 import { extractRfqFromText } from "@/lib/gemini";
 import { computeQuoteTotal } from "@/lib/quote-comparison";
 import { loadApprovalPolicy } from "@/lib/approval/policy";
@@ -410,6 +411,7 @@ export async function approveAward(rfqId: string, overrideQuoteId?: string, over
       total,
       deliveryDays: quote.delivery_days,
       warranty: quote.warranty,
+      ...(await poEmailContext(supabase, rfq.buyer_id, supplier)),
     });
     emailDelivered = true;
   } catch (e) {

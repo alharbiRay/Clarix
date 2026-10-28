@@ -6,7 +6,7 @@ import { ArrowLeft, Mail, Phone } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { loadMetricsRfqs, rfqIdsForSuppliers } from "@/lib/metrics/load";
 import { describeSupplier, scoreSupplier, scoreTrend, supplierMetrics } from "@/lib/scorecard";
-import { formatHours, formatPct } from "@/lib/metrics/format";
+import { formatHours, formatMonthLabel, formatPct } from "@/lib/metrics/format";
 import { ScoreRing } from "@/components/suppliers/score-ring";
 import { ScoreBreakdown, ScoreTrend, StrengthsWeaknesses } from "@/components/suppliers/scorecard-panels";
 import { computeQuoteTotal } from "@/lib/quote-comparison";
@@ -84,6 +84,7 @@ export default async function SupplierDetailPage({
   const currency = historyRows[0]?.rfq?.currency ?? "SAR";
 
   // Last 7 calendar months, same bucketing as the dashboard chart
+  const monthLocale = await getLocale().then((l) => (isLocale(l) ? l : "en"));
   const months: SupplierMonthPoint[] = [];
   const cursor = new Date();
   cursor.setDate(1);
@@ -94,7 +95,7 @@ export default async function SupplierDetailPage({
       return t.getFullYear() === d.getFullYear() && t.getMonth() === d.getMonth();
     });
     months.push({
-      month: d.toLocaleString("en-US", { month: "short" }) as string,
+      month: formatMonthLabel(`${d.getFullYear()}-${d.getMonth() + 1}`, false, monthLocale),
       quotedTotal: inMonth.reduce((sum, r) => sum + (r.total ?? 0), 0),
       quotes: inMonth.length,
     });

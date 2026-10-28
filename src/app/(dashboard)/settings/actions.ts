@@ -71,7 +71,7 @@ export async function updatePriceAlertThreshold(percent: number) {
 
 /**
  * Sets the VAT rate shown on top of quoted prices (comparison, supplier form,
- * reports). Quote prices are always stored excluding VAT (D-062). Takes a
+ * reports). Quote prices are always stored excluding VAT (D-063). Takes a
  * percentage (0–50, up to 2 decimals); stored as a fraction. 0 hides VAT.
  */
 export async function updateVatRate(percent: number) {
