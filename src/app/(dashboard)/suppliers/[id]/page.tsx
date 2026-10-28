@@ -1,3 +1,5 @@
+import { getLocale, getTranslations } from "next-intl/server";
+import { isLocale } from "@/i18n/config";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Mail, Phone } from "lucide-react";
@@ -92,18 +94,21 @@ export default async function SupplierDetailPage({
       return t.getFullYear() === d.getFullYear() && t.getMonth() === d.getMonth();
     });
     months.push({
-      month: d.toLocaleString("en-US", { month: "short" }),
+      month: d.toLocaleString("en-US", { month: "short" }) as string,
       quotedTotal: inMonth.reduce((sum, r) => sum + (r.total ?? 0), 0),
       quotes: inMonth.length,
     });
   }
 
+    const t = await getTranslations("suppliers");
+  const rawLocale = await getLocale();
+  const locale = isLocale(rawLocale) ? rawLocale : "en";
   const label = supplier.company_name || supplier.email;
   const ref = { id: supplier.id, email: supplier.email };
   const metrics = supplierMetrics(rfqs, ref);
   const card = scoreSupplier(metrics);
   const trend = scoreTrend(rfqs, ref, new Date(), 6);
-  const { strengths, weaknesses } = describeSupplier(metrics, card);
+  const { strengths, weaknesses } = describeSupplier(metrics, card, locale);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -112,22 +117,24 @@ export default async function SupplierDetailPage({
           href="/suppliers"
           className="-ms-1 inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-xs font-medium text-slate-400 transition-colors hover:text-slate-600"
         >
-          <ArrowLeft size={13} className="rtl:rotate-180" />
-          Suppliers
+          <ArrowLeft size={13} className="rtl:rotate-180" aria-hidden="true" />
+          {t("back")}
         </Link>
         <div className="mt-1.5 flex items-start justify-between gap-4">
           <div className="space-y-1.5">
-            <h1 className="text-2xl font-bold tracking-tight">{label}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">
+              <bdi>{label}</bdi>
+            </h1>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
               <span className="inline-flex items-center gap-1.5">
-                <Mail size={13} /> {supplier.email}
+                <Mail size={13} aria-hidden="true" /> <span dir="ltr">{supplier.email}</span>
               </span>
               {supplier.phone && (
                 <span className="inline-flex items-center gap-1.5">
-                  <Phone size={13} /> {supplier.phone}
+                  <Phone size={13} aria-hidden="true" /> <span dir="ltr">{supplier.phone}</span>
                 </span>
               )}
-              {supplier.contact_name && <span>Contact: {supplier.contact_name}</span>}
+              {supplier.contact_name && <span>{t("contact", { name: supplier.contact_name })}</span>}
             </div>
           </div>
         </div>
@@ -139,10 +146,10 @@ export default async function SupplierDetailPage({
           className="grid gap-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] lg:p-8"
         >
           <div className="flex flex-row items-center gap-5 lg:flex-col lg:items-start">
-            <h2 id="scorecard-heading" className="sr-only">Supplier scorecard</h2>
+            <h2 id="scorecard-heading" className="sr-only">{t("scorecardHeading")}</h2>
             <ScoreRing score={card?.score ?? null} />
             <div>
-              <p className="text-xs font-medium text-slate-500">Last six months</p>
+              <p className="text-xs font-medium text-slate-500">{t("lastSix")}</p>
               <div className="mt-1">
                 <ScoreTrend points={trend} />
               </div>
@@ -150,7 +157,7 @@ export default async function SupplierDetailPage({
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-slate-900">How the score is built</h3>
+            <h3 className="text-sm font-semibold text-slate-900">{t("howBuilt")}</h3>
             <div className="mt-4">
               <ScoreBreakdown card={card} />
             </div>
@@ -159,20 +166,20 @@ export default async function SupplierDetailPage({
           <div className="space-y-6">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
               {[
-                { label: "Quoted", value: `${metrics.quoted} of ${metrics.invited}` },
-                { label: "Win rate", value: formatPct(metrics.winRate) },
-                { label: "Median reply", value: formatHours(metrics.medianResponseHours) },
+                { label: t("colQuoted"), value: t("quotedOf", { quoted: metrics.quoted, invited: metrics.invited }) },
+                { label: t("colWinRate"), value: formatPct(metrics.winRate) },
+                { label: t("colMedianReply"), value: formatHours(metrics.medianResponseHours, locale) },
                 {
-                  label: "Price vs lowest",
+                  label: t("colPriceVsLowest"),
                   value: metrics.avgPriceVsLowest === null ? "—" : `+${formatPct(metrics.avgPriceVsLowest)}`,
                 },
-                { label: "Warranty offered", value: formatPct(metrics.warrantyRate) },
+                { label: t("warrantyOffered"), value: formatPct(metrics.warrantyRate) },
                 {
-                  label: "Delivery vs typical",
+                  label: t("deliveryVsTypical"),
                   value:
                     metrics.deliveryVsTypicalDays === null
                       ? "—"
-                      : `${metrics.deliveryVsTypicalDays > 0 ? "+" : metrics.deliveryVsTypicalDays < 0 ? "−" : ""}${Math.abs(Math.round(metrics.deliveryVsTypicalDays * 10) / 10)} days`,
+                      : t("daysSigned", { sign: metrics.deliveryVsTypicalDays > 0 ? "+" : metrics.deliveryVsTypicalDays < 0 ? "−" : "", days: Math.abs(Math.round(metrics.deliveryVsTypicalDays * 10) / 10) }),
                 },
               ].map((s) => (
                 <div key={s.label}>
@@ -194,31 +201,31 @@ export default async function SupplierDetailPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-semibold">
-              Quote history ({historyRows.length})
+              {t("history", { count: historyRows.length })}
             </CardTitle>
             <CardDescription className="text-xs text-slate-400">
-              Every quote this supplier has submitted, across all RFQs.
+              {t("historyHint")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {historyRows.length === 0 ? (
               <p className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400">
-                No quotes yet.
+                {t("noQuotes")}
               </p>
             ) : (
               <div className="overflow-hidden rounded-xl border border-slate-100">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50 hover:bg-slate-50">
-                      <TableHead className="text-xs font-semibold text-slate-500">RFQ</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-500">{t("rfq")}</TableHead>
                       <TableHead className="text-xs font-semibold text-slate-500">
-                        Submitted
+                        {t("submitted")}
                       </TableHead>
                       <TableHead className="text-end text-xs font-semibold text-slate-500">
-                        Total
+                        {t("totalExVat")}
                       </TableHead>
                       <TableHead className="text-end text-xs font-semibold text-slate-500">
-                        Status
+                        {t("status")}
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -231,21 +238,21 @@ export default async function SupplierDetailPage({
                               href={`/rfqs/${rfq.id}/compare`}
                               className="hover:underline underline-offset-4"
                             >
-                              {rfq.title}
+                              <bdi>{rfq.title}</bdi>
                             </Link>
                           ) : (
                             "—"
                           )}
                         </TableCell>
                         <TableCell className="text-slate-500">
-                          {formatDate(quote.submitted_at)}
+                          {formatDate(quote.submitted_at, locale)}
                         </TableCell>
                         <TableCell className="text-end font-semibold">
-                          {total === null || !rfq ? "—" : formatMoney(total, rfq.currency)}
+                          {total === null || !rfq ? "—" : formatMoney(total, rfq.currency, locale)}
                         </TableCell>
                         <TableCell className="text-end">
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium capitalize text-slate-600">
-                            {quote.status.replace("_", " ")}
+                            {t(`quoteStatus.${quote.status}`)}
                           </span>
                         </TableCell>
                       </TableRow>
@@ -261,9 +268,9 @@ export default async function SupplierDetailPage({
       <FadeIn delay={0.09}>
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-semibold">Notes</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t("notes")}</CardTitle>
             <CardDescription className="text-xs text-slate-400">
-              Private — only visible to you.
+              {t("notesHint")}
             </CardDescription>
           </CardHeader>
           <CardContent>

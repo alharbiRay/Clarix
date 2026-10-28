@@ -1,12 +1,15 @@
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
+export type ScoreTier = "new" | "excellent" | "good" | "fair" | "weak";
+
 /** Score tiers. Color always travels with the number and a word, never alone. */
-export function scoreTier(score: number | null) {
-  if (score === null) return { label: "New", className: "bg-slate-100 text-slate-600 ring-slate-200" };
-  if (score >= 80) return { label: "Excellent", className: "bg-emerald-50 text-emerald-800 ring-emerald-200" };
-  if (score >= 65) return { label: "Good", className: "bg-indigo-50 text-indigo-800 ring-indigo-200" };
-  if (score >= 45) return { label: "Fair", className: "bg-amber-50 text-amber-800 ring-amber-200" };
-  return { label: "Weak", className: "bg-red-50 text-red-800 ring-red-200" };
+export function scoreTier(score: number | null): { key: ScoreTier; className: string } {
+  if (score === null) return { key: "new", className: "bg-slate-100 text-slate-600 ring-slate-200" };
+  if (score >= 80) return { key: "excellent", className: "bg-emerald-50 text-emerald-800 ring-emerald-200" };
+  if (score >= 65) return { key: "good", className: "bg-indigo-50 text-indigo-800 ring-indigo-200" };
+  if (score >= 45) return { key: "fair", className: "bg-amber-50 text-amber-800 ring-amber-200" };
+  return { key: "weak", className: "bg-red-50 text-red-800 ring-red-200" };
 }
 
 export function ScoreBadge({
@@ -20,7 +23,9 @@ export function ScoreBadge({
   showLabel?: boolean;
   className?: string;
 }) {
+  const t = useTranslations("score");
   const tier = scoreTier(score);
+  const label = t(`tier.${tier.key}`);
   return (
     <span
       className={cn(
@@ -29,16 +34,14 @@ export function ScoreBadge({
         tier.className,
         className
       )}
-      title={score === null ? "Not enough history to score yet" : `Score ${score}/100 · ${tier.label}`}
+      title={score === null ? t("newTitle") : t("title", { score, label })}
     >
       {/* aria-label isn't announced on a plain span — use real text for screen readers. */}
-      <span className="sr-only">
-        {score === null ? "Supplier score: new, not enough history yet" : `Supplier score ${score} out of 100, ${tier.label}`}
-      </span>
-      <span aria-hidden>{score === null ? "New" : score}</span>
+      <span className="sr-only">{score === null ? t("newSr") : t("sr", { score, label })}</span>
+      <span aria-hidden>{score === null ? label : score}</span>
       {showLabel && score !== null && (
         <span aria-hidden className="font-medium opacity-80">
-          {tier.label}
+          {label}
         </span>
       )}
     </span>

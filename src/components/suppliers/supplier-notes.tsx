@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { updateSupplierNotes } from "@/app/(dashboard)/suppliers/actions";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +15,7 @@ export function SupplierNotes({
   supplierId: string;
   initialNotes: string | null;
 }) {
+  const t = useTranslations("supplierNotes");
   const [notes, setNotes] = useState(initialNotes ?? "");
   const [savedNotes, setSavedNotes] = useState(initialNotes ?? "");
   const [isPending, startTransition] = useTransition();
@@ -30,7 +32,7 @@ export function SupplierNotes({
         setSavedNotes(previous);
         toast.error(result.error);
       } else {
-        toast.success("Notes saved.");
+        toast.success(t("saved"));
       }
     });
   }
@@ -41,12 +43,14 @@ export function SupplierNotes({
         rows={4}
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
-        placeholder="Private notes — only you can see this (e.g. negotiation history, quirks, preferred contact method)."
+        placeholder={t("placeholder")}
+        aria-label={t("label")}
+        dir="auto"
       />
       <div className="flex justify-end">
         <Button size="sm" onClick={handleSave} disabled={!dirty || isPending} className="gap-2">
           {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          Save notes
+          {t("save")}
         </Button>
       </div>
     </div>
