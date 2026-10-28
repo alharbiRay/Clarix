@@ -103,8 +103,7 @@ describe("draftNegotiationReply", () => {
   });
 
   it("returns the target it drafted with, so Send matches the text", async () => {
-    generateNegotiationDraft.mockResolvedValueOnce({ subject: "Line
-Break", body: "Dear Fahad, could you reduce by about 5%? Thanks." });
+    generateNegotiationDraft.mockResolvedValueOnce({ subject: "Line\r\nBreak", body: "Dear Fahad, could you reduce by about 5%? Thanks." });
     const r = await draftNegotiationReply({ rfqId: "rfq-1", quoteId: "q1", language: "en", targetPercent: 5 });
     expect(r).toMatchObject({ targetPercent: 5, draft: { subject: "Line Break" } });
   });
