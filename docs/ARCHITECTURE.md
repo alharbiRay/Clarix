@@ -55,37 +55,38 @@ persistent supplier directory, linked lazily by `ensureSupplierProfile`.
 
 ```mermaid
 flowchart TD
-  B[Buyer creates RFQ<br/>createRfq] --> S[sendRfq: invites flip to 'sent'<br/>Resend invitation email per supplier]
-  S -->|form link /quote/token| F[Supplier web form<br/>submitQuote, service-role client]
-  S -->|reply with PDF to quotes+token@inbound| W[Resend inbound webhook<br/>/api/webhooks/resend-inbound]
-  W --> V{svix signature valid?}
-  V -- no --> X[401]
-  V -- yes --> T[match token, check RFQ open,<br/>dedupe on source_email_id]
-  T --> P[download PDF attachment]
-  P --> E[createQuoteFromPdf<br/>Gemini extraction, store PDF,<br/>insert quote + items as 'confirmed']
-  F --> Q[(quotes / quote_items)]
+  B[Buyer creates RFQ<br/>createRfq] --> S[sendRfq: invitation email per supplier,<br/>in the supplier's language]
+  S -->|form link /quote/token| F[Supplier form: submitQuote<br/>token check, rate limit, zod]
+  S -->|reply with PDF| W[Resend inbound webhook<br/>svix signature, match token]
+  W --> J1[(job: inbound_email_quote)]
+  J1 --> E[createQuoteFromPdf<br/>size + magic bytes, Gemini extraction,<br/>zod + one repair]
+  E -->|unreadable| MN[PermanentJobError:<br/>buyer told 'needs manual entry']
+  M[Buyer: manual entry or PDF upload] --> Q[(quotes / quote_items)]
+  F --> Q
   E --> Q
-  M[Buyer: manual entry / PDF upload] --> Q
-  Q --> R[maybeAutoGenerateRecommendation]
-  R --> C{all invited suppliers<br/>submitted or declined<br/>and no recommendation yet?}
-  C -- no --> Z[stop]
-  C -- yes --> G[Gemini recommendation<br/>insert ai_recommendations]
-  G --> A[evaluateAutoApproval rules engine]
-  A -->|Rule 1: AI pick == cheapest,<br/>delivery <= 14d, warranty| AA[rfq_awards auto_approved,<br/>RFQ awarded, PO email to supplier,<br/>buyer notified]
-  A -->|Rule 2 or 3, or auto-approval off| RN[rfq_awards review_needed /<br/>differs_from_cheapest,<br/>buyer notified]
-  RN --> MA[Buyer approveAward<br/>optionally another supplier]
-  MA --> PO[PO email, RFQ awarded]
+  Q --> J2[(job: auto_recommendation<br/>enqueue + waitUntil, cron sweep)]
+  J2 --> C{every invited supplier<br/>replied or declined?}
+  C -- no --> Z[wait]
+  C -- yes --> G[Gemini recommendation<br/>weighted by the buyer's priorities]
+  G --> A[evaluateAutoApproval:<br/>the account's approval rules]
+  A -->|every rule passes| AA[rfq_awards auto_approved,<br/>PO email, buyer notified]
+  A -->|a rule fails or auto-approval off| RN["waits for the buyer, with the reason<br/>(over the spend limit, a manager)"]
+  RN --> MA[Buyer approveAward] --> PO[PO email, RFQ awarded]
+  AA --> T[(audit_events: every step)]
+  PO --> T
 ```
 
-Both entry paths converge on `quotes`. Every path then calls
-`maybeAutoGenerateRecommendation`, which only proceeds once every invited
-supplier has resolved.
+Both entry paths converge on `quotes`. A saved quote schedules the
+recommendation job; it proceeds only once every invited supplier has resolved,
+and the job runner retries quota errors with backoff and gives up on output
+the AI can't produce (D-066).
 
 ## Request pipeline
 
-* `src/middleware.ts` builds a Supabase server client from cookies and calls
-  `auth.getUser()` on every matched request, then redirects logged-out users
-  to `/login`.
+* `src/middleware.ts` skips the auth call when there is no session cookie, caps
+  `auth.getUser()` at 2.5 s, and decides access with the pure rules in
+  `src/lib/auth/route-access.ts`. Public routes: `/`, `/pricing`, `/demo`,
+  `/login`, `/quote/*`, webhooks, health and the job runner (D-007).
 * Server Components read through `createClient()` (anon key + user cookies,
   so RLS applies).
 * Server Actions (`"use server"`) do every write. Buyer actions use the
