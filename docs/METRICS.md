@@ -129,3 +129,14 @@ compared within the same item, unit, and currency.
 A change at or above the buyer's **price alert threshold** (Settings, default 10%) is highlighted:
 amber when the price went up, green when it went down. The compare page uses the last 365 days
 of quotes.
+
+## Reports (Phase 9)
+The Reports page (`src/lib/reports`) reuses the definitions above for a chosen date range and,
+optionally, one supplier:
+- **Spend and savings**: purchase orders sent in the range, primary currency only. Savings use the
+  same "average of the other complete quotes" baseline.
+- **Auto-approval rate**: auto-approved decisions divided by all decisions made in the range.
+- **Supplier comparison**: scorecard metrics over RFQs created in the range. Wins, spend and savings
+  come from purchase orders sent in it.
+- **Categories**: the awarded quote's line totals, grouped by a category derived from each item's
+  name (see D-058).

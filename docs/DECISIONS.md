@@ -491,3 +491,24 @@ negotiation is a conversation, and inbound intake already refuses a second quote
 - **Send matches the draft.** The language and target the draft was written with are what's sent and
   logged. The server validates both, and the rate limit is charged only once a request is valid.
 - **An incomplete own quote is described as incomplete**, never as "the lowest".
+
+# Phase 9: Reports
+
+## D-058: Categories are derived, not stored
+RFQ line items have no category field, and asking buyers to tag every item adds friction for little
+gain. `categorizeItem` reuses the price-history normalizer (Arabic and English, glossary, whole
+words) plus ordered keyword rules. Anything unrecognised is "Other". Every demo item gets a real
+category. A stored override can come later without changing the report code.
+
+## D-059: Reports filter, they don't recalculate
+Spend, savings, monthly series and supplier spend come from the metrics module, and supplier rates
+from the scorecard. The report only chooses which RFQs go in:
+- Money: POs sent in the range.
+- Auto-approval: decisions made in the range.
+- Supplier activity: RFQs created in the range.
+A test checks the totals against the dashboard's functions on the demo data.
+
+## D-060: CSV is built on the server, Excel-first
+A BOM and CRLF make Arabic open correctly in Excel. Text cells that start with = + - @ get an
+apostrophe prefix, because supplier names and RFQ titles are user-controlled. Numbers keep their
+sign and have two decimals.

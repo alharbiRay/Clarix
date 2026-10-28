@@ -62,30 +62,15 @@ export function AppSidebar({
       <nav className="flex-1 space-y-1 px-3 pt-2">
         {NAV.map((item) => {
           const active =
-            item.href !== null &&
-            (pathname === item.href ||
-              (item.href !== "/dashboard" && pathname.startsWith(item.href)));
+            pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
           const classes = cn(
             "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-            active
-              ? "bg-slate-900 text-white"
-              : item.href
-                ? "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                : "cursor-default text-slate-300"
+            active ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
           );
 
-          if (!item.href) {
-            return (
-              <span key={item.label} className={classes} title="Coming soon">
-                <item.icon size={17} />
-                {item.label}
-              </span>
-            );
-          }
-
           return (
-            <Link key={item.label} href={item.href} className={classes}>
+            <Link key={item.label} href={item.href} className={classes} aria-current={active ? "page" : undefined}>
               <item.icon size={17} />
               {item.label}
             </Link>
