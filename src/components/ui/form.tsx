@@ -12,7 +12,9 @@ import {
   type FieldValues,
 } from "react-hook-form"
 
+import { useTranslations } from "next-intl"
 import { cn } from "@/lib/utils"
+import { VALIDATION_KEYS } from "@/i18n/validation"
 import { Label } from "@/components/ui/label"
 
 const Form = FormProvider
@@ -147,7 +149,9 @@ const FormMessage = React.forwardRef<
   React.HTMLAttributes<HTMLParagraphElement>
 >(({ className, children, ...props }, ref) => {
   const { error, formMessageId } = useFormField()
-  const body = error ? String(error?.message ?? "") : children
+  const t = useTranslations("validation")
+  const raw = error ? String(error?.message ?? "") : null
+  const body = raw !== null ? (VALIDATION_KEYS[raw] ? t(VALIDATION_KEYS[raw]) : raw) : children
 
   if (!body) {
     return null
