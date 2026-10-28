@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { decideAccess, isPublicPath } from "@/lib/auth/route-access";
 
 describe("isPublicPath", () => {
-  it.each(["/", "/login", "/auth/callback", "/quote/abc", "/api/webhooks/resend-inbound", "/api/health", "/api/jobs/process", "/demo"])(
+  it.each(["/", "/login", "/auth/callback", "/quote/abc", "/api/webhooks/resend-inbound", "/api/health", "/api/jobs/process", "/demo", "/pricing", "/opengraph-image"])(
     "%s is public",
     (p) => expect(isPublicPath(p)).toBe(true)
   );
 
-  it.each(["/dashboard", "/rfqs", "/rfqs/1/compare", "/settings", "/suppliers", "/reports", "/loginx", "/quotes", "/demo-x", "/pricing"])(
+  it.each(["/dashboard", "/rfqs", "/rfqs/1/compare", "/settings", "/suppliers", "/reports", "/loginx", "/quotes", "/demo-x", "/pricingx"])(
     "%s is protected",
     (p) => expect(isPublicPath(p)).toBe(false)
   );

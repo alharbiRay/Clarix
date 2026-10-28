@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type PublicRateLimitAction = "quote_submit_token" | "quote_submit_ip" | "demo_start_ip";
+export type PublicRateLimitAction = "quote_submit_token" | "quote_submit_ip" | "demo_start_ip" | "lead_submit_ip";
 
 /** Opaque per-action key: raw tokens and IPs never reach the database. */
 export function rateLimitKey(action: PublicRateLimitAction, raw: string) {
