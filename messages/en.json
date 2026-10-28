@@ -133,5 +133,104 @@
       "replySubject": "Quote for {title}",
       "replyHint": "Prefer email? Just reply to this message with your quote as a PDF attachment."
     }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "{today} — what your procurement saved, and what needs you.",
+    "errorTitle": "The dashboard couldn't load",
+    "errorBody": "We couldn't reach your procurement data just now. Your RFQs are safe — try again in a moment.",
+    "tryAgain": "Try again",
+    "savings": {
+      "heading": "Saved this month",
+      "increase": "increase",
+      "decrease": "decrease",
+      "noChange": "no change",
+      "noCompare": "No savings recorded in {month} to compare with",
+      "vs": "vs {month}",
+      "belowAvg": "{pct} below the average competing quote on this month's purchase orders.",
+      "premium": "This month's purchase orders cost {pct} more than the average alternative — a premium paid for better delivery or warranty.",
+      "formula": "Savings = average of the other complete quotes − the awarded total.",
+      "excluded": "{count, plural, one {# awarded RFQ (all time) in another currency is} other {# awarded RFQs (all time) in other currencies are}} left out of these figures.",
+      "byMonth": "Savings by month",
+      "byMonthNote": "{currency} · purchase orders sent",
+      "tableCaption": "Savings by month ({currency})",
+      "month": "Month",
+      "savingsCol": "Savings",
+      "spend": "Spend",
+      "pos": "Purchase orders",
+      "tooltipSaved": "Saved {amount}",
+      "tooltipPremium": "Premium paid {amount}",
+      "tooltipPos": "{count, plural, one {# PO} other {# POs}} · {amount} spend",
+      "emptyTitle": "No purchase orders yet",
+      "emptyBody": "Savings start counting when you award your first RFQ — automatically or by approving a recommendation.",
+      "emptyCta": "Create an RFQ"
+    },
+    "ops": {
+      "label": "Operations",
+      "created": "RFQs created this month",
+      "noneEither": "None last month either",
+      "same": "Same as last month",
+      "vsLast": "{delta} vs last month",
+      "autoRate": "Auto-approval rate",
+      "autoRateContext": "Decisions in the last 90 days",
+      "sentToReplied": "Sent → all replied",
+      "perRfq": "Average per RFQ",
+      "responseTime": "Supplier response time",
+      "perQuote": "Average per quote"
+    },
+    "review": {
+      "heading": "Needs your review",
+      "waiting": "{count} waiting",
+      "nothing": "Nothing is waiting on you. Every quote is confirmed and every recommendation is decided.",
+      "confirmExtraction": "Confirm the AI-extracted quote from {supplier} so it counts in the comparison",
+      "received": "Received {date}",
+      "approvalRequired": "Approval required",
+      "aiPick": "AI pick: {supplier}",
+      "waitingSince": "Waiting since {date}"
+    },
+    "spend": {
+      "heading": "Spend by supplier",
+      "aside": "{currency} · all time",
+      "empty": "Spend appears here once purchase orders go out.",
+      "pos": "{count, plural, one {# PO} other {# POs}}"
+    },
+    "top": {
+      "heading": "Biggest savings",
+      "aside": "All time · vs the average of the other quotes",
+      "empty": "Savings are measured once an awarded RFQ has at least two complete quotes to compare.",
+      "rfq": "RFQ",
+      "awardedTo": "Awarded to",
+      "paid": "Paid",
+      "avgAlt": "Avg. alternative",
+      "saved": "Saved"
+    },
+    "activity": {
+      "heading": "Active RFQs",
+      "all": "All",
+      "ready": "Ready",
+      "waiting": "Waiting",
+      "statusReady": "Ready to compare",
+      "statusWaiting": "Awaiting quotes",
+      "statusDraft": "Draft",
+      "statusClosed": "Closed",
+      "noRfqs": "No RFQs yet.",
+      "createFirst": "Create your first RFQ",
+      "toStart": "to start collecting quotes.",
+      "nothingHere": "Nothing in this view.",
+      "noProject": "No project",
+      "replied": "{replied}/{total} suppliers replied",
+      "noDeadline": "No deadline",
+      "overdue": "Overdue",
+      "daysLeft": "{count, plural, one {# day left} other {# days left}}",
+      "compare": "Compare quotes",
+      "finishDraft": "Finish draft",
+      "awaiting": "Awaiting quotes"
+    },
+    "notifications": {
+      "dismiss": "Dismiss",
+      "dismissFailed": "Couldn't dismiss that notification — try again.",
+      "approve": "Approve",
+      "approved": "Approved — PO sent."
+    }
   }
 }

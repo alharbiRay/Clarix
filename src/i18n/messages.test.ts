@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import en from "./en.json";
-import ar from "./ar.json";
+import en from "../../messages/en.json";
+import ar from "../../messages/ar.json";
 
 function keys(obj: Record<string, unknown>, prefix = ""): string[] {
   return Object.entries(obj).flatMap(([k, v]) =>

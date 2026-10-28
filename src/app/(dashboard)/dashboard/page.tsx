@@ -19,6 +19,8 @@ import {
   topSavings,
 } from "@/lib/metrics";
 import { loadMetricsRfqs } from "@/lib/metrics/load";
+import { getLocale, getTranslations } from "next-intl/server";
+import { intlLocale, isLocale } from "@/i18n/config";
 
 interface ActivityRfqRow {
   id: string;
@@ -91,7 +93,9 @@ export default async function DashboardPage() {
     };
   });
 
-  const today = now.toLocaleDateString("en-US", {
+  const t = await getTranslations("dashboard");
+  const rawLocale = await getLocale();
+  const today = now.toLocaleDateString(intlLocale(isLocale(rawLocale) ? rawLocale : "en"), {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -102,8 +106,8 @@ export default async function DashboardPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <FadeIn>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">{today} — what your procurement saved, and what needs you.</p>
+        <h1 className="text-2xl font-bold tracking-tight">{t("title")}</h1>
+        <p className="mt-1 text-sm text-slate-500">{t("subtitle", { today })}</p>
       </FadeIn>
 
       {unread.length > 0 && (
